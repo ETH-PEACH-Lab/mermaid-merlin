@@ -15,7 +15,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const elements = db.getArray();
   const showIndex = diagram.text.toLowerCase().includes(showindex_key_word); // Check for showIndex in a case-insensitive manner
   const title = db.getDiagramTitle();
-  const svgHeight = 200; // Adjust the height as needed
+  const svgHeight = 300; // Increased the height to provide more space above
   const svgWidth = 800; // Adjust the width as needed
   const svg: SVG = selectSvgElement(id);
 
@@ -55,7 +55,7 @@ const drawElement = (
 ) => {
   const group: Group = svg.append('g');
   const elementX = index * 50 + 50; // Adjust the x coordinate based on the index
-  const elementY = 50; // Keep y coordinate constant
+  const elementY = 100; // Increased the y coordinate to provide more space above
 
   if (element.arrow) {
     // Draw arrow
@@ -75,10 +75,10 @@ const drawElement = (
       group
         .append('text')
         .attr('x', elementX + 20)
-        .attr('y', arrowYStart - 5)
+        .attr('y', arrowYStart - 10) // Position it slightly above the arrow start
         .attr('fill', labelColor)
-        .attr('font-size', 20)
-        .attr('dominant-baseline', 'middle')
+        .attr('font-size', labelFontSize)
+        .attr('dominant-baseline', 'hanging') // Changed to hanging to avoid cut-off
         .attr('text-anchor', 'middle')
         .attr('class', 'arrowContext')
         .text(element.context);
