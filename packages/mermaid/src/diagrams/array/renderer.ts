@@ -19,8 +19,8 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const elements = db.getArray();
   // console.log('renderer draw - elements: ', elements);
   const title = db.getDiagramTitle();
-  const svgHeight = 800;
-  const svgWidth = 600;
+  const svgHeight = 200; // Adjust the height as needed
+  const svgWidth = 800; // Adjust the width as needed
   const svg: SVG = selectSvgElement(id);
   // console.log('svgHeight, svgWidth, svg', svgHeight, svgWidth, svg);
 
@@ -58,8 +58,8 @@ const drawElement = (
   }: Required<ArrayDiagramConfig>
 ) => {
   const group: Group = svg.append('g');
-  const elementX = 10;
-  const elementY = index * 50 + 50;
+  const elementX = index * 50 + 50; // Adjust the x coordinate based on the index
+  const elementY = 50; // Keep y coordinate constant
   group
     .append('rect')
     .attr('x', elementX)
