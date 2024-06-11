@@ -36,10 +36,8 @@ const getConfig = (): Required<ArrayDiagramConfig> => {
 const getArray = (): ArrayElement[] => data.elements;
 
 const addElement = (element: ArrayElement) => {
-  // console.log('db.ts addElement is called');
+  // console.log('db addElement element: ', element);
   data.elements.push(element);
-  // debug print
-  // console.log('db.ts addElement is called, after data.element: ', data.elements);
 };
 
 const clear = () => {

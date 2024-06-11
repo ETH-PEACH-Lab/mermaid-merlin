@@ -6,7 +6,6 @@ import { populateCommonDb } from '../common/populateCommonDb.js';
 import { db } from './db.js';
 
 const populate = (ast: ArrayDiagram) => {
-  // console.log('array/populate');
   populateCommonDb(ast, db);
   for (const element of ast.elements) {
     const index = ast.elements.indexOf(element);
@@ -14,9 +13,14 @@ const populate = (ast: ArrayDiagram) => {
       throw new Error(`Array index ${index} is invalid. Index must be non-negative.`);
     }
     log.debug(`Array element at index ${index} with value ${element.value}`);
-    db.addElement({ index, value: element.value });
+
+    // Add the element to the database with the arrow property if it exists
+    db.addElement({
+      index,
+      value: element.value,
+      arrow: element.arrow ? true : false, // Ensure arrow is a boolean
+    });
   }
-  // console.log('populate test');
 };
 
 export const parser: ParserDefinition = {
