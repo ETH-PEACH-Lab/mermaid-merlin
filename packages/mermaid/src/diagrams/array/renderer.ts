@@ -7,6 +7,9 @@ import { configureSvgSize } from '../../setupGraphViewbox.js';
 import type { ArrayDB, ArrayElement } from './types.js';
 import { version } from 'os';
 
+// cspell:ignore showindex
+const showindex_key_word = 'showindex';
+
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   // console.log('renderer draw - _text: ', _text);
   // console.log('renderer draw - id: ', id);
@@ -17,6 +20,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   // console.log('renderer config', config);
   const { elementColor, borderColor, borderWidth, labelColor, labelFontSize } = config;
   const elements = db.getArray();
+  const showIndex = diagram.text.toLowerCase().includes(showindex_key_word); // Check for showIndex in a case-insensitive manner
   // console.log('renderer draw - elements: ', elements);
   const title = db.getDiagramTitle();
   const svgHeight = 200; // Adjust the height as needed
@@ -29,7 +33,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
   for (const [index, element] of elements.entries()) {
     // console.log('draw', element, index);
-    drawElement(svg, element, index, config);
+    drawElement(svg, element, index, config, showIndex);
   }
 
   if (title) {
@@ -55,7 +59,8 @@ const drawElement = (
     borderWidth,
     labelColor,
     labelFontSize,
-  }: Required<ArrayDiagramConfig>
+  }: Required<ArrayDiagramConfig>,
+  showIndex: boolean
 ) => {
   const group: Group = svg.append('g');
   const elementX = index * 50 + 50; // Adjust the x coordinate based on the index
@@ -84,6 +89,19 @@ const drawElement = (
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
     .text(element.value);
+
+  if (showIndex) {
+    group
+      .append('text')
+      .attr('x', elementX + 20)
+      .attr('y', elementY + 60) // Position below the rectangle
+      .attr('fill', labelColor)
+      .attr('font-size', 25) // Slightly smaller font for the index
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'indexLabel')
+      .text(index);
+  }
 };
 
 export const renderer: DiagramRenderer = { draw };
