@@ -1,8 +1,8 @@
 import type { LangiumParser, ParseResult } from 'langium';
 
-import type { Info, Packet, Pie } from './index.js';
+import type { Info, Packet, Pie, ArrayDiagram } from './index.js';
 
-export type DiagramAST = Info | Packet | Pie;
+export type DiagramAST = Info | Packet | Pie | ArrayDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -21,11 +21,17 @@ const initializers = {
     const parser = createPieServices().Pie.parser.LangiumParser;
     parsers['pie'] = parser;
   },
+  array: async () => {
+    const { createArrayServices } = await import('./language/array/index.js');
+    const parser = createArrayServices().Array.parser.LangiumParser;
+    parsers['array'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
 export async function parse(diagramType: 'packet', text: string): Promise<Packet>;
 export async function parse(diagramType: 'pie', text: string): Promise<Pie>;
+export async function parse(diagramType: 'array', text: string): Promise<ArrayDiagram>;
 export async function parse<T extends DiagramAST>(
   diagramType: keyof typeof initializers,
   text: string

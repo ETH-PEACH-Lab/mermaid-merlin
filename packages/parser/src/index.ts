@@ -9,3 +9,15 @@ export * from './parse.js';
 export type RecursiveAstOmit<T> = T extends object
   ? { [P in keyof T as Exclude<P, keyof AstNode>]: RecursiveAstOmit<T[P]> }
   : T;
+
+// export * from './language/generated/ast.js'; // Ensure this exports the generated AST interfaces
+
+// // @mermaid-js/parser/src/generated/ast.ts
+// export interface ArrayElement {
+//   value: number;
+//   index: number;
+// }
+
+// export interface ArrayAST {
+//   elements: ArrayElement[];
+// }

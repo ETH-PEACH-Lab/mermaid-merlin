@@ -52,6 +52,7 @@ required:
   - sankey
   - packet
   - block
+  - array
 properties:
   theme:
     description: |
@@ -238,6 +239,8 @@ properties:
     $ref: '#/$defs/SankeyDiagramConfig'
   packet:
     $ref: '#/$defs/PacketDiagramConfig'
+  array:
+    $ref: '#/$defs/ArrayDiagramConfig'
   block:
     $ref: '#/$defs/BlockDiagramConfig'
   dompurifyConfig:
@@ -275,6 +278,32 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
           If set to `false`, the absolute space required is used.
         type: boolean
         default: true
+  
+  ArrayDiagramConfig:
+    title: Array Diagram Config
+    allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]
+    description: The object containing configurations specific for array diagrams.
+    type: object
+    unevaluatedProperties: false
+    properties:
+      elementColor:
+        type: string
+        description: Color of the array elements.
+      borderColor:
+        type: string
+        description: Border color of the elements.
+      borderWidth:
+        type: number
+        minimum: 0
+        default: 1
+        description: Width of the border.
+      labelColor:
+        type: string
+        description: Color of the labels.
+      labelFontSize:
+        type: string
+        description: Font size of the labels.
+
   C4DiagramConfig:
     title: C4 Diagram Config
     allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]

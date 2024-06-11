@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Mermaid Array Diagram Demo</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=" />
+    <style>
+      div.mermaid {
+        font-family: 'Courier New', Courier, monospace !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Array Diagram Demo</h1>
+
+    <div class="diagrams">
+      <pre class="mermaid">
+        array
+        1
+        2
+        3
+        4
+        5
+        6
+        7
+        8
+        99
+      </pre>
+    </div>
+    <script type="module">
+      import mermaid from '/mermaid.esm.mjs';
+      mermaid.initialize({
+        logLevel: 3,
+        securityLevel: 'loose',
+      });
+    </script>
+
+    <style>
+      .diagrams {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      pre {
+        width: 45vw;
+        padding: 2em;
+      }
+    </style>
+  </body>
+</html>
