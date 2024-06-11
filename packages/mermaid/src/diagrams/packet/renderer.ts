@@ -7,6 +7,10 @@ import type { PacketDB, PacketWord } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
+  // console.log('draw _text - ', _text);
+  // console.log('draw id - ', id);
+  // console.log('draw _version - ', _version);
+  // console.log('draw diagram - ', diagram);
   const db = diagram.db as PacketDB;
   const config = db.getConfig();
   const { rowHeight, paddingY, bitWidth, bitsPerRow } = config;

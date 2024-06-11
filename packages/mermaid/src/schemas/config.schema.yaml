@@ -278,7 +278,7 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
           If set to `false`, the absolute space required is used.
         type: boolean
         default: true
-  
+
   ArrayDiagramConfig:
     title: Array Diagram Config
     allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]

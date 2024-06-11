@@ -22,6 +22,11 @@ let data: ArrayData = structuredClone(defaultArrayData);
 const DEFAULT_ARRAY_CONFIG: Required<ArrayDiagramConfig> = DEFAULT_CONFIG.array;
 
 const getConfig = (): Required<ArrayDiagramConfig> => {
+  // debug print
+  // console.log('db.ts getConfig return: ', cleanAndMerge({
+  //   ...DEFAULT_ARRAY_CONFIG,
+  //   ...commonGetConfig().array,
+  // }));
   return cleanAndMerge({
     ...DEFAULT_ARRAY_CONFIG,
     ...commonGetConfig().array,
@@ -31,10 +36,15 @@ const getConfig = (): Required<ArrayDiagramConfig> => {
 const getArray = (): ArrayElement[] => data.elements;
 
 const addElement = (element: ArrayElement) => {
+  // console.log('db.ts addElement is called');
   data.elements.push(element);
+  // debug print
+  // console.log('db.ts addElement is called, after data.element: ', data.elements);
 };
 
 const clear = () => {
+  // debug print
+  // console.log('db.ts clear is called');
   commonClear();
   data = structuredClone(defaultArrayData);
 };
@@ -51,3 +61,5 @@ export const db: ArrayDB = {
   getAccDescription,
   setAccDescription,
 };
+
+// console.log("db.ts - db: ", db);
