@@ -69,6 +69,20 @@ const drawElement = (
       .attr('y2', arrowYEnd)
       .attr('stroke', 'black')
       .attr('marker-end', 'url(#arrowhead)');
+
+    // Draw arrow context if it exists
+    if (element.context) {
+      group
+        .append('text')
+        .attr('x', elementX + 20)
+        .attr('y', arrowYStart - 5)
+        .attr('fill', labelColor)
+        .attr('font-size', 20)
+        .attr('dominant-baseline', 'middle')
+        .attr('text-anchor', 'middle')
+        .attr('class', 'arrowContext')
+        .text(element.context);
+    }
   }
 
   group
@@ -99,7 +113,7 @@ const drawElement = (
       .attr('x', elementX + 20)
       .attr('y', elementY + 60) // Position below the rectangle
       .attr('fill', labelColor)
-      .attr('font-size', labelFontSize - 2) // Slightly smaller font for the index
+      .attr('font-size', 25) // Slightly smaller font for the index
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'middle')
       .attr('class', 'indexLabel')

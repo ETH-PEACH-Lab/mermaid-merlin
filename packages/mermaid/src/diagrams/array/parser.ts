@@ -14,11 +14,12 @@ const populate = (ast: ArrayDiagram) => {
     }
     log.debug(`Array element at index ${index} with value ${element.value}`);
 
-    // Add the element to the database with the arrow property if it exists
+    // Add the element to the database with the arrow and context properties if they exist
     db.addElement({
       index,
       value: element.value,
-      arrow: element.arrow ? true : false, // Ensure arrow is a boolean
+      arrow: element.arrow ? true : false, // Convert arrow to boolean
+      context: element.context || undefined, // Add context if it exists
     });
   }
 };

@@ -13,7 +13,7 @@ entry ArrayDiagram:
 ;
 
 ArrayElement:
-  '@' value=Value (':' arrow='arrow')? NEWLINE
+  '@' value=Value (':' arrow='arrow' ('::' context=ID)?)? NEWLINE
 ;
 
 Value returns string:

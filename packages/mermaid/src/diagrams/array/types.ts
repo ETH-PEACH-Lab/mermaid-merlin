@@ -4,7 +4,8 @@ import type { DiagramDBBase } from '../../diagram-api/types.js';
 export interface ArrayElement {
   index: number;
   value: any;
-  arrow?: boolean; // New property added
+  arrow?: boolean;
+  context?: string; // New optional property added
 }
 
 export interface ArrayDB extends DiagramDBBase<ArrayDiagramConfig> {
