@@ -1,8 +1,8 @@
 import type { LangiumParser, ParseResult } from 'langium';
 
-import type { Info, Packet, Pie, ArrayDiagram } from './index.js';
+import type { Info, Packet, Pie, ArrayDiagram, MatrixDiagram } from './index.js';
 
-export type DiagramAST = Info | Packet | Pie | ArrayDiagram;
+export type DiagramAST = Info | Packet | Pie | ArrayDiagram | MatrixDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -26,12 +26,19 @@ const initializers = {
     const parser = createArrayServices().Array.parser.LangiumParser;
     parsers['array'] = parser;
   },
+  matrix: async () => {
+    const { createMatrixServices } = await import('./language/matrix/index.js');
+    const parser = createMatrixServices().Matrix.parser.LangiumParser;
+    parsers['matrix'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
 export async function parse(diagramType: 'packet', text: string): Promise<Packet>;
 export async function parse(diagramType: 'pie', text: string): Promise<Pie>;
 export async function parse(diagramType: 'array', text: string): Promise<ArrayDiagram>;
+export async function parse(diagramType: 'matrix', text: string): Promise<MatrixDiagram>;
+
 export async function parse<T extends DiagramAST>(
   diagramType: keyof typeof initializers,
   text: string

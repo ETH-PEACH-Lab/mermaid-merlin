@@ -163,6 +163,7 @@ export interface MermaidConfig {
   sankey?: SankeyDiagramConfig;
   packet?: PacketDiagramConfig;
   array?: ArrayDiagramConfig;
+  matrix?: MatrixDiagramConfig;
   block?: BlockDiagramConfig;
   dompurifyConfig?: DOMPurifyConfiguration;
   wrap?: boolean;
@@ -1464,6 +1465,34 @@ export interface PacketDiagramConfig extends BaseDiagramConfig {
 export interface ArrayDiagramConfig extends BaseDiagramConfig {
   /**
    * Color of the array elements.
+   */
+  elementColor?: string;
+  /**
+   * Border color of the elements.
+   */
+  borderColor?: string;
+  /**
+   * Width of the border.
+   */
+  borderWidth?: number;
+  /**
+   * Color of the labels.
+   */
+  labelColor?: string;
+  /**
+   * Font size of the labels.
+   */
+  labelFontSize?: string;
+}
+/**
+ * The object containing configurations specific for matrix diagrams.
+ *
+ * This interface was referenced by `MermaidConfig`'s JSON-Schema
+ * via the `definition` "MatrixDiagramConfig".
+ */
+export interface MatrixDiagramConfig extends BaseDiagramConfig {
+  /**
+   * Color of the matrix elements.
    */
   elementColor?: string;
   /**

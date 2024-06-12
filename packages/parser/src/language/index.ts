@@ -1,6 +1,7 @@
 export {
   Info,
   ArrayDiagram,
+  MatrixDiagram,
   MermaidAstType,
   Packet,
   PacketBlock,

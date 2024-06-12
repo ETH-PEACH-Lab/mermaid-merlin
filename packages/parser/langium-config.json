@@ -20,6 +20,11 @@
       "id": "array",
       "grammar": "src/language/array/array.langium",
       "fileExtensions": [".mmd", ".mermaid"]
+    },
+    {
+      "id": "matrix",
+      "grammar": "src/language/matrix/matrix.langium",
+      "fileExtensions": [".mmd", ".mermaid"]
     }
   ],
   "mode": "production",

@@ -1,0 +1,26 @@
+grammar MatrixDiagram
+import "../common/common"
+
+entry MatrixDiagram:
+  NEWLINE*
+  "matrix" NEWLINE*
+  (
+    TitleAndAccessibilities rows+=MatrixRow*
+    | NEWLINE+ rows+=MatrixRow+
+    | NEWLINE*
+  )
+  "@" NEWLINE*
+  rows+=MatrixRow+
+  "@" NEWLINE*
+;
+
+MatrixRow:
+  elements+=MatrixElement ("," elements+=MatrixElement)* NEWLINE
+;
+
+MatrixElement returns string:
+  INT | ID
+;
+
+terminal INT returns number: /0|[1-9][0-9]*/;
+terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
