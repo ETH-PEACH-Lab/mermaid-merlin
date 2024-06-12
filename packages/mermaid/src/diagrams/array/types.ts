@@ -5,7 +5,8 @@ export interface ArrayElement {
   index: number;
   value: any;
   arrow?: boolean;
-  context?: string; // New optional property added
+  context?: string;
+  color?: string;
 }
 
 export interface ArrayDB extends DiagramDBBase<ArrayDiagramConfig> {

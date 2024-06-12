@@ -13,11 +13,15 @@ entry ArrayDiagram:
 ;
 
 ArrayElement:
-  '@' value=Value (':' arrow='arrow' ('::' context=ID)?)? NEWLINE
+  '@' value=Value (':' arrow='arrow' ('::' context=ID)?)? ( '&' color=Color '&')? NEWLINE
 ;
 
 Value returns string:
   INT | ID
+;
+
+Color returns string:
+  'blue' | 'red' | 'green'
 ;
 
 terminal INT returns number: /0|[1-9][0-9]*/;
