@@ -10,6 +10,8 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const config = db.getConfig();
   const matrix = db.getMatrix();
   const title = db.getDiagramTitle();
+  // cspell:ignore showindex
+  const showIndex = diagram.text.toLowerCase().includes('showindex'); // Check for showIndex in a case-insensitive manner
   const svgHeight = 800;
   const svgWidth = 600;
   const svg: SVG = selectSvgElement(id);
@@ -30,8 +32,12 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
   for (const [rowIndex, row] of matrix.entries()) {
     for (const [colIndex, element] of row.elements.entries()) {
-      drawElement(svg, element, rowIndex, colIndex, config);
+      drawElement(svg, element, rowIndex, colIndex, config, showIndex);
     }
+  }
+
+  if (showIndex) {
+    drawIndices(svg, matrix.length, matrix[0]?.elements.length || 0, config);
   }
 };
 
@@ -53,7 +59,8 @@ const drawElement = (
   element: MatrixElement,
   rowIndex: number,
   colIndex: number,
-  { borderColor, borderWidth, labelColor, labelFontSize }: Required<MatrixDiagramConfig>
+  { borderColor, borderWidth, labelColor, labelFontSize }: Required<MatrixDiagramConfig>,
+  showIndex: boolean
 ) => {
   const group: Group = svg.append('g');
   const elementX = colIndex * 50 + 50;
@@ -65,8 +72,8 @@ const drawElement = (
     .append('rect')
     .attr('x', elementX)
     .attr('y', elementY)
-    .attr('width', 40)
-    .attr('height', 40)
+    .attr('width', 50)
+    .attr('height', 50)
     .style('fill', fillColor)
     .attr('stroke', 'blue')
     .attr('stroke-width', 1)
@@ -82,6 +89,41 @@ const drawElement = (
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
     .text(element.value.toString());
+};
+
+const drawIndices = (
+  svg: SVG,
+  rowCount: number,
+  colCount: number,
+  { labelColor, labelFontSize }: Required<MatrixDiagramConfig>
+) => {
+  // Draw row indices on the left
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    svg
+      .append('text')
+      .attr('x', 20)
+      .attr('y', rowIndex * 50 + 70)
+      .attr('fill', labelColor)
+      .attr('font-size', labelFontSize)
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'indexLabel')
+      .text(rowIndex.toString());
+  }
+
+  // Draw column indices at the bottom
+  for (let colIndex = 0; colIndex < colCount; colIndex++) {
+    svg
+      .append('text')
+      .attr('x', colIndex * 50 + 70)
+      .attr('y', rowCount * 50 + 70)
+      .attr('fill', labelColor)
+      .attr('font-size', labelFontSize)
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'indexLabel')
+      .text(colIndex.toString());
+  }
 };
 
 export const renderer: DiagramRenderer = { draw };

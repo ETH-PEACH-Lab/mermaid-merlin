@@ -4,6 +4,7 @@ import "../common/common"
 entry MatrixDiagram:
   NEWLINE*
   "matrix" NEWLINE*
+  (showIndex="showIndex" NEWLINE*)?
   (
     TitleAndAccessibilities rows+=MatrixRow*
     | NEWLINE+ rows+=MatrixRow+
