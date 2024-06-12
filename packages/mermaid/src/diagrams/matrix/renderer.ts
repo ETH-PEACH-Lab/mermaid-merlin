@@ -12,8 +12,8 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const title = db.getDiagramTitle();
   // cspell:ignore showindex
   const showIndex = diagram.text.toLowerCase().includes('showindex'); // Check for showIndex in a case-insensitive manner
-  const svgHeight = 800;
-  const svgWidth = 600;
+  const svgHeight = 1600;
+  const svgWidth = 1600;
   const svg: SVG = selectSvgElement(id);
 
   svg.attr('viewbox', `0 0 ${svgWidth} ${svgHeight}`);
@@ -44,11 +44,11 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 const getColor = (color?: string): string => {
   switch (color) {
     case 'blue':
-      return 'rgba(0, 0, 255, 0.3)'; // Semi-transparent blue
+      return 'rgba(0, 0, 255, 0.4)'; // Semi-transparent blue
     case 'green':
-      return 'rgba(0, 255, 0, 0.3)'; // Semi-transparent green
+      return 'rgba(0, 255, 0, 0.4)'; // Semi-transparent green
     case 'red':
-      return 'rgba(255, 0, 0, 0.3)'; // Semi-transparent red
+      return 'rgba(255, 0, 0, 0.4)'; // Semi-transparent red
     default:
       return 'none';
   }
