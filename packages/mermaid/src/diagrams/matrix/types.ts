@@ -3,6 +3,7 @@ import type { DiagramDBBase } from '../../diagram-api/types.js';
 
 export interface MatrixElement {
   value: string | number;
+  color?: 'blue' | 'green' | 'red';
 }
 
 export interface MatrixRow {

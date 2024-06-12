@@ -18,8 +18,16 @@ MatrixRow:
   elements+=MatrixElement ("," elements+=MatrixElement)* NEWLINE
 ;
 
-MatrixElement returns string:
+MatrixElement:
+  value=Value ( "{" color=Color "}" )?
+;
+
+Value returns string:
   INT | ID
+;
+
+Color returns string:
+  'blue' | 'green' | 'red'
 ;
 
 terminal INT returns number: /0|[1-9][0-9]*/;

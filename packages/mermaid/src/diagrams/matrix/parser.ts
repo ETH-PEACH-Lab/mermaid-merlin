@@ -8,7 +8,8 @@ import type { MatrixRow, MatrixElement as LocalMatrixElement } from './types.js'
 const populate = (ast: MatrixDiagram) => {
   for (const row of ast.rows) {
     const elements: LocalMatrixElement[] = row.elements.map((e) => ({
-      value: e as string | number,
+      value: e.value as string | number,
+      color: e.color as 'blue' | 'green' | 'red' | undefined,
     }));
     db.addRow({ elements });
   }

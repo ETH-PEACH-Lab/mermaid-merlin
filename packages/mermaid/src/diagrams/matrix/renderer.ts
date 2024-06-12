@@ -35,22 +35,31 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   }
 };
 
+const getColor = (color?: string): string => {
+  switch (color) {
+    case 'blue':
+      return 'rgba(0, 0, 255, 0.3)'; // Semi-transparent blue
+    case 'green':
+      return 'rgba(0, 255, 0, 0.3)'; // Semi-transparent green
+    case 'red':
+      return 'rgba(255, 0, 0, 0.3)'; // Semi-transparent red
+    default:
+      return 'none';
+  }
+};
+
 const drawElement = (
   svg: SVG,
   element: MatrixElement,
   rowIndex: number,
   colIndex: number,
-  {
-    elementColor,
-    borderColor,
-    borderWidth,
-    labelColor,
-    labelFontSize,
-  }: Required<MatrixDiagramConfig>
+  { borderColor, borderWidth, labelColor, labelFontSize }: Required<MatrixDiagramConfig>
 ) => {
   const group: Group = svg.append('g');
   const elementX = colIndex * 50 + 50;
   const elementY = rowIndex * 50 + 50;
+
+  const fillColor = getColor(element.color);
 
   group
     .append('rect')
@@ -58,7 +67,7 @@ const drawElement = (
     .attr('y', elementY)
     .attr('width', 40)
     .attr('height', 40)
-    .style('fill', 'none')
+    .style('fill', fillColor)
     .attr('stroke', 'blue')
     .attr('stroke-width', 1)
     .attr('class', 'matrixElement');
