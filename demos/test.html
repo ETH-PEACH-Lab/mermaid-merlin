@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SVG Pages</title>
+    <style>
+      svg {
+        width: 100%;
+        height: 100%;
+      }
+      .page {
+        display: none;
+      }
+      .page.active {
+        display: inline;
+      }
+      #svgButton {
+        cursor: pointer;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <svg viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+      <g id="page1" class="page active">
+        <rect x="10" y="10" width="100" height="100" fill="lightblue" />
+        <text
+          x="60"
+          y="60"
+          text-anchor="middle"
+          alignment-baseline="middle"
+          font-size="12"
+          fill="black"
+        >
+          Page 1
+        </text>
+      </g>
+      <g id="page2" class="page">
+        <rect x="10" y="10" width="100" height="100" fill="lightgreen" />
+        <text
+          x="60"
+          y="60"
+          text-anchor="middle"
+          alignment-baseline="middle"
+          font-size="12"
+          fill="black"
+        >
+          Page 2
+        </text>
+      </g>
+      <g id="svgButton">
+        <rect x="10" y="120" width="100" height="20" fill="#007bff" />
+        <text
+          x="60"
+          y="135"
+          text-anchor="middle"
+          alignment-baseline="middle"
+          font-size="10"
+          fill="white"
+        >
+          Switch Page
+        </text>
+      </g>
+    </svg>
+
+    <script>
+      document.getElementById('svgButton').addEventListener('click', function () {
+        const page1 = document.getElementById('page1');
+        const page2 = document.getElementById('page2');
+
+        if (page1.classList.contains('active')) {
+          page1.classList.remove('active');
+          page2.classList.add('active');
+        } else {
+          page1.classList.add('active');
+          page2.classList.remove('active');
+        }
+      });
+    </script>
+  </body>
+</html>
