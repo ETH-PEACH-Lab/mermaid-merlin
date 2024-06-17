@@ -27,6 +27,7 @@ const MERMAID_CONFIG_DIAGRAM_KEYS = [
   'packet',
   'array',
   'matrix',
+  'testslides',
 ] as const;
 
 /**

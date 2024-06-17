@@ -25,6 +25,11 @@
       "id": "matrix",
       "grammar": "src/language/matrix/matrix.langium",
       "fileExtensions": [".mmd", ".mermaid"]
+    },
+    {
+      "id": "testslides",
+      "grammar": "src/language/testslides/testslides.langium",
+      "fileExtensions": [".mmd", ".mermaid"]
     }
   ],
   "mode": "production",

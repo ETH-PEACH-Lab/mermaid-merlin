@@ -1,8 +1,8 @@
 import type { LangiumParser, ParseResult } from 'langium';
 
-import type { Info, Packet, Pie, ArrayDiagram, MatrixDiagram } from './index.js';
+import type { Info, Packet, Pie, ArrayDiagram, MatrixDiagram, TestSlidesDiagram } from './index.js';
 
-export type DiagramAST = Info | Packet | Pie | ArrayDiagram | MatrixDiagram;
+export type DiagramAST = Info | Packet | Pie | ArrayDiagram | MatrixDiagram | TestSlidesDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -31,6 +31,12 @@ const initializers = {
     const parser = createMatrixServices().Matrix.parser.LangiumParser;
     parsers['matrix'] = parser;
   },
+  testslides: async () => {
+    const { createTestSlidesServices } = await import('./language/testslides/index.js');
+    const parser = createTestSlidesServices().TestSlides.parser.LangiumParser;
+    // cspell:ignore testslides
+    parsers['testslides'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
@@ -38,6 +44,8 @@ export async function parse(diagramType: 'packet', text: string): Promise<Packet
 export async function parse(diagramType: 'pie', text: string): Promise<Pie>;
 export async function parse(diagramType: 'array', text: string): Promise<ArrayDiagram>;
 export async function parse(diagramType: 'matrix', text: string): Promise<MatrixDiagram>;
+// cspell:ignore testslides
+export async function parse(diagramType: 'testslides', text: string): Promise<TestSlidesDiagram>;
 
 export async function parse<T extends DiagramAST>(
   diagramType: keyof typeof initializers,

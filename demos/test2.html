@@ -1,0 +1,105 @@
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Define styles for slides and buttons -->
+  <style>
+    .slide {
+      display: none;
+    }
+    .active {
+      display: block;
+    }
+    .button {
+      cursor: pointer;
+      font-size: 18px;
+      fill: blue;
+    }
+  </style>
+
+  <!-- Slide 1 -->
+  <g id="slide1" class="slide active">
+    <rect width="800" height="600" fill="lightblue" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 1</text>
+  </g>
+
+  <!-- Slide 2 -->
+  <g id="slide2" class="slide">
+    <rect width="800" height="600" fill="lightgreen" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 2</text>
+  </g>
+
+  <!-- Slide 3 -->
+  <g id="slide3" class="slide">
+    <rect width="800" height="600" fill="lightcoral" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 3</text>
+  </g>
+
+  <!-- Slide 4 -->
+  <g id="slide4" class="slide">
+    <rect width="800" height="600" fill="lightgoldenrodyellow" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 4</text>
+  </g>
+
+  <!-- Slide 5 -->
+  <g id="slide5" class="slide">
+    <rect width="800" height="600" fill="lightpink" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 5</text>
+  </g>
+
+  <!-- Slide 6 -->
+  <g id="slide6" class="slide">
+    <rect width="800" height="600" fill="lightsalmon" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 6</text>
+  </g>
+
+  <!-- Slide 7 -->
+  <g id="slide7" class="slide">
+    <rect width="800" height="600" fill="lightseagreen" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 7</text>
+  </g>
+
+  <!-- Slide 8 -->
+  <g id="slide8" class="slide">
+    <rect width="800" height="600" fill="lightskyblue" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 8</text>
+  </g>
+
+  <!-- Slide 9 -->
+  <g id="slide9" class="slide">
+    <rect width="800" height="600" fill="lightslategray" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 9</text>
+  </g>
+
+  <!-- Slide 10 -->
+  <g id="slide10" class="slide">
+    <rect width="800" height="600" fill="lightsteelblue" />
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 10</text>
+  </g>
+
+  <!-- Next button -->
+  <text x="750" y="580" class="button" onclick="nextSlide()">Next</text>
+
+  <!-- Previous button -->
+  <text x="50" y="580" class="button" onclick="prevSlide()">Previous</text>
+
+  <!-- JavaScript for controlling the slides -->
+  <script type="application/ecmascript">
+    var currentSlide = 1;
+    var totalSlides = 10;
+
+    function showSlide(slideIndex) {
+      for (var i = 1; i <= totalSlides; i++) {
+        document.getElementById('slide' + i).classList.remove('active');
+      }
+      document.getElementById('slide' + slideIndex).classList.add('active');
+    }
+
+    function nextSlide() {
+      currentSlide = currentSlide < totalSlides ? currentSlide + 1 : 1;
+      showSlide(currentSlide);
+    }
+
+    function prevSlide() {
+      currentSlide = currentSlide > 1 ? currentSlide - 1 : totalSlides;
+      showSlide(currentSlide);
+    }
+  </script>
+</svg>
