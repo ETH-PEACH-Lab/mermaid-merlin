@@ -165,6 +165,7 @@ export interface MermaidConfig {
   array?: ArrayDiagramConfig;
   matrix?: MatrixDiagramConfig;
   testslides?: TestSlidesDiagramConfig;
+  visslides?: VisSlidesDiagramConfig;
   block?: BlockDiagramConfig;
   dompurifyConfig?: DOMPurifyConfiguration;
   wrap?: boolean;
@@ -1520,6 +1521,34 @@ export interface MatrixDiagramConfig extends BaseDiagramConfig {
  * via the `definition` "TestSlidesDiagramConfig".
  */
 export interface TestSlidesDiagramConfig extends BaseDiagramConfig {
+  /**
+   * Color of the matrix elements.
+   */
+  elementColor?: string;
+  /**
+   * Border color of the elements.
+   */
+  borderColor?: string;
+  /**
+   * Width of the border.
+   */
+  borderWidth?: number;
+  /**
+   * Color of the labels.
+   */
+  labelColor?: string;
+  /**
+   * Font size of the labels.
+   */
+  labelFontSize?: string;
+}
+/**
+ * The object containing configurations specific for visslides diagrams.
+ *
+ * This interface was referenced by `MermaidConfig`'s JSON-Schema
+ * via the `definition` "VisSlidesDiagramConfig".
+ */
+export interface VisSlidesDiagramConfig extends BaseDiagramConfig {
   /**
    * Color of the matrix elements.
    */

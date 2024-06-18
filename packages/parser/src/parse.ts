@@ -1,8 +1,23 @@
 import type { LangiumParser, ParseResult } from 'langium';
 
-import type { Info, Packet, Pie, ArrayDiagram, MatrixDiagram, TestSlidesDiagram } from './index.js';
+import type {
+  Info,
+  Packet,
+  Pie,
+  ArrayDiagram,
+  MatrixDiagram,
+  TestSlidesDiagram,
+  VisSlidesDiagram,
+} from './index.js';
 
-export type DiagramAST = Info | Packet | Pie | ArrayDiagram | MatrixDiagram | TestSlidesDiagram;
+export type DiagramAST =
+  | Info
+  | Packet
+  | Pie
+  | ArrayDiagram
+  | MatrixDiagram
+  | TestSlidesDiagram
+  | VisSlidesDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -37,6 +52,12 @@ const initializers = {
     // cspell:ignore testslides
     parsers['testslides'] = parser;
   },
+  visslides: async () => {
+    const { createVisSlidesServices } = await import('./language/visslides/index.js');
+    const parser = createVisSlidesServices().VisSlides.parser.LangiumParser;
+    // cspell:ignore testslides
+    parsers['visslides'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
@@ -46,6 +67,8 @@ export async function parse(diagramType: 'array', text: string): Promise<ArrayDi
 export async function parse(diagramType: 'matrix', text: string): Promise<MatrixDiagram>;
 // cspell:ignore testslides
 export async function parse(diagramType: 'testslides', text: string): Promise<TestSlidesDiagram>;
+// cspell:ignore visslides
+export async function parse(diagramType: 'visslides', text: string): Promise<VisSlidesDiagram>;
 
 export async function parse<T extends DiagramAST>(
   diagramType: keyof typeof initializers,

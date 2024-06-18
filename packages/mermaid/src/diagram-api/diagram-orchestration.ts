@@ -24,6 +24,7 @@ import { packet } from '../diagrams/packet/detector.js';
 import { array } from '../diagrams/array/detector.js';
 import { matrix } from '../diagrams/matrix/detector.js';
 import { testslides } from '../diagrams/testslides/detector.js';
+import { visslides } from '../diagrams/visslides/detector.js';
 import block from '../diagrams/block/blockDetector.js';
 import { registerLazyLoadedDiagrams } from './detectType.js';
 import { registerDiagram } from './diagramAPI.js';
@@ -96,6 +97,7 @@ export const addDiagrams = () => {
     block,
     array,
     matrix,
-    testslides
+    testslides,
+    visslides
   );
 };

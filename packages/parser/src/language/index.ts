@@ -3,6 +3,7 @@ export {
   ArrayDiagram,
   MatrixDiagram,
   TestSlidesDiagram,
+  VisSlidesDiagram,
   MermaidAstType,
   Packet,
   PacketBlock,
