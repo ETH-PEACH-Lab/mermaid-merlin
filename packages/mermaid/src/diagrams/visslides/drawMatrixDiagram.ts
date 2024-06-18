@@ -34,11 +34,11 @@ const drawElement = (
     .append('rect')
     .attr('x', elementX)
     .attr('y', elementY)
-    .attr('width', 40)
-    .attr('height', 40)
+    .attr('width', 48)
+    .attr('height', 48)
     .style('fill', fillColor)
-    .attr('stroke', borderColor)
-    .attr('stroke-width', borderWidth)
+    .attr('stroke', '#191970')
+    .attr('stroke-width', '1.5px')
     .attr('class', 'matrixElement');
 
   group

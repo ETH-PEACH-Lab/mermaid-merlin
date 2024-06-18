@@ -13,10 +13,11 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const pages = db.getPages();
   const title = db.getDiagramTitle();
   const svgHeight = 800;
-  const svgWidth = 600;
+  const svgWidth = 1000;
   const svg: SVG = selectSvgElement(id);
 
-  const currentPage = 0;
+  let currentPage = 0;
+  let playInterval: number | null = null;
 
   const renderPage = (pageIndex: number) => {
     svg.selectAll('g.page').attr('display', 'none');
@@ -25,10 +26,20 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     // Update button states
     svg.select('#prevButton').attr('fill', pageIndex > 0 ? '#007bff' : '#c0c0c0');
     svg.select('#nextButton').attr('fill', pageIndex < pages.length - 1 ? '#007bff' : '#c0c0c0');
+
+    // Update current page display
+    svg.select('#pageIndicator').text(`${pageIndex + 1} / ${pages.length}`);
   };
 
   const addNavigationButtons = (svg: SVG, totalPages: number) => {
     const buttonGroup = svg.append('g').attr('class', 'navigation-buttons');
+
+    const buttonWidth = 40;
+    const buttonHeight = 20;
+    const buttonSpacing = 10;
+
+    const buttonsX = svgWidth / 2 - (buttonWidth * 1.5 + buttonSpacing);
+    const buttonsY = svgHeight - 60; // Adjusted y position
 
     // Prev button
     const prevButtonGroup = buttonGroup
@@ -39,17 +50,41 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     prevButtonGroup
       .append('rect')
       .attr('id', 'prevButton')
-      .attr('x', 10)
-      .attr('y', svgHeight - 40)
-      .attr('width', 60)
-      .attr('height', 30)
+      .attr('x', buttonsX)
+      .attr('y', buttonsY)
+      .attr('width', buttonWidth)
+      .attr('height', buttonHeight)
       .attr('fill', '#c0c0c0'); // Initially disabled
 
     prevButtonGroup
       .append('text')
-      .text('Prev')
-      .attr('x', 40)
-      .attr('y', svgHeight - 20)
+      .text('<')
+      .attr('x', buttonsX + buttonWidth / 2)
+      .attr('y', buttonsY + buttonHeight / 2)
+      .attr('fill', 'white')
+      .attr('text-anchor', 'middle')
+      .attr('alignment-baseline', 'middle');
+
+    // Play button
+    const playButtonGroup = buttonGroup
+      .append('g')
+      .attr('id', 'playButtonGroup')
+      .attr('cursor', 'pointer');
+
+    playButtonGroup
+      .append('rect')
+      .attr('id', 'playButton')
+      .attr('x', buttonsX + buttonWidth + buttonSpacing)
+      .attr('y', buttonsY)
+      .attr('width', buttonWidth)
+      .attr('height', buttonHeight)
+      .attr('fill', '#007bff'); // Initially enabled
+
+    playButtonGroup
+      .append('text')
+      .text('▶')
+      .attr('x', buttonsX + buttonWidth + buttonSpacing + buttonWidth / 2)
+      .attr('y', buttonsY + buttonHeight / 2)
       .attr('fill', 'white')
       .attr('text-anchor', 'middle')
       .attr('alignment-baseline', 'middle');
@@ -63,20 +98,65 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     nextButtonGroup
       .append('rect')
       .attr('id', 'nextButton')
-      .attr('x', svgWidth - 70)
-      .attr('y', svgHeight - 40)
-      .attr('width', 60)
-      .attr('height', 30)
+      .attr('x', buttonsX + 2 * (buttonWidth + buttonSpacing))
+      .attr('y', buttonsY)
+      .attr('width', buttonWidth)
+      .attr('height', buttonHeight)
       .attr('fill', '#007bff'); // Initially enabled
 
     nextButtonGroup
       .append('text')
-      .text('Next')
-      .attr('x', svgWidth - 40)
-      .attr('y', svgHeight - 20)
+      .text('>')
+      .attr('x', buttonsX + 2 * (buttonWidth + buttonSpacing) + buttonWidth / 2)
+      .attr('y', buttonsY + buttonHeight / 2)
       .attr('fill', 'white')
       .attr('text-anchor', 'middle')
       .attr('alignment-baseline', 'middle');
+
+    // Page indicator
+    buttonGroup
+      .append('text')
+      .attr('id', 'pageIndicator')
+      .attr('x', svgWidth - 50)
+      .attr('y', svgHeight - 50)
+      .attr('fill', 'black')
+      .attr('text-anchor', 'middle')
+      .attr('alignment-baseline', 'middle')
+      .text(`1 / ${totalPages}`);
+
+    prevButtonGroup.node()?.addEventListener('click', () => {
+      if (currentPage > 0) {
+        currentPage -= 1;
+        renderPage(currentPage);
+      }
+    });
+
+    nextButtonGroup.node()?.addEventListener('click', () => {
+      if (currentPage < totalPages - 1) {
+        currentPage += 1;
+        renderPage(currentPage);
+      }
+    });
+
+    playButtonGroup.node()?.addEventListener('click', () => {
+      if (playInterval) {
+        clearInterval(playInterval);
+        playInterval = null;
+        d3.select('#playButton text').text('▶');
+        d3.select('#playButton').attr('fill', '#007bff');
+      } else {
+        playInterval = setInterval(() => {
+          if (currentPage < totalPages - 1) {
+            currentPage += 1;
+          } else {
+            currentPage = 0;
+          }
+          renderPage(currentPage);
+        }, 1000);
+        d3.select('#playButton text').text('❚❚');
+        d3.select('#playButton').attr('fill', '#c0c0c0');
+      }
+    });
   };
 
   const drawPage = (svg: SVG, page: VisSlidePage, pageIndex: number) => {
@@ -132,6 +212,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
       const svg = document.getElementById('${id}');
       let currentPage = 0;
       const totalPages = ${pages.length};
+      let playInterval = null;
 
       function renderPage(pageIndex) {
         const pages = svg.querySelectorAll('g.page');
@@ -142,9 +223,12 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
         const prevButton = svg.querySelector('#prevButton');
         const nextButton = svg.querySelector('#nextButton');
-
+        
         if (prevButton) prevButton.setAttribute('fill', pageIndex > 0 ? '#007bff' : '#c0c0c0');
         if (nextButton) nextButton.setAttribute('fill', pageIndex < totalPages - 1 ? '#007bff' : '#c0c0c0');
+
+        // Update current page display
+        svg.querySelector('#pageIndicator').textContent = (pageIndex + 1) + ' / ' + totalPages;
       }
 
       svg.querySelector('#prevButtonGroup').addEventListener('click', function() {
@@ -158,6 +242,26 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         if (currentPage < totalPages - 1) {
           currentPage += 1;
           renderPage(currentPage);
+        }
+      });
+
+      svg.querySelector('#playButtonGroup').addEventListener('click', function() {
+        if (playInterval) {
+          clearInterval(playInterval);
+          playInterval = null;
+          svg.querySelector('#playButton text').textContent = '▶';
+          svg.querySelector('#playButton').setAttribute('fill', '#007bff');
+        } else {
+          playInterval = setInterval(() => {
+            if (currentPage < totalPages - 1) {
+              currentPage += 1;
+            } else {
+              currentPage = 0;
+            }
+            renderPage(currentPage);
+          }, 1000);
+          svg.querySelector('#playButton text').textContent = '❚❚';
+          svg.querySelector('#playButton').setAttribute('fill', '#c0c0c0');
         }
       });
 

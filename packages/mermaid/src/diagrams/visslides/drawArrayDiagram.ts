@@ -67,8 +67,8 @@ const drawElement = (
     .attr('width', 40)
     .attr('height', 40)
     .style('fill', fillColor)
-    .attr('stroke', borderColor)
-    .attr('stroke-width', borderWidth)
+    .attr('stroke', '#191970')
+    .attr('stroke-width', '2px')
     .attr('class', 'arrayElement');
 
   group
