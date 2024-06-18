@@ -16,59 +16,71 @@
 
   <!-- Slide 1 -->
   <g id="slide1" class="slide active">
-    <rect width="800" height="600" fill="lightblue" />
+    <rect width="800" height="600" fill="lightblue"></rect>
     <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 1</text>
   </g>
 
   <!-- Slide 2 -->
   <g id="slide2" class="slide">
-    <rect width="800" height="600" fill="lightgreen" />
+    <rect width="800" height="600" fill="lightgreen"></rect>
     <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 2</text>
   </g>
 
   <!-- Slide 3 -->
   <g id="slide3" class="slide">
-    <rect width="800" height="600" fill="lightcoral" />
+    <rect width="800" height="600" fill="lightcoral"></rect>
     <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 3</text>
   </g>
 
   <!-- Slide 4 -->
   <g id="slide4" class="slide">
-    <rect width="800" height="600" fill="lightgoldenrodyellow" />
+    <rect width="800" height="600" fill="lightgoldenrodyellow"></rect>
     <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 4</text>
   </g>
 
   <!-- Slide 5 -->
   <g id="slide5" class="slide">
-    <rect width="800" height="600" fill="lightpink" />
+    <rect width="800" height="600" fill="lightpink"></rect>
     <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 5</text>
+  </g>
+
+  <!-- Slide 6 -->
+  <g id="slide6" class="slide">
+    <rect width="800" height="600" fill="lightsalmon"></rect>
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 6</text>
+  </g>
+
+  <!-- Slide 7 -->
+  <g id="slide7" class="slide">
+    <rect width="800" height="600" fill="lightseagreen"></rect>
+    <text x="400" y="300" font-size="50" text-anchor="middle" fill="black">Slide 7</text>
   </g>
 
   <!-- Next button -->
   <text x="750" y="580" class="button" onclick="nextSlide()">Next</text>
 
   <!-- Previous button -->
-  <text x="50" y="580" class="button" onclick="prevSlide()">Previous</text>
+  <text x="50" y="580" class="button" onclick="prevSlide()">Prev</text>
 
   <!-- JavaScript for controlling the slides -->
   <script type="application/ecmascript">
     var currentSlide = 1;
-    var totalSlides = 5;
+    var totalSlides = 10;
 
     function showSlide(slideIndex) {
-      for (var i = 1; i <= totalSlides; i++) {
+      for (var i = 1; i &lt;= totalSlides; i++) {
         document.getElementById('slide' + i).classList.remove('active');
       }
       document.getElementById('slide' + slideIndex).classList.add('active');
     }
 
     function nextSlide() {
-      currentSlide = currentSlide < totalSlides ? currentSlide + 1 : 1;
+      currentSlide = currentSlide &lt; totalSlides ? currentSlide + 1 : 1;
       showSlide(currentSlide);
     }
 
     function prevSlide() {
-      currentSlide = currentSlide > 1 ? currentSlide - 1 : totalSlides;
+      currentSlide = currentSlide &gt; 1 ? currentSlide - 1 : totalSlides;
       showSlide(currentSlide);
     }
   </script>

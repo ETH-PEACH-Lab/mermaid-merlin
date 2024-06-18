@@ -41,7 +41,13 @@ array
 @ 2
 @ 3 
 @ 4 &blue&
-@ 5</textarea
+@ 5
+array
+@ 1
+@ 2
+@ 3 
+@ 4 
+@ 5 &blue&</textarea
       >
       <br />
       <button id="renderButton">Render Diagram</button>
@@ -65,6 +71,7 @@ array
             const svg = document.getElementById('dynamicDiagram');
             let currentPage = 0;
             const totalPages = ${document.querySelectorAll('g.page').length};
+            console.log('totalPages', totalPages);
 
             document.querySelector('#prevButtonGroup').addEventListener('click', function() {
               console.log('Prev button clicked');

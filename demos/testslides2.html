@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Mermaid Quick Test Page</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=" />
+    <style>
+      div.mermaid {
+        font-family: 'Courier New', Courier, monospace !important;
+      }
+      .button {
+        cursor: pointer;
+        font-size: 18px;
+        fill: blue;
+      }
+      .page {
+        display: none;
+      }
+      .page.active {
+        display: block;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Sequence diagram demos</h1>
+
+    <pre class="mermaid">
+        testslides
+        array
+        @ 1:arrow &blue&
+        @ 2
+        @ 3
+        @ 4
+        @ 5
+        array
+        @ 1
+        @ 2:arrow &blue&
+        @ 3
+        @ 4
+        @ 5
+        array
+        @ 1
+        @ 2
+        @ 3:arrow &blue&
+        @ 4
+        @ 5
+        array
+        @ 1
+        @ 2
+        @ 3 
+        @ 4:arrow &blue&
+        @ 5
+        array
+        @ 1
+        @ 2
+        @ 3 
+        @ 4 
+        @ 5:arrow &blue&
+    </pre>
+
+    <script type="module">
+      import mermaid from './mermaid.esm.mjs';
+      console.log('html mermaid');
+      mermaid.initialize({
+        theme: 'base',
+        logLevel: 3,
+        securityLevel: 'loose',
+        flowchart: { curve: 'basis' },
+        gantt: { axisFormat: '%m/%d/%Y' },
+        sequence: { actorMargin: 50 },
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        mermaid.contentLoaded();
+      });
+    </script>
+  </body>
+</html>
