@@ -12,19 +12,14 @@ const populate = (ast: VisSlidesDiagram) => {
       if ('elements' in subDiagram) {
         return {
           elements: subDiagram.elements.map((e) => ({
-            value: e.value,
-            arrow: e.arrow ? true : undefined,
-            context: e.context,
-            color: e.color,
+            value: 1,
           })),
-          showIndex: subDiagram.showIndex ? true : undefined,
         };
       } else {
         return {
           rows: subDiagram.rows.map((row) => ({
             elements: row.elements.map((e) => ({
-              value: e.value,
-              color: e.color,
+              value: 1,
             })),
           })),
         };
