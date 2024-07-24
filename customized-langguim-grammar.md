@@ -96,8 +96,7 @@ label: This is text-label for stack
 - graph
   graph's grammar always strat with 'graph', which is case-insensitive.
   then in the new line there is a optional 'title', the valid value for title can consists of any numbers/characters.
-  then there is each unit of the graph. the graph start with @ and ends with @. there are nodes and edges. the valid value for nodes consisting of characters and numbers. there are 2 kinds of edges '-->' and '---' to represent directed edge and undirected edge. For node there are four optional attributes: value, color arrow and hiden. The valid value for each are respectively: number/characters/string(value), string(color), number/characters/string(arrow), True or False(hiden). the edge has 2 optional artributes color and value. The valid value for color is string and for value is number/characters/string.
-  There can be node independently but can't be edges independently. The edges can only be between two nodes.
+  then there is each unit of the graph. the graph start with @ and ends with @. there are nodes and edges. the valid value for nodes consisting of characters and numbers. . For node there are four optional attributes: value, color arrow and hiden. The valid value for each are respectively: number/characters/string(value), string(color), number/characters/string(arrow), True or False(hiden). the edge has 2 optional artributes color and value. The valid value for color is string and for value is number/characters/string.
   then there is optional label: the valid value for label is numbers/characters/string.
   Here is an example of granph:
 
@@ -105,11 +104,12 @@ label: This is text-label for stack
 graph
 title: graphDemo
 @
-node1{value:1, color:blue, arrow: head, hiden:False} - {color: red, value: 1} -> node2
-node2{value:2, color:blue, arrow: head, hiden:False} - {color: red, value: hello} -- node3
-node3 --> node1
-node3 --- node1
+node1{value:1, color:blue, arrow: head, hiden:False}
+node2{value:2, color:blue, arrow: head, hiden:False}
+node3
 node4
+edge(node1, node2) {value: 1, color: blue, directed: True}
+edge(node2, node1)
 @
 label: This is text-label for graph
 ```
@@ -118,8 +118,7 @@ label: This is text-label for graph
   tree's grammar always strat with 'tree', which is case-insensitive.
   then there is an optional identifier 'LR' or 'TD' to control the tree should be horizontal or vertical
   then in the new line there is a optional 'title', the valid value for title can consists of any numbers/characters.
-  then there is each unit of the tree. the graph start with @ and ends with @. there are nodes and edges. the valid value for nodes consisting of characters and numbers. there are 2 kinds of edges '-->' and '---' to represent directed edge and undirected edge. For node there are four optional attributes: value, color arrow and hiden. The valid value for each are respectively: number/characters/string(value), string(color), number/characters/string(arrow), True or False(hiden). the edge has 2 optional artributes color and value. The valid value for color is string and for value is number/characters/string.
-  There can be node independently but can't be edges independently. The edges can only be between two nodes.
+  then there is each unit of the tree. the graph start with @ and ends with @. there are nodes and edges. the valid value for nodes consisting of characters and numbers. For node there are four optional attributes: value, color arrow and hiden. The valid value for each are respectively: number/characters/string(value), string(color), number/characters/string(arrow), True or False(hiden). the edge has 2 optional artributes color and value. The valid value for color is string and for value is number/characters/string.
   then there is optional label: the valid value for label is numbers/characters/string.
   Here is an example of granph:
 
@@ -127,11 +126,171 @@ label: This is text-label for graph
 tree
 title: treeDemo
 @
-father{value:1, color:blue, arrow: father, hiden:False} - {color: red, value: 1} -> leftson1
-leftson1{value:2, color:blue, arrow: head, hiden:False} - {color: red, value: hello} -- leftgrandson1
-father --> leftson1
-leftson1 --- leftgrandson1
-mother
+root{value:1, color:blue, arrow: head, hiden:False}
+son1{value:2, color:blue, arrow: head, hiden:False}
+son2
+son11
+edge(root, son1) {value: 1, color: blue, directed: True}
+edge(son1, son11)
 @
 label: This is text-label for tree
+```
+
+langium grammar for visualDiagram:
+
+```
+grammar VisualDiagram
+import "../common/common"
+
+entry VisualDiagram:
+  NEWLINE*
+  ("visual" | "slides" | "slide") NEWLINE*
+  ( TitleAndAccessibilities )?
+  pages+=VisSlidePage+
+;
+
+TitleAndAccessibilities:
+  "title:" titleValue=TitleValue NEWLINE*
+;
+
+TitleValue returns string:
+  /[a-zA-Z0-9\s!@#\$%\^&\*\(\)\-_=+\[\]\{\};:'",<>\.?\/\\|]+/
+;
+
+VisSlidePage:
+  "page" NEWLINE*
+  subDiagrams+=SubDiagram+
+;
+
+SubDiagram:
+  ArrayDiagram | MatrixDiagram | StackDiagram | TreeDiagram | GraphDiagram
+;
+
+ArrayDiagram:
+  diagramType="array" NEWLINE*
+  orientation=Orientation? NEWLINE*
+  (title="title:" titleValue=TitleValue NEWLINE*)?
+  (showIndex="showIndex" NEWLINE*)?
+  elements+=ArrayElement* NEWLINE*
+;
+
+Orientation:
+  "LR" | "TD"
+;
+
+ArrayElement:
+  '@' value=Value ( '{' attributeList+=Attribute (',' attributeList+=Attribute)* '}' )? NEWLINE
+;
+
+Attribute:
+  arrowAttribute | colorAttribute
+
+arrowAttribute:
+  "arrow:" attributeValue=AttributeValue
+
+colorAttribute:
+  "color:" attributeValue=AttributeValue
+
+MatrixDiagram:
+  diagramType="matrix" NEWLINE*
+  (title="title:" titleValue=TitleValue NEWLINE*)?
+  (showIndex="showIndex" NEWLINE*)?
+  '@' NEWLINE
+  rows+=MatrixRow+
+  '@' NEWLINE*
+;
+
+MatrixRow:
+  elements+=MatrixElement (',' elements+=MatrixElement)* NEWLINE
+;
+
+MatrixElement:
+  value=Value ( '{' color=Color '}' )?
+;
+
+StackDiagram:
+  diagramType="stack" NEWLINE*
+  orientation=Orientation? NEWLINE*
+  (title="title:" titleValue=TitleValue NEWLINE*)?
+  (showIndex="showIndex" NEWLINE*)?
+  (size="size:" sizeValue=SizeValue NEWLINE*)?
+  elements+=StackElement* NEWLINE*
+;
+
+SizeValue returns number:
+  /0|[1-9][0-9]*/
+;
+
+StackElement:
+  '@' value=Value ( '{' attributeList+=Attribute (',' attributeList+=Attribute)* '}' )? NEWLINE
+;
+
+TreeDiagram:
+  diagramType="tree" NEWLINE*
+  orientation=Orientation? NEWLINE*
+  (title="title:" titleValue=TitleValue NEWLINE*)?
+  '@' NEWLINE
+  elements+=TreeElement* NEWLINE
+  '@' NEWLINE*
+;
+
+TreeElement:
+  node | edge
+
+node:
+  nodeName=ID nodeAttributes?
+
+nodeAttributes:
+  '{' attributeList+=Attribute (',' attributeList+=Attribute)* '}'
+
+edge:
+  source=ID edgeAttributes? edgeConnector target=ID
+
+edgeConnector:
+  "->" | "--"
+
+edgeAttributes:
+  '{' edgeAttributeList+=EdgeAttribute (',' edgeAttributeList+=EdgeAttribute)* '}'
+
+EdgeAttribute:
+  colorAttribute | valueAttribute
+
+GraphDiagram:
+  diagramType="graph" NEWLINE*
+  (title="title:" titleValue=TitleValue NEWLINE*)?
+  '@' NEWLINE
+  elements+=GraphElement* NEWLINE
+  '@' NEWLINE*
+;
+
+GraphElement:
+  node | edge
+
+Value returns string:
+  INT | ID
+;
+
+Color returns string:
+  'blue' | 'red' | 'green'
+;
+
+AttributeValue returns string:
+  /[a-zA-Z0-9\s]+/
+;
+
+terminal INT returns number:
+  /0|[1-9][0-9]*/
+;
+
+terminal ID:
+  /[a-zA-Z_][a-zA-Z0-9_]*/
+;
+
+Label:
+  "label:" labelValue=LabelValue NEWLINE*
+
+LabelValue returns string:
+  /[a-zA-Z0-9\s!@#\$%\^&\*\(\)\-_=+\[\]\{\};:'",<>\.?\/\\|]+/
+;
+
 ```
