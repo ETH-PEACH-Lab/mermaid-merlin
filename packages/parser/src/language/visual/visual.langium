@@ -20,7 +20,7 @@ SubDiagram:
 ArrayDiagram:
   diagramType="array" NEWLINE*
   (orientation=Orientation NEWLINE*)?
-  (title=STRING NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   elements+=ArrayElement* NEWLINE*
   ('label:' label=STRING NEWLINE*)?
@@ -36,7 +36,7 @@ ArrayAttribute:
 
 MatrixDiagram:
   diagramType="matrix" NEWLINE*
-  (title=STRING NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   '@' NEWLINE
   rows+=MatrixRow+
@@ -59,7 +59,7 @@ MatrixAttributes:
 StackDiagram:
   diagramType="stack" NEWLINE*
   (orientation=Orientation NEWLINE*)?
-  (title=STRING NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   'size:' size=INT NEWLINE*
   elements+=StackElement* NEWLINE*
@@ -76,7 +76,7 @@ StackAttribute:
 
 GraphDiagram:
   diagramType="graph" NEWLINE*
-  (title=STRING NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
   '@' NEWLINE
   elements+=GraphElement+
   '@' NEWLINE*
@@ -105,7 +105,7 @@ EdgeAttributes:
 
 TreeDiagram:
   diagramType="tree" NEWLINE*
-  (title=STRING NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
   '@' NEWLINE
   elements+=TreeElement+
   '@' NEWLINE*
