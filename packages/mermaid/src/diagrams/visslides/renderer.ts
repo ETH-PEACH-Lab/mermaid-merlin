@@ -145,14 +145,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         d3.select('#playButton text').text('▶');
         d3.select('#playButton').attr('fill', '#007bff');
       } else {
-        playInterval = setInterval(() => {
-          if (currentPage < totalPages - 1) {
-            currentPage += 1;
-          } else {
-            currentPage = 0;
-          }
-          renderPage(currentPage);
-        }, 1000);
+        playInterval = 1000;
         d3.select('#playButton text').text('❚❚');
         d3.select('#playButton').attr('fill', '#c0c0c0');
       }
