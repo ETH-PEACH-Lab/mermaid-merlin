@@ -4,6 +4,7 @@ export {
   MatrixDiagram,
   TestSlidesDiagram,
   VisSlidesDiagram,
+  VisualDiagram,
   MermaidAstType,
   Packet,
   PacketBlock,
@@ -30,3 +31,4 @@ export * from './info/index.js';
 export * from './packet/index.js';
 export * from './pie/index.js';
 export * from './array/index.js';
+export * from './visual/index.js';

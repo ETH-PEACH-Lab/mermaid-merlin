@@ -56,6 +56,7 @@ required:
   - matrix
   - testslides
   - visslides
+  - visual
 properties:
   theme:
     description: |
@@ -250,6 +251,8 @@ properties:
     $ref: '#/$defs/TestSlidesDiagramConfig'
   visslides:
     $ref: '#/$defs/VisSlidesDiagramConfig'
+  visual:
+    $ref: '#/$defs/VisualDiagramConfig'
   block:
     $ref: '#/$defs/BlockDiagramConfig'
   dompurifyConfig:
@@ -367,6 +370,31 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
     title: VisSlides Diagram Config
     allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]
     description: The object containing configurations specific for visslides diagrams.
+    type: object
+    unevaluatedProperties: false
+    properties:
+      elementColor:
+        type: string
+        description: Color of the matrix elements.
+      borderColor:
+        type: string
+        description: Border color of the elements.
+      borderWidth:
+        type: number
+        minimum: 0
+        default: 1
+        description: Width of the border.
+      labelColor:
+        type: string
+        description: Color of the labels.
+      labelFontSize:
+        type: string
+        description: Font size of the labels.
+
+  VisualDiagramConfig:
+    title: Visual Diagram Config
+    allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]
+    description: The object containing configurations specific for visual diagrams.
     type: object
     unevaluatedProperties: false
     properties:

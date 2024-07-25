@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Mermaid Visual Diagram Demo</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=" />
+    <style>
+      div.mermaid {
+        font-family: 'Courier New', Courier, monospace !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Array Diagram Demo</h1>
+
+    <div>
+      <textarea id="arrayInput" rows="10" cols="50">
+        visual
+        page
+        array
+        @1
+        @2
+        @3
+        stack
+        size:8
+        @1
+        @2
+        @3 
+        @4
+        @6{color:"blue"}
+        @7{color:"red"}
+        @8
+        label:"label1 this is a stack"
+        page
+        array
+        @1{color:"blue"}
+        label:"this is an array"
+        matrix
+        showIndex
+        @
+        1{color:"blue"},2
+        1{color:"blue"},2
+        1{color:"blue"},2,3
+        @
+        label:"this is a matrix"
+        </textarea
+      >
+      <br />
+      <button id="renderButton">Render Diagram</button>
+    </div>
+
+    <div class="diagrams">
+      <div id="mermaidDiagram" class="mermaid"></div>
+    </div>
+
+    <script type="module">
+      import mermaid from '/mermaid.esm.mjs';
+
+      async function renderDiagram() {
+        const input = document.getElementById('arrayInput').value;
+        const { svg } = await mermaid.render('dynamicDiagram', input);
+        document.getElementById('mermaidDiagram').innerHTML = svg;
+      }
+
+      document.getElementById('renderButton').addEventListener('click', async () => {
+        await renderDiagram();
+      });
+
+      window.onload = async () => {
+        await renderDiagram();
+      };
+
+      mermaid.initialize({
+        startOnLoad: true,
+        logLevel: 3,
+        securityLevel: 'loose',
+      });
+    </script>
+
+    <style>
+      .diagrams {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      #arrayInput {
+        width: 50vw;
+        padding: 1em;
+      }
+      #mermaidDiagram {
+        width: 45vw;
+        padding: 2em;
+      }
+    </style>
+  </body>
+</html>

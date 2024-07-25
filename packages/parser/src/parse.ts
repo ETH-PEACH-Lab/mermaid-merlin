@@ -8,6 +8,7 @@ import type {
   MatrixDiagram,
   TestSlidesDiagram,
   VisSlidesDiagram,
+  VisualDiagram,
 } from './index.js';
 
 export type DiagramAST =
@@ -17,7 +18,8 @@ export type DiagramAST =
   | ArrayDiagram
   | MatrixDiagram
   | TestSlidesDiagram
-  | VisSlidesDiagram;
+  | VisSlidesDiagram
+  | VisualDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -58,6 +60,12 @@ const initializers = {
     // cspell:ignore testslides
     parsers['visslides'] = parser;
   },
+  visual: async () => {
+    const { createVisualDiagramServices } = await import('./language/visual/index.js');
+    const parser = createVisualDiagramServices().VisualDiagram.parser.LangiumParser;
+    // cspell:ignore testslides
+    parsers['visual'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
@@ -69,6 +77,8 @@ export async function parse(diagramType: 'matrix', text: string): Promise<Matrix
 export async function parse(diagramType: 'testslides', text: string): Promise<TestSlidesDiagram>;
 // cspell:ignore visslides
 export async function parse(diagramType: 'visslides', text: string): Promise<VisSlidesDiagram>;
+// cspell:ignore visual
+export async function parse(diagramType: 'visual', text: string): Promise<VisualDiagram>;
 
 export async function parse<T extends DiagramAST>(
   diagramType: keyof typeof initializers,

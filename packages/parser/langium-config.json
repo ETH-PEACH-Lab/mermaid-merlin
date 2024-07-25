@@ -35,6 +35,11 @@
       "id": "visslides",
       "grammar": "src/language/visslides/visslides.langium",
       "fileExtensions": [".mmd", ".mermaid"]
+    },
+    {
+      "id": "visual",
+      "grammar": "src/language/visual/visual.langium",
+      "fileExtensions": [".mmd", ".mermaid"]
     }
   ],
   "mode": "production",
