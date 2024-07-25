@@ -27,11 +27,7 @@ ArrayDiagram:
 ;
 
 ArrayElement:
-  '@' value=Value ( '{' arrayAttributes+=ArrayAttribute (',' arrayAttributes+=ArrayAttribute)* '}' )? NEWLINE*
-;
-
-ArrayAttribute:
-    name=ID ':' value=STRING
+  '@' value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 MatrixDiagram:
@@ -49,7 +45,7 @@ MatrixRow:
 ;
 
 MatrixElement:
-  value=Value ( '{' matrixAttributes=MatrixAttributes '}' )?
+  value=Value ( '{' 'color:' color=STRING '}' )?
 ;
 
 MatrixAttributes:
@@ -67,7 +63,7 @@ StackDiagram:
 ;
 
 StackElement:
-  '@' value=Value ( '{' stackAttributes+=StackAttribute (',' stackAttributes+=StackAttribute)* '}' )? NEWLINE*
+  '@' value=Value ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 StackAttribute:
@@ -84,19 +80,19 @@ GraphDiagram:
 ;
 
 GraphElement:
-  NodeDefinition | EdgeDefinition NEWLINE
+  NodeDefinition | EdgeDefinition 
 ;
 
 NodeDefinition:
-  'node' nodeId=ID ('{' nodeAttributes=NodeAttributes (',' nodeAttributes+=NodeAttributes)* '}')? 
+  'node:' nodeId=ID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')?NEWLINE
 ;
 
 NodeAttributes:
-  name=ID ':' value=Value
+  name=ID ':' value=Value 
 ;
 
 EdgeDefinition:
-  'edge' '(' start=ID ',' end=ID ')' ('{' edgeAttributes=EdgeAttributes (',' edgeAttributes+=EdgeAttributes)* '}')? 
+  'edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
 ;
 
 EdgeAttributes:
@@ -113,15 +109,15 @@ TreeDiagram:
 ;
 
 TreeElement:
-  TreeNodeDefinition | TreeEdgeDefinition NEWLINE
+  TreeNodeDefinition | TreeEdgeDefinition 
 ;
 
 TreeNodeDefinition:
-  'node' nodeId=ID ('{' nodeAttributes=NodeAttributes (',' nodeAttributes+=NodeAttributes)* '}')? 
+  'node:' nodeId=ID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')?NEWLINE
 ;
 
 TreeEdgeDefinition:
-  'edge' '(' father=ID ',' son=ID ')' ('{' edgeAttributes=EdgeAttributes (',' edgeAttributes+=EdgeAttributes)* '}')? 
+  'edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
 ;
 
 Value returns string:
