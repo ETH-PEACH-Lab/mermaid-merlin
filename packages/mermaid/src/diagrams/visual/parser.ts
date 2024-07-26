@@ -63,6 +63,49 @@ const populate = (ast: VisualDiagram) => {
             type: 'graph',
             title: subDiagram.title,
             label: subDiagram.label,
+            elements: subDiagram.elements.map((element) => {
+              if (element.$type == 'NodeDefinition') {
+                return {
+                  type: 'node',
+                  nodeId: element.nodeId,
+                  value: element.value,
+                  color: element.color,
+                  arrow: element.arrowLabel !== undefined && element.arrowLabel !== null,
+                  arrowLabel: element.arrowLabel,
+                  hidden: element.hidden,
+                };
+              } else if (element.$type == 'EdgeDefinition') {
+                return {
+                  type: 'edge',
+                  start: element.start,
+                  end: element.end,
+                  value: element.value,
+                  color: element.color,
+                };
+              } else {
+                throw new Error('Unknown graph element type');
+              }
+            }),
+            graphNodes: subDiagram.elements
+              .filter((element) => element.$type === 'NodeDefinition')
+              .map((element) => ({
+                type: 'node',
+                nodeId: element.nodeId,
+                value: element.value,
+                color: element.color,
+                arrow: element.arrowLabel !== undefined && element.arrowLabel !== null,
+                arrowLabel: element.arrowLabel,
+                hidden: element.hidden,
+              })),
+            graphEdges: subDiagram.elements
+              .filter((element) => element.$type === 'EdgeDefinition')
+              .map((element) => ({
+                type: 'edge',
+                start: element.start,
+                end: element.end,
+                value: element.value,
+                color: element.color,
+              })),
           };
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);

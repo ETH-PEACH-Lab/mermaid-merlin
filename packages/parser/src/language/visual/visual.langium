@@ -84,7 +84,7 @@ GraphElement:
 ;
 
 NodeDefinition:
-  'node:' nodeId=ID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')?NEWLINE
+  type='node:' nodeId=ID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')?NEWLINE
 ;
 
 NodeAttributes:
@@ -92,7 +92,7 @@ NodeAttributes:
 ;
 
 EdgeDefinition:
-  'edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
+  type='edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
 ;
 
 EdgeAttributes:

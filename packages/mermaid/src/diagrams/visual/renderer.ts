@@ -3,10 +3,18 @@ import type { Diagram } from '../../Diagram.js';
 import type { DiagramRenderer, DrawDefinition, SVG } from '../../diagram-api/types.js';
 import { selectSvgElement } from '../../rendering-util/selectSvgElement.js';
 import { configureSvgSize } from '../../setupGraphViewbox.js';
-import type { VisualDB, VisualPage, ArrayDiagram, MatrixDiagram, StackDiagram } from './types.js';
+import type {
+  VisualDB,
+  VisualPage,
+  ArrayDiagram,
+  MatrixDiagram,
+  StackDiagram,
+  GraphDiagram,
+} from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
 import { drawStackDiagram } from './drawStackDiagram.js';
+import { drawGraphDiagram } from './drawGraphDiagram.js';
 
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const db = diagram.db as VisualDB;
@@ -197,6 +205,11 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         }
         case 'stack': {
           drawStackDiagram(pageGroup as unknown as SVG, subDiagram as StackDiagram, yOffset);
+          yOffset += 200; // Adjust the offset for next sub-diagram
+          break;
+        }
+        case 'graph': {
+          drawGraphDiagram(pageGroup as unknown as SVG, subDiagram as GraphDiagram, yOffset);
           yOffset += 200; // Adjust the offset for next sub-diagram
           break;
         }
