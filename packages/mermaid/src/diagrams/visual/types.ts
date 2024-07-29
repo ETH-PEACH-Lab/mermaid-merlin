@@ -71,11 +71,20 @@ export interface TreeEdge {
   color?: string;
 }
 
+export interface TreeElement {
+  nodeId: string;
+  value?: string;
+  color?: string;
+  left: string;
+  right: string;
+}
+
 export interface TreeDiagram {
   type: string;
   orientation?: string;
   title?: string;
-  elements?: (TreeNode | TreeEdge)[];
+  //TODO: should be changed to required field
+  elements?: TreeElement[];
   label?: string;
 }
 
