@@ -14,7 +14,7 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram 
 ;
 
 ArrayDiagram:
@@ -109,15 +109,20 @@ TreeDiagram:
 ;
 
 TreeElement:
-  TreeNodeDefinition | TreeEdgeDefinition 
+  nodeId=ID ':' '[' left=(ID | 'None') ',' right=(ID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE*
 ;
 
-TreeNodeDefinition:
-  'node:' nodeId=ID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')?NEWLINE
+LinkedListDiagram:
+  diagramType="linkedList" NEWLINE*
+  (double='double' NEWLINE*)?
+  ('title:' title=STRING NEWLINE*)?
+  (showIndex="showIndex" NEWLINE*)?
+  elements+=LinkedListElement* NEWLINE*
+  ('label:' label=STRING NEWLINE*)?
 ;
 
-TreeEdgeDefinition:
-  'edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
+LinkedListElement:
+  '@' value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 Value returns string:
