@@ -57,6 +57,13 @@ const populate = (ast: VisualDiagram) => {
             type: 'tree',
             title: subDiagram.title,
             label: subDiagram.label,
+            elements: subDiagram.elements.map((element) => ({
+              nodeId: element.nodeId,
+              left: element.left == 'None' ? undefined : element.left,
+              right: element.right == 'None' ? undefined : element.right,
+              value: element.value,
+              color: element.color,
+            })),
           };
         case 'graph':
           return {
