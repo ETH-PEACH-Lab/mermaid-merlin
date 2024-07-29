@@ -4,19 +4,22 @@ import type { SVG } from '../../diagram-api/types.js';
 export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, yOffset: number) => {
   const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
 
+  const graphNodes = graphDiagram.elements.filter((ele) => ele.type == 'node');
+  const graphEdges = graphDiagram.elements.filter((ele) => ele.type == 'edge');
+
   // Calculate node positions in a circular layout
-  const nodePositions = calculateNodePositions(graphDiagram.graphNodes || []);
+  const nodePositions = calculateNodePositions(graphNodes || []);
 
   // Draw graph edges first
-  if (graphDiagram.graphEdges) {
-    graphDiagram.graphEdges.forEach((edge) => {
+  if (graphEdges) {
+    graphEdges.forEach((edge) => {
       drawEdge(group as unknown as SVG, edge, nodePositions);
     });
   }
 
   // Draw graph nodes
-  if (graphDiagram.graphNodes) {
-    graphDiagram.graphNodes.forEach((node) => {
+  if (graphNodes) {
+    graphNodes.forEach((node) => {
       drawNode(group as unknown as SVG, node, nodePositions[node.nodeId]);
     });
   }
@@ -113,8 +116,8 @@ const drawEdge = (
       .attr('x2', endX)
       .attr('y2', endY)
       .attr('stroke', strokeColor)
-      .attr('stroke-width', '2')
-      .attr('marker-end', edge.arrow ? 'url(#arrowhead)' : null);
+      .attr('stroke-width', '2');
+    // .attr('marker-end', edge.arrow ? 'url(#arrowhead)' : null);
 
     if (edge.value) {
       svg
