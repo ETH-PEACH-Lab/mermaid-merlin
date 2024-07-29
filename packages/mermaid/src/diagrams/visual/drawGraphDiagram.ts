@@ -26,9 +26,7 @@ export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, yOffset: 
 
   if (graphDiagram.label) {
     // Add the label at the bottom
-    const labelYPosition = graphDiagram.graphNodes
-      ? Math.ceil(graphDiagram.graphNodes.length / 3) * 100 + 70
-      : 100;
+    const labelYPosition = graphNodes ? Math.ceil(graphNodes.length / 3) * 100 + 70 : 100;
     const labelXPosition = 150; // Adjust based on your diagram size and layout
 
     group

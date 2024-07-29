@@ -99,8 +99,7 @@ export interface GraphEdge {
 export interface GraphDiagram {
   type: string;
   title?: string;
-  graphNodes?: GraphNode[];
-  graphEdges?: GraphEdge[];
+  elements: any[];
   label?: string;
 }
 
