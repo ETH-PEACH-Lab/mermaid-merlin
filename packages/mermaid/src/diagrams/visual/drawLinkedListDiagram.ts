@@ -1,4 +1,4 @@
-import type { LinkedListDiagram } from './types.js';
+import type { LinkedListDiagram, LinkedListElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 
 export const drawLinkedListDiagram = (
@@ -28,22 +28,21 @@ export const drawLinkedListDiagram = (
   // Calculate node positions in a linear layout
   const nodePositions = calculateNodePositions(linkedListNodes || []);
 
-  // Draw linked list nodes
+  // Draw linked list nodes and arrows
   if (linkedListNodes) {
     linkedListNodes.forEach((node, index) => {
       drawNode(
         group as unknown as SVG,
-        node.value,
+        node,
         nodePositions[index],
-        index < linkedListNodes.length - 1,
-        node.color
+        index < linkedListNodes.length - 1
       );
     });
   }
 
   if (linkedListDiagram.label) {
     // Add the label at the bottom
-    const labelYPosition = 120;
+    const labelYPosition = 100;
     const labelXPosition = 150; // Adjust based on your diagram size and layout
 
     group
@@ -51,7 +50,7 @@ export const drawLinkedListDiagram = (
       .attr('x', labelXPosition)
       .attr('y', labelYPosition)
       .attr('fill', 'black')
-      .attr('font-size', '20')
+      .attr('font-size', '16')
       .attr('dominant-baseline', 'hanging')
       .attr('text-anchor', 'middle')
       .attr('class', 'linkedListDiagramLabel')
@@ -59,13 +58,11 @@ export const drawLinkedListDiagram = (
   }
 };
 
-const calculateNodePositions = (
-  nodes: { value: string | number; color?: string }[]
-): { x: number; y: number }[] => {
+const calculateNodePositions = (nodes: LinkedListElement[]): { x: number; y: number }[] => {
   const positions: { x: number; y: number }[] = [];
   const startX = 50; // Starting X position
   const startY = 50; // Starting Y position
-  const nodeSpacing = 100; // Spacing between nodes
+  const nodeSpacing = 120; // Increased spacing between nodes
 
   nodes.forEach((_, index) => {
     positions.push({
@@ -79,16 +76,16 @@ const calculateNodePositions = (
 
 const drawNode = (
   svg: SVG,
-  value: string | number,
+  node: LinkedListElement,
   position: { x: number; y: number },
-  hasNext: boolean,
-  color?: string
+  hasNext: boolean
 ) => {
   const nodeX = position.x;
   const nodeY = position.y;
 
-  const fillColor = getColor(color);
+  const fillColor = getColor(node.color);
 
+  // Draw the rectangle for the node
   svg
     .append('rect')
     .attr('x', nodeX)
@@ -100,24 +97,53 @@ const drawNode = (
     .attr('stroke-width', '1')
     .attr('class', 'linkedListNode');
 
+  // Draw the text for the node value
   svg
     .append('text')
     .attr('x', nodeX + 30)
     .attr('y', nodeY + 15)
     .attr('dy', '.35em')
     .attr('fill', 'black')
-    .attr('font-size', '20')
+    .attr('font-size', '12')
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
-    .text(value);
+    .text(node.value);
 
+  // Draw the smaller arrow above the node if it exists
+  if (node.arrow) {
+    svg
+      .append('line')
+      .attr('x1', nodeX + 30)
+      .attr('y1', nodeY - 30)
+      .attr('x2', nodeX + 30)
+      .attr('y2', nodeY)
+      .attr('stroke', 'black')
+      .attr('stroke-width', '2')
+      .attr('marker-end', 'url(#arrowhead)');
+
+    // Draw the arrow label
+    if (node.arrowLabel) {
+      svg
+        .append('text')
+        .attr('x', nodeX + 30)
+        .attr('y', nodeY - 40)
+        .attr('fill', 'black')
+        .attr('font-size', '16')
+        .attr('dominant-baseline', 'middle')
+        .attr('text-anchor', 'middle')
+        .attr('class', 'arrowLabel')
+        .text(node.arrowLabel);
+    }
+  }
+
+  // Draw the longer connecting line to the next node if there is one
   if (hasNext) {
     svg
       .append('line')
       .attr('x1', nodeX + 60)
       .attr('y1', nodeY + 15)
-      .attr('x2', nodeX + 60 + 40)
+      .attr('x2', nodeX + 60 + 60) // Increased length of the connecting line
       .attr('y2', nodeY + 15)
       .attr('stroke', 'black')
       .attr('stroke-width', '2')

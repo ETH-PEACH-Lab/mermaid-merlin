@@ -102,6 +102,8 @@ const populate = (ast: VisualDiagram) => {
             elements: subDiagram.elements.map((e) => ({
               value: e.value,
               color: e.color,
+              arrow: e.arrowLabel ? true : false,
+              arrowLabel: e.arrowLabel,
             })),
           };
         default:

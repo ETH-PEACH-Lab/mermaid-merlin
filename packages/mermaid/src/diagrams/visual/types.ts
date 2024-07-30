@@ -115,6 +115,8 @@ export interface GraphDiagram {
 export interface LinkedListElement {
   value: string | number;
   color?: string;
+  arrow?: boolean;
+  arrowLabel?: string;
 }
 
 export interface LinkedListDiagram {
