@@ -43,7 +43,7 @@ export const drawLinkedListDiagram = (
 
   if (linkedListDiagram.label) {
     // Add the label at the bottom
-    const labelYPosition = linkedListNodes ? linkedListNodes.length * 50 + 70 : 100;
+    const labelYPosition = 120;
     const labelXPosition = 150; // Adjust based on your diagram size and layout
 
     group
@@ -51,7 +51,7 @@ export const drawLinkedListDiagram = (
       .attr('x', labelXPosition)
       .attr('y', labelYPosition)
       .attr('fill', 'black')
-      .attr('font-size', '16')
+      .attr('font-size', '20')
       .attr('dominant-baseline', 'hanging')
       .attr('text-anchor', 'middle')
       .attr('class', 'linkedListDiagramLabel')
@@ -106,7 +106,7 @@ const drawNode = (
     .attr('y', nodeY + 15)
     .attr('dy', '.35em')
     .attr('fill', 'black')
-    .attr('font-size', '12')
+    .attr('font-size', '20')
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
