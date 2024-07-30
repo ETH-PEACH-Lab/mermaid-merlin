@@ -11,12 +11,14 @@ import type {
   StackDiagram,
   GraphDiagram,
   TreeDiagram,
+  LinkedListDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
 import { drawStackDiagram } from './drawStackDiagram.js';
 import { drawGraphDiagram } from './drawGraphDiagram.js';
 import { drawTreeDiagram } from './drawTreeDiagram.js';
+import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const db = diagram.db as VisualDB;
@@ -217,6 +219,15 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         }
         case 'tree': {
           drawTreeDiagram(pageGroup as unknown as SVG, subDiagram as TreeDiagram, yOffset);
+          yOffset += 200; // Adjust the offset for next sub-diagram
+          break;
+        }
+        case 'linkedList': {
+          drawLinkedListDiagram(
+            pageGroup as unknown as SVG,
+            subDiagram as LinkedListDiagram,
+            yOffset
+          );
           yOffset += 200; // Adjust the offset for next sub-diagram
           break;
         }

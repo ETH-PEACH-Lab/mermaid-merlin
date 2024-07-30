@@ -112,9 +112,28 @@ export interface GraphDiagram {
   label?: string;
 }
 
+export interface LinkedListElement {
+  value: string | number;
+  color?: string;
+}
+
+export interface LinkedListDiagram {
+  type: string;
+  title?: string;
+  label?: string;
+  elements: LinkedListElement[];
+}
+
 // Page interface
 export interface VisualPage {
-  subDiagrams: (ArrayDiagram | MatrixDiagram | StackDiagram | TreeDiagram | GraphDiagram)[];
+  subDiagrams: (
+    | ArrayDiagram
+    | MatrixDiagram
+    | StackDiagram
+    | TreeDiagram
+    | GraphDiagram
+    | LinkedListDiagram
+  )[];
 }
 
 // Database interface

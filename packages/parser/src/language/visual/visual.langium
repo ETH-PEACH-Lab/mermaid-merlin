@@ -14,7 +14,7 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram 
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram
 ;
 
 ArrayDiagram:
@@ -122,7 +122,7 @@ LinkedListDiagram:
 ;
 
 LinkedListElement:
-  '@' value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+  '@' nodeId=ID  ('{' 'value:'  value=STRING ( ',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 Value returns string:

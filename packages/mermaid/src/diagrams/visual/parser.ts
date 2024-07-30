@@ -94,6 +94,16 @@ const populate = (ast: VisualDiagram) => {
               }
             }),
           };
+        case 'linkedList':
+          return {
+            type: 'linkedList',
+            title: subDiagram.title,
+            label: subDiagram.label,
+            elements: subDiagram.elements.map((e) => ({
+              value: e.value,
+              color: e.color,
+            })),
+          };
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
       }
