@@ -8,7 +8,46 @@ export const drawArrayDiagram = (
   yOffset: number,
   config: Required<ArrayDiagramConfig>
 ) => {
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
+  // Add marker definition for the arrowhead
+  svg
+    .append('defs')
+    .append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', '5')
+    .attr('refY', '5')
+    .attr('markerWidth', '6')
+    .attr('markerHeight', '6')
+    .attr('orient', 'auto-start-reverse')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+    .attr('fill', 'black');
+
+  // title style parameters
+  const titleFontSize = '16';
+  const title_X = 100;
+  const title_Y = 20;
+
+  // label style parameters
+  const labelFontSize = '16';
+  const label_X = 100;
+  const label_Y = 160;
+
+  // Add the title to the top center of the SVG
+  if (arrayDiagram.title) {
+    svg
+      .append('text')
+      .attr('x', title_X)
+      .attr('y', title_Y)
+      .attr('fill', config.labelColor)
+      .attr('font-size', titleFontSize)
+      .attr('dominant-baseline', 'hanging')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'arrayDiagramTitle')
+      .text(arrayDiagram.title);
+  }
+
+  const group = svg.append('g').attr('transform', `translate(0, ${yOffset + 40})`);
 
   arrayDiagram.elements.forEach((element, index) => {
     drawElement(group as unknown as SVG, element, index, config, arrayDiagram.showIndex || false);
@@ -16,15 +55,15 @@ export const drawArrayDiagram = (
 
   if (arrayDiagram.label) {
     // #TODO adjust the position of the label correctly
-    const labelYPosition = 120;
-    const labelXPosition = 300;
+    const labelYPosition = label_Y;
+    const labelXPosition = label_X;
 
     group
       .append('text')
       .attr('x', labelXPosition)
       .attr('y', labelYPosition)
       .attr('fill', config.labelColor)
-      .attr('font-size', config.labelFontSize)
+      .attr('font-size', labelFontSize)
       .attr('dominant-baseline', 'hanging')
       .attr('text-anchor', 'middle')
       .attr('class', 'arrayDiagramLabel')
@@ -39,8 +78,13 @@ const drawElement = (
   { labelColor, labelFontSize }: Required<ArrayDiagramConfig>,
   showIndex: boolean
 ) => {
+  // array element style parameters
+  const indexFontSize = '16';
+  const elementFontSize = '16';
+
   const group = svg.append('g');
-  const elementX = index * 50 + 50;
+  const elementSize = 40;
+  const elementX = index * elementSize;
   const elementY = 50;
 
   const fillColor = getColor(element.color);
@@ -55,13 +99,14 @@ const drawElement = (
       .attr('x2', elementX + 20)
       .attr('y2', arrowYEnd)
       .attr('stroke', 'black')
+      .attr('stroke-width', '1.5')
       .attr('marker-end', 'url(#arrowhead)');
 
     if (element.arrowLabel) {
       group
         .append('text')
         .attr('x', elementX + 20)
-        .attr('y', arrowYStart - 10)
+        .attr('y', arrowYStart - 20)
         .attr('fill', labelColor)
         .attr('font-size', labelFontSize)
         .attr('dominant-baseline', 'hanging')
@@ -75,19 +120,19 @@ const drawElement = (
     .append('rect')
     .attr('x', elementX)
     .attr('y', elementY)
-    .attr('width', 40)
-    .attr('height', 40)
+    .attr('width', elementSize)
+    .attr('height', elementSize)
     .style('fill', fillColor)
-    .attr('stroke', '#191970')
+    .attr('stroke', '#000000')
     .attr('stroke-width', '2px')
     .attr('class', 'arrayElement');
 
   group
     .append('text')
-    .attr('x', elementX + 20)
-    .attr('y', elementY + 20)
+    .attr('x', elementX + elementSize / 2)
+    .attr('y', elementY + elementSize / 2)
     .attr('fill', labelColor)
-    .attr('font-size', labelFontSize)
+    .attr('font-size', elementFontSize)
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
@@ -96,10 +141,10 @@ const drawElement = (
   if (showIndex) {
     group
       .append('text')
-      .attr('x', elementX + 20)
-      .attr('y', elementY + 60)
+      .attr('x', elementX + elementSize / 2)
+      .attr('y', elementY + elementSize + 20)
       .attr('fill', labelColor)
-      .attr('font-size', 25)
+      .attr('font-size', indexFontSize)
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'middle')
       .attr('class', 'indexLabel')
