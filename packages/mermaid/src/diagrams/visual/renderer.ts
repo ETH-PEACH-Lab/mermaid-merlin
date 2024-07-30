@@ -194,7 +194,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             yOffset,
             config
           );
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'matrix': {
@@ -204,22 +204,22 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             yOffset,
             config
           );
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'stack': {
           drawStackDiagram(pageGroup as unknown as SVG, subDiagram as StackDiagram, yOffset);
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'graph': {
           drawGraphDiagram(pageGroup as unknown as SVG, subDiagram as GraphDiagram, yOffset);
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'tree': {
           drawTreeDiagram(pageGroup as unknown as SVG, subDiagram as TreeDiagram, yOffset);
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'linkedList': {
@@ -228,7 +228,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             subDiagram as LinkedListDiagram,
             yOffset
           );
-          yOffset += 200; // Adjust the offset for next sub-diagram
+          yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         default:
