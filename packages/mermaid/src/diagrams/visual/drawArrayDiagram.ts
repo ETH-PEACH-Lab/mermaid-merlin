@@ -47,14 +47,15 @@ export const drawArrayDiagram = (
       .text(arrayDiagram.title);
   }
 
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset + 40})`);
+  // Apply right shift by adjusting the x translation value
+  const xOffset = 50;
+  const group = svg.append('g').attr('transform', `translate(${xOffset}, ${yOffset + 40})`);
 
   arrayDiagram.elements.forEach((element, index) => {
     drawElement(group as unknown as SVG, element, index, config, arrayDiagram.showIndex || false);
   });
 
   if (arrayDiagram.label) {
-    // #TODO adjust the position of the label correctly
     const labelYPosition = label_Y;
     const labelXPosition = label_X;
 
