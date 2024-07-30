@@ -8,18 +8,39 @@ export const drawMatrixDiagram = (
   yOffset: number,
   config: Required<MatrixDiagramConfig>
 ) => {
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
+  const xOffset = 50; // Adjust this value to shift the matrix to the right
+  const titleOffset = matrixDiagram.title ? 100 : 0; // Space for the title if it exists
+  const group = svg
+    .append('g')
+    .attr('transform', `translate(${xOffset}, ${yOffset + titleOffset})`);
+
+  const rowCount = matrixDiagram.rows.length;
+  const colCount = Math.max(...matrixDiagram.rows.map((row) => row.elements.length));
+
+  // Add title if it exists
+  if (matrixDiagram.title) {
+    svg
+      .append('text')
+      .attr('x', xOffset)
+      .attr('y', yOffset)
+      .attr('fill', config.labelColor)
+      .attr('font-size', config.labelFontSize)
+      .attr('dominant-baseline', 'hanging')
+      .attr('text-anchor', 'start')
+      .attr('class', 'diagramTitle')
+      .text(matrixDiagram.title);
+  }
 
   matrixDiagram.rows.forEach((row, rowIndex) => {
     row.elements.forEach((element, colIndex) => {
       drawElement(group as unknown as SVG, element, rowIndex, colIndex, config);
+      drawGrid(group as unknown as SVG, rowIndex, colIndex, config); // Draw grid only for existing elements
     });
   });
 
   if (matrixDiagram.label) {
-    // #TODO adjust the position of the label correctly
-    const labelYPosition = 120;
-    const labelXPosition = 300;
+    const labelYPosition = rowCount * 50 + 50; // Increase the gap between the matrix and the label
+    const labelXPosition = colCount * 25; // Centered under the matrix
 
     group
       .append('text')
@@ -32,6 +53,10 @@ export const drawMatrixDiagram = (
       .attr('class', 'arrayDiagramLabel')
       .text(matrixDiagram.label);
   }
+
+  if (matrixDiagram.showIndex) {
+    addIndices(group as unknown as SVG, rowCount, colCount, config);
+  }
 };
 
 const drawElement = (
@@ -39,11 +64,14 @@ const drawElement = (
   element: MatrixElement,
   rowIndex: number,
   colIndex: number,
-  { borderColor, borderWidth, labelColor, labelFontSize }: Required<MatrixDiagramConfig>
+  { labelColor, labelFontSize }: Required<MatrixDiagramConfig>
 ) => {
   const group = svg.append('g');
-  const elementX = colIndex * 50 + 50;
-  const elementY = rowIndex * 50 + 50;
+  const elementX = colIndex * 50;
+  const elementY = rowIndex * 50;
+
+  const borderColor = '#000000';
+  const borderWidth = '1.2px';
 
   const fillColor = getColor(element.color);
 
@@ -51,23 +79,81 @@ const drawElement = (
     .append('rect')
     .attr('x', elementX)
     .attr('y', elementY)
-    .attr('width', 48)
-    .attr('height', 48)
+    .attr('width', 50)
+    .attr('height', 50)
     .style('fill', fillColor)
-    .attr('stroke', '#191970')
-    .attr('stroke-width', '1.5px')
+    .attr('stroke', borderColor)
+    .attr('stroke-width', borderWidth)
     .attr('class', 'matrixElement');
 
   group
     .append('text')
-    .attr('x', elementX + 20)
-    .attr('y', elementY + 20)
+    .attr('x', elementX + 25)
+    .attr('y', elementY + 25)
     .attr('fill', labelColor)
     .attr('font-size', labelFontSize)
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
     .text(element.value.toString());
+};
+
+const addIndices = (
+  svg: SVG,
+  rowCount: number,
+  colCount: number,
+  { labelColor, labelFontSize }: Required<MatrixDiagramConfig>
+) => {
+  const indexGroup = svg.append('g');
+
+  // Draw row indices
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    indexGroup
+      .append('text')
+      .attr('x', -10)
+      .attr('y', rowIndex * 50 + 25)
+      .attr('fill', labelColor)
+      .attr('font-size', labelFontSize)
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'rowIndex')
+      .text(rowIndex.toString());
+  }
+
+  // Draw column indices
+  for (let colIndex = 0; colIndex < colCount; colIndex++) {
+    indexGroup
+      .append('text')
+      .attr('x', colIndex * 50 + 25)
+      .attr('y', -10)
+      .attr('fill', labelColor)
+      .attr('font-size', labelFontSize)
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'colIndex')
+      .text(colIndex.toString());
+  }
+};
+
+const drawGrid = (
+  svg: SVG,
+  rowIndex: number,
+  colIndex: number,
+  { borderColor, borderWidth }: Required<MatrixDiagramConfig>
+) => {
+  const gridGroup = svg.append('g');
+  const x = colIndex * 50;
+  const y = rowIndex * 50;
+
+  gridGroup
+    .append('rect')
+    .attr('x', x)
+    .attr('y', y)
+    .attr('width', 50)
+    .attr('height', 50)
+    .attr('stroke', borderColor)
+    .attr('stroke-width', borderWidth)
+    .attr('fill', 'none');
 };
 
 const getColor = (color?: string): string => {
