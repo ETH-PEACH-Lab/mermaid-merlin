@@ -35,7 +35,8 @@ export const drawLinkedListDiagram = (
         group as unknown as SVG,
         node.value,
         nodePositions[index],
-        index < linkedListNodes.length - 1
+        index < linkedListNodes.length - 1,
+        node.color
       );
     });
   }
@@ -59,7 +60,7 @@ export const drawLinkedListDiagram = (
 };
 
 const calculateNodePositions = (
-  nodes: { value: string | number }[]
+  nodes: { value: string | number; color?: string }[]
 ): { x: number; y: number }[] => {
   const positions: { x: number; y: number }[] = [];
   const startX = 50; // Starting X position
@@ -80,10 +81,13 @@ const drawNode = (
   svg: SVG,
   value: string | number,
   position: { x: number; y: number },
-  hasNext: boolean
+  hasNext: boolean,
+  color?: string
 ) => {
   const nodeX = position.x;
   const nodeY = position.y;
+
+  const fillColor = getColor(color);
 
   svg
     .append('rect')
@@ -91,7 +95,7 @@ const drawNode = (
     .attr('y', nodeY)
     .attr('width', 60)
     .attr('height', 30)
-    .style('fill', 'white')
+    .style('fill', fillColor)
     .attr('stroke', 'black')
     .attr('stroke-width', '1')
     .attr('class', 'linkedListNode');
@@ -130,6 +134,6 @@ const getColor = (color?: string): string => {
     case 'red':
       return 'rgba(255, 0, 0, 0.3)';
     default:
-      return 'none';
+      return 'white';
   }
 };
