@@ -4,15 +4,15 @@ import type { SVG } from '../../diagram-api/types.js';
 export const drawTextDiagram = (svg: SVG, textDiagram: TextDiagram, yOffset: number) => {
   const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
 
+  let currentY = 0; // Initialize the current Y position
+
   // Draw each text element
-  textDiagram.elements.forEach((element, index) => {
-    drawElement(group as unknown as SVG, element, index);
+  textDiagram.elements.forEach((element) => {
+    currentY = drawElement(group as unknown as SVG, element, currentY);
   });
 
   if (textDiagram.label) {
-    // Calculate the total height of the text diagram
-    const totalHeight = textDiagram.elements.length * 40; // Adjust this value based on the height of your elements and desired spacing
-    const labelYPosition = totalHeight + 20; // Adjust this value based on the height of your elements and desired spacing
+    const labelYPosition = currentY + 20; // Adjust this value based on desired spacing
     const labelXPosition = 50; // Center the label horizontally based on element width
 
     group
@@ -28,22 +28,25 @@ export const drawTextDiagram = (svg: SVG, textDiagram: TextDiagram, yOffset: num
   }
 };
 
-const drawElement = (svg: SVG, element: string, positionIndex: number) => {
+const drawElement = (svg: SVG, element: string, startY: number) => {
   const group = svg.append('g');
   const elementX = 50;
-  const elementY = positionIndex * 40;
 
   const lines = element.split('\n');
 
   lines.forEach((line, lineIndex) => {
+    const lineY = startY + lineIndex * 20; // Adjust the line height as needed
     group
       .append('text')
       .attr('x', elementX)
-      .attr('y', elementY + lineIndex * 20) // Adjust the line height as needed
+      .attr('y', lineY)
       .attr('fill', 'black')
-      .attr('font-size', '18')
+      .attr('font-size', '14')
       .attr('dominant-baseline', 'hanging')
       .attr('class', 'textElement')
       .text(line);
   });
+
+  // Return the updated Y position for the next element, considering the height of the current element
+  return startY + lines.length * 20; // Adjust the line height as needed
 };
