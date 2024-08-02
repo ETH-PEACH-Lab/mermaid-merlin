@@ -12,6 +12,7 @@ import type {
   GraphDiagram,
   TreeDiagram,
   LinkedListDiagram,
+  TextDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
@@ -19,6 +20,7 @@ import { drawStackDiagram } from './drawStackDiagram.js';
 import { drawGraphDiagram } from './drawGraphDiagram.js';
 import { drawTreeDiagram } from './drawTreeDiagram.js';
 import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
+import { drawTextDiagram } from './drawTextDiagram.js';
 
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const db = diagram.db as VisualDB;
@@ -228,6 +230,11 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             subDiagram as LinkedListDiagram,
             yOffset
           );
+          yOffset += 250; // Adjust the offset for next sub-diagram
+          break;
+        }
+        case 'text': {
+          drawTextDiagram(pageGroup as unknown as SVG, subDiagram as TextDiagram, yOffset);
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }

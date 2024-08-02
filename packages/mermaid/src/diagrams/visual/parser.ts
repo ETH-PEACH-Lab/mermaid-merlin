@@ -106,6 +106,12 @@ const populate = (ast: VisualDiagram) => {
               arrowLabel: e.arrowLabel,
             })),
           };
+        case 'text':
+          return {
+            type: 'text',
+            title: subDiagram.title,
+            elements: subDiagram.elements.map((e) => e.value),
+          };
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
       }

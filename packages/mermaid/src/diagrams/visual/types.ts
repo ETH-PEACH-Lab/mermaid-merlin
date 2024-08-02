@@ -126,6 +126,13 @@ export interface LinkedListDiagram {
   elements: LinkedListElement[];
 }
 
+export interface TextDiagram {
+  type: string;
+  title?: string;
+  elements: string[];
+  label?: string;
+}
+
 // Page interface
 export interface VisualPage {
   subDiagrams: (
@@ -135,6 +142,7 @@ export interface VisualPage {
     | TreeDiagram
     | GraphDiagram
     | LinkedListDiagram
+    | TextDiagram
   )[];
 }
 
