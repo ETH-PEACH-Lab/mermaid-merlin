@@ -41,7 +41,7 @@ const drawElement = (svg: SVG, element: string, startY: number) => {
       .attr('x', elementX)
       .attr('y', lineY)
       .attr('fill', 'black')
-      .attr('font-size', '14')
+      .attr('font-size', '20')
       .attr('dominant-baseline', 'hanging')
       .attr('class', 'textElement')
       .text(line);
