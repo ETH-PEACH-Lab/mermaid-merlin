@@ -186,6 +186,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     }
 
     let yOffset = 50;
+    let component_id = 0;
 
     for (const subDiagram of page.subDiagrams) {
       switch (subDiagram.type) {
@@ -194,8 +195,10 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             pageGroup as unknown as SVG,
             subDiagram as ArrayDiagram,
             yOffset,
-            config
+            config,
+            component_id
           );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }

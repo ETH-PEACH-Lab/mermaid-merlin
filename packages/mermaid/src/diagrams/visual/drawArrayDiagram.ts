@@ -6,7 +6,8 @@ export const drawArrayDiagram = (
   svg: SVG,
   arrayDiagram: ArrayDiagram,
   yOffset: number,
-  config: Required<ArrayDiagramConfig>
+  config: Required<ArrayDiagramConfig>,
+  component_id: number
 ) => {
   // Add marker definition for the arrowhead
   svg
@@ -49,10 +50,24 @@ export const drawArrayDiagram = (
 
   // Apply right shift by adjusting the x translation value
   const xOffset = 50;
-  const group = svg.append('g').attr('transform', `translate(${xOffset}, ${yOffset + 40})`);
+  const group = svg
+    .append('g')
+    .attr('class', 'component')
+    .attr('id', `component_${component_id.toString().padStart(2, '0')}`)
+    .attr('transform', `translate(${xOffset}, ${yOffset + 40})`);
+
+  let unit_id = 0;
 
   arrayDiagram.elements.forEach((element, index) => {
-    drawElement(group as unknown as SVG, element, index, config, arrayDiagram.showIndex || false);
+    drawElement(
+      group as unknown as SVG,
+      element,
+      index,
+      config,
+      arrayDiagram.showIndex || false,
+      unit_id
+    );
+    unit_id += 1;
   });
 
   if (arrayDiagram.label) {
@@ -77,13 +92,15 @@ const drawElement = (
   element: ArrayElement,
   index: number,
   { labelColor, labelFontSize }: Required<ArrayDiagramConfig>,
-  showIndex: boolean
+  showIndex: boolean,
+  unit_id: number
 ) => {
   // array element style parameters
   const indexFontSize = '16';
   const elementFontSize = '16';
 
   const group = svg.append('g');
+  group.attr('class', 'unit').attr('id', `unit_${unit_id.toString().padStart(3, '0')}`);
   const elementSize = 40;
   const elementX = index * elementSize;
   const elementY = 50;
