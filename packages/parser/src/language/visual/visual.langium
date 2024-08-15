@@ -22,12 +22,14 @@ ArrayDiagram:
   (orientation=Orientation NEWLINE*)?
   ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
+  '@' NEWLINE
   elements+=ArrayElement* NEWLINE*
+  '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
 
 ArrayElement:
-  '@' value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+   value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 MatrixDiagram:
@@ -58,12 +60,14 @@ StackDiagram:
   ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   'size:' size=INT NEWLINE*
+  '@' NEWLINE
   elements+=StackElement* NEWLINE*
+  '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
 
 StackElement:
-  '@' value=Value ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+  value=Value ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 StackAttribute:
@@ -117,12 +121,14 @@ LinkedListDiagram:
   (double='double' NEWLINE*)?
   ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
+  '@' NEWLINE
   elements+=LinkedListElement* NEWLINE*
+  '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
 
 LinkedListElement:
-  '@' nodeId=ID  ('{' 'value:'  value=STRING ( ',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+  nodeId=ID  ('{' 'value:'  value=STRING ( ',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
 ;
 
 TextDiagram:
