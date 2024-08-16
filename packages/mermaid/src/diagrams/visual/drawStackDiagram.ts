@@ -16,11 +16,12 @@ export const drawStackDiagram = (
   // Draw the framework of the stack
   const stackHeight = stackDiagram.size * 40;
   drawFramework(group as unknown as SVG, 50, 0, 70, stackHeight);
-  const unit_id = 0;
+  let unit_id = 0;
   // Draw each stack element, positioning them from the bottom of the stack upwards
   stackDiagram.elements.forEach((element, index) => {
     const positionIndex = stackDiagram.size - stackDiagram.elements.length + index;
     drawElement(group as unknown as SVG, element, positionIndex, unit_id);
+    unit_id += 1;
   });
 
   if (stackDiagram.label) {
