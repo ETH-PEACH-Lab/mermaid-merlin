@@ -56,10 +56,12 @@ export const drawTreeDiagram = (
 const calculateNodePositions = (nodes: any[]): { [key: string]: { x: number; y: number } } => {
   const positions: { [key: string]: { x: number; y: number } } = {};
   const levelHeight = 100;
-  const siblingDistance = 50;
+  const maxDepth = calculateMaxDepth(nodes);
+  const maxDistance = maxDepth > 2 ? 100 : 70; // Adjust this value based on the total number of layers
   const currentY = 0;
 
   const calculatePosition = (node: any, currentX: number, depth: number) => {
+    const adjustedSiblingDistance = maxDistance - depth * (maxDistance / maxDepth);
     const x = currentX;
     const y = currentY + depth * levelHeight;
     positions[node.nodeId] = { x, y };
@@ -67,10 +69,10 @@ const calculateNodePositions = (nodes: any[]): { [key: string]: { x: number; y: 
     const leftChild = nodes.find((n) => n.nodeId === node.left);
     const rightChild = nodes.find((n) => n.nodeId === node.right);
     if (leftChild) {
-      calculatePosition(leftChild, x - siblingDistance, depth + 1);
+      calculatePosition(leftChild, x - adjustedSiblingDistance, depth + 1);
     }
     if (rightChild) {
-      calculatePosition(rightChild, x + siblingDistance, depth + 1);
+      calculatePosition(rightChild, x + adjustedSiblingDistance, depth + 1);
     }
   };
 
@@ -80,6 +82,22 @@ const calculateNodePositions = (nodes: any[]): { [key: string]: { x: number; y: 
   }
 
   return positions;
+};
+
+const calculateMaxDepth = (nodes: any[]): number => {
+  const findDepth = (node: any, depth: number): number => {
+    const leftChild = nodes.find((n) => n.nodeId === node.left);
+    const rightChild = nodes.find((n) => n.nodeId === node.right);
+    const leftDepth = leftChild ? findDepth(leftChild, depth + 1) : depth;
+    const rightDepth = rightChild ? findDepth(rightChild, depth + 1) : depth;
+    return Math.max(leftDepth, rightDepth);
+  };
+
+  const rootNode = nodes.find((node) => !node.parentId);
+  if (rootNode) {
+    return findDepth(rootNode, 0);
+  }
+  return 0;
 };
 
 const calculateTreeEdges = (
