@@ -1,17 +1,26 @@
 import type { StackDiagram, StackElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 
-export const drawStackDiagram = (svg: SVG, stackDiagram: StackDiagram, yOffset: number) => {
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
+export const drawStackDiagram = (
+  svg: SVG,
+  stackDiagram: StackDiagram,
+  yOffset: number,
+  component_id: number
+) => {
+  const group = svg.append('g');
+  group
+    .attr('transform', `translate(0, ${yOffset})`)
+    .attr('class', 'component')
+    .attr('id', `component_${component_id}`);
 
   // Draw the framework of the stack
   const stackHeight = stackDiagram.size * 40;
   drawFramework(group as unknown as SVG, 50, 0, 70, stackHeight);
-
+  const unit_id = 0;
   // Draw each stack element, positioning them from the bottom of the stack upwards
   stackDiagram.elements.forEach((element, index) => {
     const positionIndex = stackDiagram.size - stackDiagram.elements.length + index;
-    drawElement(group as unknown as SVG, element, positionIndex);
+    drawElement(group as unknown as SVG, element, positionIndex, unit_id);
   });
 
   if (stackDiagram.label) {
@@ -33,8 +42,9 @@ export const drawStackDiagram = (svg: SVG, stackDiagram: StackDiagram, yOffset: 
   }
 };
 
-const drawElement = (svg: SVG, element: StackElement, positionIndex: number) => {
+const drawElement = (svg: SVG, element: StackElement, positionIndex: number, unit_id: number) => {
   const group = svg.append('g');
+  group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
   const elementX = 50;
   const elementY = positionIndex * 40;
 

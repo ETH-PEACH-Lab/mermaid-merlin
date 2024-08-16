@@ -4,9 +4,14 @@ import type { SVG } from '../../diagram-api/types.js';
 export const drawLinkedListDiagram = (
   svg: SVG,
   linkedListDiagram: LinkedListDiagram,
-  yOffset: number
+  yOffset: number,
+  component_id: number
 ) => {
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
+  const group = svg.append('g');
+  group
+    .attr('transform', `translate(0, ${yOffset})`)
+    .attr('class', 'component')
+    .attr('id', `component_${component_id}`);
 
   // Define the marker for the arrowhead
   group
@@ -27,7 +32,7 @@ export const drawLinkedListDiagram = (
 
   // Calculate node positions in a linear layout
   const nodePositions = calculateNodePositions(linkedListNodes || []);
-
+  let unit_id = 0;
   // Draw linked list nodes and arrows
   if (linkedListNodes) {
     linkedListNodes.forEach((node, index) => {
@@ -35,8 +40,10 @@ export const drawLinkedListDiagram = (
         group as unknown as SVG,
         node,
         nodePositions[index],
-        index < linkedListNodes.length - 1
+        index < linkedListNodes.length - 1,
+        unit_id
       );
+      unit_id += 1;
     });
   }
 
@@ -78,15 +85,17 @@ const drawNode = (
   svg: SVG,
   node: LinkedListElement,
   position: { x: number; y: number },
-  hasNext: boolean
+  hasNext: boolean,
+  unit_id: number
 ) => {
   const nodeX = position.x;
   const nodeY = position.y;
 
   const fillColor = getColor(node.color);
-
+  const group = svg.append('g');
+  group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
   // Draw the rectangle for the node
-  svg
+  group
     .append('rect')
     .attr('x', nodeX)
     .attr('y', nodeY)
@@ -98,7 +107,7 @@ const drawNode = (
     .attr('class', 'linkedListNode');
 
   // Draw the text for the node value
-  svg
+  group
     .append('text')
     .attr('x', nodeX + 30)
     .attr('y', nodeY + 15)
@@ -112,7 +121,7 @@ const drawNode = (
 
   // Draw the smaller arrow above the node if it exists
   if (node.arrow) {
-    svg
+    group
       .append('line')
       .attr('x1', nodeX + 30)
       .attr('y1', nodeY - 30)
@@ -124,7 +133,7 @@ const drawNode = (
 
     // Draw the arrow label
     if (node.arrowLabel) {
-      svg
+      group
         .append('text')
         .attr('x', nodeX + 30)
         .attr('y', nodeY - 40)
@@ -139,7 +148,7 @@ const drawNode = (
 
   // Draw the longer connecting line to the next node if there is one
   if (hasNext) {
-    svg
+    group
       .append('line')
       .attr('x1', nodeX + 60)
       .attr('y1', nodeY + 15)

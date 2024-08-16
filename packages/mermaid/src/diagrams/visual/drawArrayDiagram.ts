@@ -53,7 +53,7 @@ export const drawArrayDiagram = (
   const group = svg
     .append('g')
     .attr('class', 'component')
-    .attr('id', `component_${component_id.toString().padStart(2, '0')}`)
+    .attr('id', `component_${component_id}`)
     .attr('transform', `translate(${xOffset}, ${yOffset + 40})`);
 
   let unit_id = 0;
@@ -100,7 +100,7 @@ const drawElement = (
   const elementFontSize = '16';
 
   const group = svg.append('g');
-  group.attr('class', 'unit').attr('id', `unit_${unit_id.toString().padStart(3, '0')}`);
+  group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
   const elementSize = 40;
   const elementX = index * elementSize;
   const elementY = 50;

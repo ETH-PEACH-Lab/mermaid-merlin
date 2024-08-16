@@ -1,8 +1,17 @@
 import type { GraphDiagram, GraphNode, GraphEdge } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 
-export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, yOffset: number) => {
-  const group = svg.append('g').attr('transform', `translate(0, ${yOffset})`);
+export const drawGraphDiagram = (
+  svg: SVG,
+  graphDiagram: GraphDiagram,
+  yOffset: number,
+  component_id: number
+) => {
+  const group = svg.append('g');
+  group
+    .attr('transform', `translate(0, ${yOffset})`)
+    .attr('class', 'component')
+    .attr('id', `component_${component_id}`);
 
   const graphNodes = graphDiagram.elements.filter((ele) => ele.type == 'node');
   const graphEdges = graphDiagram.elements.filter((ele) => ele.type == 'edge');
@@ -19,8 +28,10 @@ export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, yOffset: 
 
   // Draw graph nodes
   if (graphNodes) {
+    let unit_id = 0;
     graphNodes.forEach((node) => {
-      drawNode(group as unknown as SVG, node, nodePositions[node.nodeId]);
+      drawNode(group as unknown as SVG, node, nodePositions[node.nodeId], unit_id);
+      unit_id += 1;
     });
   }
 
@@ -62,13 +73,20 @@ const calculateNodePositions = (
   return positions;
 };
 
-const drawNode = (svg: SVG, node: GraphNode, position: { x: number; y: number }) => {
+const drawNode = (
+  svg: SVG,
+  node: GraphNode,
+  position: { x: number; y: number },
+  unit_id: number
+) => {
   const nodeX = position.x;
   const nodeY = position.y;
 
   const fillColor = getColor(node.color);
+  const group = svg.append('g');
+  group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
 
-  svg
+  group
     .append('circle')
     .attr('cx', nodeX)
     .attr('cy', nodeY)
@@ -78,7 +96,7 @@ const drawNode = (svg: SVG, node: GraphNode, position: { x: number; y: number })
     .attr('stroke-width', '1')
     .attr('class', 'graphNode');
 
-  svg
+  group
     .append('text')
     .attr('x', nodeX)
     .attr('y', nodeY)

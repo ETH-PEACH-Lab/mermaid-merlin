@@ -207,23 +207,43 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
             pageGroup as unknown as SVG,
             subDiagram as MatrixDiagram,
             yOffset,
-            config
+            config,
+            component_id
           );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'stack': {
-          drawStackDiagram(pageGroup as unknown as SVG, subDiagram as StackDiagram, yOffset);
+          drawStackDiagram(
+            pageGroup as unknown as SVG,
+            subDiagram as StackDiagram,
+            yOffset,
+            component_id
+          );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'graph': {
-          drawGraphDiagram(pageGroup as unknown as SVG, subDiagram as GraphDiagram, yOffset);
+          drawGraphDiagram(
+            pageGroup as unknown as SVG,
+            subDiagram as GraphDiagram,
+            yOffset,
+            component_id
+          );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'tree': {
-          drawTreeDiagram(pageGroup as unknown as SVG, subDiagram as TreeDiagram, yOffset);
+          drawTreeDiagram(
+            pageGroup as unknown as SVG,
+            subDiagram as TreeDiagram,
+            yOffset,
+            component_id
+          );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
@@ -231,13 +251,21 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
           drawLinkedListDiagram(
             pageGroup as unknown as SVG,
             subDiagram as LinkedListDiagram,
-            yOffset
+            yOffset,
+            component_id
           );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
         case 'text': {
-          drawTextDiagram(pageGroup as unknown as SVG, subDiagram as TextDiagram, yOffset);
+          drawTextDiagram(
+            pageGroup as unknown as SVG,
+            subDiagram as TextDiagram,
+            yOffset,
+            component_id
+          );
+          component_id += 1;
           yOffset += 250; // Adjust the offset for next sub-diagram
           break;
         }
