@@ -107,7 +107,7 @@ const drawElement = (
 
   const fillColor = getColor(element.color);
 
-  if (element.arrow) {
+  if (element.arrow && element.arrowLabel !== 'null') {
     const arrowYStart = elementY - 40;
     const arrowYEnd = elementY - 10;
     group
@@ -120,7 +120,7 @@ const drawElement = (
       .attr('stroke-width', '1.5')
       .attr('marker-end', 'url(#arrowhead)');
 
-    if (element.arrowLabel) {
+    if (element.arrowLabel && element.arrowLabel !== 'null') {
       group
         .append('text')
         .attr('x', elementX + 20)
