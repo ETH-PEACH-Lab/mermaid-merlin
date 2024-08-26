@@ -83,7 +83,7 @@ const populate = (ast: VisualDiagram) => {
                   color: element.color,
                   arrow: element.arrowLabel !== undefined && element.arrowLabel !== null,
                   arrowLabel: element.arrowLabel,
-                  hidden: element.hidden,
+                  hidden: (element.hidden || '').toLowerCase() == 'true',
                 };
               } else if (element.$type == 'EdgeDefinition') {
                 return {

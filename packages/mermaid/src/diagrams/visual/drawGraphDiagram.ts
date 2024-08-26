@@ -30,22 +30,29 @@ export const drawGraphDiagram = (
     .attr('fill', 'black');
 
   const graphNodes = graphDiagram.elements.filter((ele) => ele.type == 'node');
-  const graphEdges = graphDiagram.elements.filter((ele) => ele.type == 'edge');
+  const hiddenNodeIds = new Set(
+    graphNodes.filter((node) => node.hidden).map((node) => node.nodeId)
+  );
+  const visibleGraphNodes = graphNodes.filter((node) => !node.hidden);
 
-  // Calculate node positions in a circular layout
+  const graphEdges = graphDiagram.elements.filter(
+    (ele) => ele.type == 'edge' && !hiddenNodeIds.has(ele.start) && !hiddenNodeIds.has(ele.end)
+  );
+
+  // Calculate node positions in a circular layout (including hidden nodes)
   const nodePositions = calculateNodePositions(graphNodes || []);
 
-  // Draw graph edges first
+  // Draw graph edges first (excluding those connected to hidden nodes)
   if (graphEdges) {
     graphEdges.forEach((edge) => {
       drawEdge(group as unknown as SVG, edge, nodePositions);
     });
   }
 
-  // Draw graph nodes
-  if (graphNodes) {
+  // Draw graph nodes (excluding hidden nodes)
+  if (visibleGraphNodes) {
     let unit_id = 0;
-    graphNodes.forEach((node) => {
+    visibleGraphNodes.forEach((node) => {
       drawNode(group as unknown as SVG, node, nodePositions[node.nodeId], unit_id);
       unit_id += 1;
     });
@@ -53,7 +60,9 @@ export const drawGraphDiagram = (
 
   if (graphDiagram.label) {
     // Add the label at the bottom
-    const labelYPosition = graphNodes ? Math.ceil(graphNodes.length / 3) * 100 + 70 : 100;
+    const labelYPosition = visibleGraphNodes
+      ? Math.ceil(visibleGraphNodes.length / 3) * 100 + 70
+      : 100;
     const labelXPosition = 150; // Adjust based on your diagram size and layout
 
     group
@@ -95,6 +104,11 @@ const drawNode = (
   position: { x: number; y: number },
   unit_id: number
 ) => {
+  // Skip drawing if the node is hidden
+  if (node.hidden) {
+    return;
+  }
+
   const nodeX = position.x;
   const nodeY = position.y;
 
@@ -129,7 +143,6 @@ const drawNode = (
     const arrowXStart = nodeX + 45; // Start slightly to the right of the node
     const arrowXEnd = nodeX + 25; // End at the node edge
 
-    // console.log(arrowXStart, nodeY, arrowXEnd, nodeY);
     group
       .append('line')
       .attr('x1', arrowXStart)
@@ -170,8 +183,6 @@ const drawEdge = (
 
     const strokeColor = edge.color || 'black';
 
-    // console.log("2\n", startX, startY, endX, endY);
-
     svg
       .append('line')
       .attr('x1', startX || 0)
@@ -180,7 +191,6 @@ const drawEdge = (
       .attr('y2', endY || 0)
       .attr('stroke', strokeColor)
       .attr('stroke-width', '2');
-    // .attr('marker-end', edge.arrow ? 'url(#arrowhead)' : null);
 
     if (edge.value) {
       svg
