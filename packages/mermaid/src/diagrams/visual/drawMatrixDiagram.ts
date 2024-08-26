@@ -1,6 +1,6 @@
-import type { MatrixDiagram, MatrixRow, MatrixElement } from './types.js';
+import type { MatrixDiagram, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
-import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
+import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
 
 export const drawMatrixDiagram = (
@@ -81,6 +81,7 @@ const drawElement = (
 
   const fillColor = getColor(element.color);
 
+  // Draw the rectangle for the matrix element
   group
     .append('rect')
     .attr('x', elementX)
@@ -92,6 +93,7 @@ const drawElement = (
     .attr('stroke-width', borderWidth)
     .attr('class', 'matrixElement');
 
+  // Draw the text inside the matrix element
   group
     .append('text')
     .attr('x', elementX + 25)
@@ -102,6 +104,31 @@ const drawElement = (
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
     .text(element.value.toString());
+
+  // Draw the red circle and arrow label if the arrow exists
+  if (element.arrow && element.arrowLabel !== 'null') {
+    // Draw the red circle around the element
+    group
+      .append('circle')
+      .attr('cx', elementX + 25)
+      .attr('cy', elementY + 25)
+      .attr('r', 23)
+      .attr('stroke', 'red')
+      .attr('stroke-width', '2')
+      .attr('fill', 'none');
+
+    // Draw the arrow label near the circle
+    group
+      .append('text')
+      .attr('x', elementX + 52) // Position to the right of the circle
+      .attr('y', elementY + 25)
+      .attr('fill', 'red')
+      .attr('font-size', labelFontSize)
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'start')
+      .attr('class', 'arrowLabel')
+      .text(element.arrowLabel || '');
+  }
 };
 
 const addIndices = (

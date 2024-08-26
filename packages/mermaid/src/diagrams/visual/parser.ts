@@ -32,6 +32,8 @@ const populate = (ast: VisualDiagram) => {
               elements: row.elements.map((e) => ({
                 value: e.value,
                 color: e.color,
+                arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
+                arrowLabel: e.arrowLabel,
               })),
             })),
             showIndex: subDiagram.showIndex,
@@ -63,6 +65,8 @@ const populate = (ast: VisualDiagram) => {
               right: element.right == 'None' ? undefined : element.right,
               value: element.value,
               color: element.color,
+              arrow: element.arrowLabel !== undefined && element.arrowLabel !== null, //if with arrow then True, else False
+              arrowLabel: element.arrowLabel,
             })),
           };
         case 'graph':

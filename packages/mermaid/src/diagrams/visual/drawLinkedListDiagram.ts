@@ -14,16 +14,31 @@ export const drawLinkedListDiagram = (
     .attr('class', 'component')
     .attr('id', `component_${component_id}`);
 
+  // Define the marker for the arrowhead_node
+  group
+    .append('defs')
+    .append('marker')
+    .attr('id', 'arrowhead_node')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', '5')
+    .attr('refY', '5')
+    .attr('markerWidth', '5')
+    .attr('markerHeight', '6')
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+    .attr('fill', 'black');
+
   // Define the marker for the arrowhead
   group
     .append('defs')
     .append('marker')
     .attr('id', 'arrowhead')
     .attr('viewBox', '0 0 10 10')
-    .attr('refX', '10')
+    .attr('refX', '5')
     .attr('refY', '5')
-    .attr('markerWidth', '6')
-    .attr('markerHeight', '6')
+    .attr('markerWidth', '3')
+    .attr('markerHeight', '5')
     .attr('orient', 'auto')
     .append('path')
     .attr('d', 'M 0 0 L 10 5 L 0 10 z')
@@ -58,7 +73,7 @@ export const drawLinkedListDiagram = (
       .attr('x', labelXPosition)
       .attr('y', labelYPosition)
       .attr('fill', 'black')
-      .attr('font-size', '16')
+      .attr('font-size', '18')
       .attr('dominant-baseline', 'hanging')
       .attr('text-anchor', 'middle')
       .attr('class', 'linkedListDiagramLabel')
@@ -95,6 +110,7 @@ const drawNode = (
   const fillColor = getColor(node.color);
   const group = svg.append('g');
   group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
+
   // Draw the rectangle for the node
   group
     .append('rect')
@@ -114,37 +130,38 @@ const drawNode = (
     .attr('y', nodeY + 15)
     .attr('dy', '.35em')
     .attr('fill', 'black')
-    .attr('font-size', '12')
+    .attr('font-size', '18')
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
     .text(node.value);
 
-  // Draw the smaller arrow above the node if it exists
-  if (node.arrow) {
+  // Draw the smaller arrow above the node if it exists and the arrowLabel is not "null"
+  if (node.arrow && node.arrowLabel !== 'null') {
+    const arrowYStart = nodeY - 30; // Start of the arrow, closer to the node
+    const arrowYEnd = nodeY - 10; // End of the arrow, just above the node
+
     group
       .append('line')
       .attr('x1', nodeX + 30)
-      .attr('y1', nodeY - 30)
+      .attr('y1', arrowYStart)
       .attr('x2', nodeX + 30)
-      .attr('y2', nodeY)
+      .attr('y2', arrowYEnd)
       .attr('stroke', 'black')
       .attr('stroke-width', '2')
       .attr('marker-end', 'url(#arrowhead)');
 
     // Draw the arrow label
-    if (node.arrowLabel) {
-      group
-        .append('text')
-        .attr('x', nodeX + 30)
-        .attr('y', nodeY - 40)
-        .attr('fill', 'black')
-        .attr('font-size', '16')
-        .attr('dominant-baseline', 'middle')
-        .attr('text-anchor', 'middle')
-        .attr('class', 'arrowLabel')
-        .text(node.arrowLabel);
-    }
+    group
+      .append('text')
+      .attr('x', nodeX + 30)
+      .attr('y', arrowYStart - 10) // Place the label above the arrow
+      .attr('fill', 'black')
+      .attr('font-size', '16')
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'middle')
+      .attr('class', 'arrowLabel')
+      .text(node.arrowLabel || '');
   }
 
   // Draw the longer connecting line to the next node if there is one
@@ -153,10 +170,10 @@ const drawNode = (
       .append('line')
       .attr('x1', nodeX + 60)
       .attr('y1', nodeY + 15)
-      .attr('x2', nodeX + 60 + 60) // Increased length of the connecting line
+      .attr('x2', nodeX + 60 + 55) // Increased length of the connecting line
       .attr('y2', nodeY + 15)
       .attr('stroke', 'black')
       .attr('stroke-width', '2')
-      .attr('marker-end', 'url(#arrowhead)');
+      .attr('marker-end', 'url(#arrowhead_node)');
   }
 };

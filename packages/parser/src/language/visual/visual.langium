@@ -29,7 +29,7 @@ ArrayDiagram:
 ;
 
 ArrayElement:
-   value=Value  ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+   value=Value  ('{' 'color:' color=STRING  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE*
 ;
 
 MatrixDiagram:
@@ -47,7 +47,7 @@ MatrixRow:
 ;
 
 MatrixElement:
-  value=Value ( '{' 'color:' color=STRING '}' )?
+  value=Value  ('{' 'color:' color=STRING  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')?
 ;
 
 MatrixAttributes:
@@ -67,7 +67,7 @@ StackDiagram:
 ;
 
 StackElement:
-  value=Value ('{' 'color:' color=STRING (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+  value=Value  ('{' 'color:' color=STRING  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE*
 ;
 
 StackAttribute:
@@ -96,7 +96,7 @@ NodeAttributes:
 ;
 
 EdgeDefinition:
-  type='edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE
+  type='edge:' '(' start=ID ',' end=ID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE
 ;
 
 EdgeAttributes:
@@ -113,7 +113,7 @@ TreeDiagram:
 ;
 
 TreeElement:
-  nodeId=ID ':' '[' left=(ID | 'None') ',' right=(ID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? '}')? NEWLINE*
+  nodeId=ID ':' '[' left=(ID | 'None') ',' right=(ID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
 ;
 
 LinkedListDiagram:
@@ -128,7 +128,7 @@ LinkedListDiagram:
 ;
 
 LinkedListElement:
-  nodeId=ID  ('{' 'value:'  value=STRING ( ',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? '}')? NEWLINE*
+  nodeId=ID  ('{' 'value:'  value=STRING ( ',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE*
 ;
 
 TextDiagram:

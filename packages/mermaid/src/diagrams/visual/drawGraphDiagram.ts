@@ -14,6 +14,21 @@ export const drawGraphDiagram = (
     .attr('class', 'component')
     .attr('id', `component_${component_id}`);
 
+  // Define the marker for the arrowhead
+  group
+    .append('defs')
+    .append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', '5')
+    .attr('refY', '5')
+    .attr('markerWidth', '4')
+    .attr('markerHeight', '5')
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+    .attr('fill', 'black');
+
   const graphNodes = graphDiagram.elements.filter((ele) => ele.type == 'node');
   const graphEdges = graphDiagram.elements.filter((ele) => ele.type == 'edge');
 
@@ -103,11 +118,40 @@ const drawNode = (
     .attr('y', nodeY)
     .attr('dy', '.35em')
     .attr('fill', 'black')
-    .attr('font-size', '12')
+    .attr('font-size', '16')
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
     .text(node.value || node.nodeId);
+
+  // Draw the arrow on the right side of the node, pointing towards the node
+  if (node.arrow && node.arrowLabel !== 'null') {
+    const arrowXStart = nodeX + 45; // Start slightly to the right of the node
+    const arrowXEnd = nodeX + 25; // End at the node edge
+
+    // console.log(arrowXStart, nodeY, arrowXEnd, nodeY);
+    group
+      .append('line')
+      .attr('x1', arrowXStart)
+      .attr('y1', nodeY)
+      .attr('x2', arrowXEnd)
+      .attr('y2', nodeY)
+      .attr('stroke', 'black')
+      .attr('stroke-width', '2')
+      .attr('marker-end', 'url(#arrowhead)');
+
+    // Draw the arrow label if it exists
+    group
+      .append('text')
+      .attr('x', arrowXStart + 5)
+      .attr('y', nodeY)
+      .attr('fill', 'black')
+      .attr('font-size', '14')
+      .attr('dominant-baseline', 'middle')
+      .attr('text-anchor', 'start')
+      .attr('class', 'arrowLabel')
+      .text(node.arrowLabel || '');
+  }
 };
 
 const drawEdge = (
@@ -126,12 +170,14 @@ const drawEdge = (
 
     const strokeColor = edge.color || 'black';
 
+    // console.log("2\n", startX, startY, endX, endY);
+
     svg
       .append('line')
-      .attr('x1', startX)
-      .attr('y1', startY)
-      .attr('x2', endX)
-      .attr('y2', endY)
+      .attr('x1', startX || 0)
+      .attr('y1', startY || 0)
+      .attr('x2', endX || 0)
+      .attr('y2', endY || 0)
       .attr('stroke', strokeColor)
       .attr('stroke-width', '2');
     // .attr('marker-end', edge.arrow ? 'url(#arrowhead)' : null);
@@ -142,7 +188,7 @@ const drawEdge = (
         .attr('x', (startX + endX) / 2)
         .attr('y', (startY + endY) / 2)
         .attr('fill', 'black')
-        .attr('font-size', '12')
+        .attr('font-size', '16')
         .attr('dominant-baseline', 'middle')
         .attr('text-anchor', 'middle')
         .attr('class', 'edgeLabel')

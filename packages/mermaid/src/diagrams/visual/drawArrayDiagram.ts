@@ -127,7 +127,7 @@ const drawElement = (
         .attr('x', elementX + 20)
         .attr('y', arrowYStart - 20)
         .attr('fill', labelColor)
-        .attr('font-size', labelFontSize)
+        .attr('font-size', '16')
         .attr('dominant-baseline', 'hanging')
         .attr('text-anchor', 'middle')
         .attr('class', 'arrowContext')

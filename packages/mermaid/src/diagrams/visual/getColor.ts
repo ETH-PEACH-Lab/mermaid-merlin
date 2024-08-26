@@ -67,7 +67,7 @@ export const getColor = (color?: string, transparency: number = 0.6): string => 
     const rgbaColor = hexToRgba(hexColor, transparency);
     return rgbaColor;
   } else {
-    return 'null';
+    return 'white';
   }
 };
 
