@@ -1,5 +1,6 @@
 import type { LinkedListDiagram, LinkedListElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { getColor } from './getColor.js';
 
 export const drawLinkedListDiagram = (
   svg: SVG,
@@ -157,18 +158,5 @@ const drawNode = (
       .attr('stroke', 'black')
       .attr('stroke-width', '2')
       .attr('marker-end', 'url(#arrowhead)');
-  }
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'white';
   }
 };

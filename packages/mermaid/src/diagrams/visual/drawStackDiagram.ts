@@ -1,5 +1,6 @@
 import type { StackDiagram, StackElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { getColor } from './getColor.js';
 
 export const drawStackDiagram = (
   svg: SVG,
@@ -107,17 +108,4 @@ const drawFramework = (svg: SVG, x: number, y: number, width: number, height: nu
     .attr('y2', y + height)
     .attr('stroke', borderColor)
     .attr('stroke-width', borderWidth);
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
-  }
 };

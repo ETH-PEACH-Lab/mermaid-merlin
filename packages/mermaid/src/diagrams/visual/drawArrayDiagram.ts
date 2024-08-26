@@ -1,6 +1,7 @@
 import type { ArrayDiagram, ArrayElement } from './types.js';
 import type { ArrayDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { getColor } from './getColor.js';
 
 export const drawArrayDiagram = (
   svg: SVG,
@@ -167,18 +168,5 @@ const drawElement = (
       .attr('text-anchor', 'middle')
       .attr('class', 'indexLabel')
       .text(index);
-  }
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
   }
 };

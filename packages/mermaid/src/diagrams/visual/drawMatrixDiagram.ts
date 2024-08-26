@@ -1,6 +1,7 @@
 import type { MatrixDiagram, MatrixRow, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
+import { getColor } from './getColor.js';
 
 export const drawMatrixDiagram = (
   svg: SVG,
@@ -159,17 +160,4 @@ const drawGrid = (
     .attr('stroke', borderColor)
     .attr('stroke-width', borderWidth)
     .attr('fill', 'none');
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
-  }
 };

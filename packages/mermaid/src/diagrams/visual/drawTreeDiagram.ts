@@ -1,5 +1,6 @@
 import type { TreeDiagram } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { getColor } from './getColor.js';
 
 export const drawTreeDiagram = (
   svg: SVG,
@@ -204,17 +205,4 @@ const calculateEdgePosition = (start: { x: number; y: number }, end: { x: number
     endX: end.x - offsetX,
     endY: end.y - offsetY,
   };
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
-  }
 };
