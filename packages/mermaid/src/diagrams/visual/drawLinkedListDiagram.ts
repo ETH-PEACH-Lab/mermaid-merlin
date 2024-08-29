@@ -137,7 +137,7 @@ const drawNode = (
     .text(node.value);
 
   // Draw the smaller arrow above the node if it exists and the arrowLabel is not "null"
-  if (node.arrow && node.arrowLabel !== 'null') {
+  if (node.arrowLabel !== 'null') {
     const arrowYStart = nodeY - 30; // Start of the arrow, closer to the node
     const arrowYEnd = nodeY - 10; // End of the arrow, just above the node
 
