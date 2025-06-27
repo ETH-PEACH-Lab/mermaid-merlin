@@ -2,6 +2,7 @@ import type { MatrixDiagram, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
 export const drawMatrixDiagram = (
   svg: SVG,
@@ -93,6 +94,9 @@ const drawElement = (
     .attr('stroke-width', borderWidth)
     .attr('class', 'matrixElement');
 
+  // Format the element value using the utility function
+  const formattedValue = formatValue(element.value);
+
   // Draw the text inside the matrix element
   group
     .append('text')
@@ -103,10 +107,10 @@ const drawElement = (
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
-    .text(element.value.toString());
+    .text(formattedValue);
 
   // Draw the red circle and arrow label if the arrow exists
-  if (element.arrow && element.arrowLabel !== 'null') {
+  if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
     // Draw the red circle around the element
     group
       .append('circle')
@@ -127,7 +131,7 @@ const drawElement = (
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'start')
       .attr('class', 'arrowLabel')
-      .text(element.arrowLabel || '');
+      .text(formatValue(element.arrowLabel || ''));
   }
 };
 

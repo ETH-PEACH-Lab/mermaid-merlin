@@ -1,6 +1,7 @@
 import type { StackDiagram, StackElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
 export const drawStackDiagram = (
   svg: SVG,
@@ -79,7 +80,7 @@ const drawElement = (svg: SVG, element: StackElement, positionIndex: number, uni
     .attr('stroke-width', '1')
     .attr('class', 'stackElement');
 
-  if (element.arrow && element.arrowLabel !== 'null') {
+  if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
     const arrowXStart = elementX + 80; // Start at the right edge of the element
     const arrowXEnd = arrowXStart + 40; // Extend the arrow further to the right
 
@@ -93,7 +94,7 @@ const drawElement = (svg: SVG, element: StackElement, positionIndex: number, uni
       .attr('stroke-width', '1.5')
       .attr('marker-end', 'url(#arrowhead)'); // Arrowhead points towards the element from the right
 
-    if (element.arrowLabel && element.arrowLabel !== 'null') {
+    if (shouldDisplayArrowLabel(element.arrowLabel)) {
       group
         .append('text')
         .attr('x', arrowXEnd + 10)
@@ -103,7 +104,7 @@ const drawElement = (svg: SVG, element: StackElement, positionIndex: number, uni
         .attr('dominant-baseline', 'middle')
         .attr('text-anchor', 'start')
         .attr('class', 'arrowContext')
-        .text(element.arrowLabel);
+        .text(formatValue(element.arrowLabel || ''));
     }
   }
 
@@ -116,7 +117,7 @@ const drawElement = (svg: SVG, element: StackElement, positionIndex: number, uni
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
-    .text(element.value);
+    .text(formatValue(element.value));
 };
 
 const drawFramework = (svg: SVG, x: number, y: number, width: number, height: number) => {

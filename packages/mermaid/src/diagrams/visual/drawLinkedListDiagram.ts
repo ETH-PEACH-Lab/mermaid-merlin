@@ -1,6 +1,7 @@
 import type { LinkedListDiagram, LinkedListElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
 export const drawLinkedListDiagram = (
   svg: SVG,
@@ -134,10 +135,10 @@ const drawNode = (
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
-    .text(node.value);
+    .text(formatValue(node.value));
 
   // Draw the smaller arrow above the node if it exists and the arrowLabel is not "null"
-  if (node.arrowLabel !== 'null') {
+  if (shouldDisplayArrowLabel(node.arrowLabel)) {
     const arrowYStart = nodeY - 30; // Start of the arrow, closer to the node
     const arrowYEnd = nodeY - 10; // End of the arrow, just above the node
 
@@ -161,7 +162,7 @@ const drawNode = (
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'middle')
       .attr('class', 'arrowLabel')
-      .text(node.arrowLabel || '');
+      .text(formatValue(node.arrowLabel || ''));
   }
 
   // Draw the longer connecting line to the next node if there is one

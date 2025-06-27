@@ -59,7 +59,7 @@ StackDiagram:
   (orientation=Orientation NEWLINE*)?
   ('title:' title=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
-  'size:' size=INT NEWLINE*
+  'size:' size=NUMBER NEWLINE*
   '@' NEWLINE
   elements+=StackElement* NEWLINE*
   '@' NEWLINE*
@@ -143,10 +143,10 @@ TextElement:
 ;
 
 Value returns string:
-  INT | ID
+  NUMBER | ID | STRING | 'null' | '\\null'
 ;
 
-terminal INT returns number: /0|[1-9][0-9]*/;
+terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
 terminal Orientation: "TD" | "LR";

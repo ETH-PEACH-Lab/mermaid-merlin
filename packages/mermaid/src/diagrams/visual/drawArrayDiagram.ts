@@ -2,6 +2,7 @@ import type { ArrayDiagram, ArrayElement } from './types.js';
 import type { ArrayDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
 export const drawArrayDiagram = (
   svg: SVG,
@@ -108,7 +109,7 @@ const drawElement = (
 
   const fillColor = getColor(element.color);
 
-  if (element.arrow && element.arrowLabel !== 'null') {
+  if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
     const arrowYStart = elementY - 40;
     const arrowYEnd = elementY - 10;
     group
@@ -121,7 +122,7 @@ const drawElement = (
       .attr('stroke-width', '1.5')
       .attr('marker-end', 'url(#arrowhead)');
 
-    if (element.arrowLabel && element.arrowLabel !== 'null') {
+    if (shouldDisplayArrowLabel(element.arrowLabel)) {
       group
         .append('text')
         .attr('x', elementX + 20)
@@ -131,7 +132,7 @@ const drawElement = (
         .attr('dominant-baseline', 'hanging')
         .attr('text-anchor', 'middle')
         .attr('class', 'arrowContext')
-        .text(element.arrowLabel);
+        .text(formatValue(element.arrowLabel || ''));
     }
   }
 
@@ -155,7 +156,7 @@ const drawElement = (
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
-    .text(element.value);
+    .text(formatValue(element.value));
 
   if (showIndex) {
     group

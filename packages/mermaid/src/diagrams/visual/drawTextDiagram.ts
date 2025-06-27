@@ -1,5 +1,6 @@
 import type { TextDiagram } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { formatValue } from './valueFormatter.js';
 
 export const drawTextDiagram = (
   svg: SVG,
@@ -57,7 +58,7 @@ const drawElement = (svg: SVG, element: string, startY: number, unit_id: number)
       .attr('font-size', '20')
       .attr('dominant-baseline', 'hanging')
       .attr('class', 'textElement')
-      .text(line);
+      .text(formatValue(line));
   });
 
   // Return the updated Y position for the next element, considering the height of the current element
