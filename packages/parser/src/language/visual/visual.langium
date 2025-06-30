@@ -134,12 +134,28 @@ LinkedListElement:
 TextDiagram:
   diagramType="text" NEWLINE*
   ('title:' title=STRING NEWLINE*)?
+  ('fontSize:' fontSize=NUMBER NEWLINE*)?
+  ('color:' color=STRING NEWLINE*)?
+  ('fontWeight:' fontWeight=STRING NEWLINE*)?
+  ('fontFamily:' fontFamily=STRING NEWLINE*)?
+  ('align:' align=STRING NEWLINE*)?
+  ('lineSpacing:' lineSpacing=NUMBER NEWLINE*)?
+  ('width:' width=NUMBER NEWLINE*)?
+  ('height:' height=NUMBER NEWLINE*)?
   elements+=TextElement* NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
 
 TextElement:
-  value=STRING NEWLINE*
+  value=STRING ('{' attributes+=TextElementAttribute (',' attributes+=TextElementAttribute)* '}')? NEWLINE*
+;
+
+TextElementAttribute:
+  (name='fontSize' ':' value=NUMBER) |
+  (name='color' ':' value=STRING) |
+  (name='fontWeight' ':' value=STRING) |
+  (name='fontFamily' ':' value=STRING) |
+  (name='align' ':' value=STRING)
 ;
 
 Value returns string:

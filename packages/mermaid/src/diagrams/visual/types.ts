@@ -130,11 +130,28 @@ export interface LinkedListDiagram {
   elements: LinkedListElement[];
 }
 
+export interface TextElement {
+  value: string;
+  fontSize?: number;
+  color?: string;
+  fontWeight?: string;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
+}
+
 export interface TextDiagram {
   type: string;
   title?: string;
-  elements: string[];
+  elements: (string | TextElement)[];
   label?: string;
+  fontSize?: number;
+  color?: string;
+  fontWeight?: string;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
+  lineSpacing?: number;
+  width?: number;
+  height?: number;
 }
 
 // Page interface

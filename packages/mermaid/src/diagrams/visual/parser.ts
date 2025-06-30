@@ -114,7 +114,27 @@ const populate = (ast: VisualDiagram) => {
           return {
             type: 'text',
             title: subDiagram.title,
-            elements: subDiagram.elements.map((e) => e.value),
+            fontSize: subDiagram.fontSize,
+            color: subDiagram.color,
+            fontWeight: subDiagram.fontWeight,
+            fontFamily: subDiagram.fontFamily,
+            align: subDiagram.align,
+            lineSpacing: subDiagram.lineSpacing,
+            width: subDiagram.width,
+            height: subDiagram.height,
+            label: subDiagram.label,
+            elements: subDiagram.elements.map((e: any) => {
+              if (e.attributes && e.attributes.length > 0) {
+                // Build element properties from attributes array
+                const elementProps: any = { value: e.value };
+                e.attributes.forEach((attr: any) => {
+                  elementProps[attr.name] = attr.value;
+                });
+                return elementProps;
+              } else {
+                return e.value;
+              }
+            }),
           };
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
