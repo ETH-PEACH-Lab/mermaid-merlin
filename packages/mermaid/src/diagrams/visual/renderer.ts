@@ -51,7 +51,7 @@ const processItemsWithRelativePositioning = (subDiagrams: any[]): ProcessedGroup
       const targetGroup = groups[groups.length - 1];
       if (targetGroup) {
         targetGroup.textItems.push({
-          item: subDiagram,
+          item: { ...subDiagram, index }, // Ensure the index is preserved
           placement: subDiagram.position.placement || subDiagram.placement || 'below',
         });
         processedIndices.add(index);
@@ -64,7 +64,7 @@ const processItemsWithRelativePositioning = (subDiagrams: any[]): ProcessedGroup
       type: subDiagram.type,
       position:
         subDiagram.position && 'column' in subDiagram.position ? subDiagram.position : undefined,
-      mainItem: subDiagram,
+      mainItem: { ...subDiagram, index }, // Ensure the index is preserved here too
       textItems: [],
     };
 
@@ -255,7 +255,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     const itemsWithPositions: Array<{ item: any; position: { column: number; row: number } }> = [];
     const itemsWithoutPositions: Array<any> = [];
 
-    processedGroups.forEach((group, index) => {
+    processedGroups.forEach((group, groupIndex) => {
       if (group.position) {
         // Convert 1-based to 0-based indexing and validate
         const col = group.position.column - 1;
@@ -263,15 +263,15 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
         if (row >= 0 && row < layout.rows && col >= 0 && col < layout.columns) {
           itemsWithPositions.push({
-            item: { ...group, index },
+            item: group, // Don't override the existing index
             position: { column: col, row },
           });
         } else {
           // Invalid position, treat as item without position
-          itemsWithoutPositions.push({ ...group, index });
+          itemsWithoutPositions.push(group); // Don't override the existing index
         }
       } else {
-        itemsWithoutPositions.push({ ...group, index });
+        itemsWithoutPositions.push(group); // Don't override the existing index
       }
     });
 
