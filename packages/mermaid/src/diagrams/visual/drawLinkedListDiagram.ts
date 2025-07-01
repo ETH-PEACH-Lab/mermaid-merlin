@@ -6,14 +6,10 @@ import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 export const drawLinkedListDiagram = (
   svg: SVG,
   linkedListDiagram: LinkedListDiagram,
-  yOffset: number,
   component_id: number
 ) => {
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   // Define the marker for the arrowhead_node
   group

@@ -7,7 +7,6 @@ import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 export const drawArrayDiagram = (
   svg: SVG,
   arrayDiagram: ArrayDiagram,
-  yOffset: number,
   config: Required<ArrayDiagramConfig>,
   component_id: number
 ) => {
@@ -56,7 +55,7 @@ export const drawArrayDiagram = (
     .append('g')
     .attr('class', 'component')
     .attr('id', `component_${component_id}`)
-    .attr('transform', `translate(${xOffset}, ${yOffset + 40})`);
+    .attr('transform', `translate(${xOffset}, 40)`);
 
   let unit_id = 0;
 

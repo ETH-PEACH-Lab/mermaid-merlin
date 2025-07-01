@@ -3,17 +3,9 @@ import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
-export const drawGraphDiagram = (
-  svg: SVG,
-  graphDiagram: GraphDiagram,
-  yOffset: number,
-  component_id: number
-) => {
+export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, component_id: number) => {
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   // Define the marker for the arrowhead
   group

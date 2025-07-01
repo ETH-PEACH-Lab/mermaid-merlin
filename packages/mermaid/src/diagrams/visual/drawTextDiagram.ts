@@ -2,17 +2,9 @@ import type { TextDiagram, TextElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { formatValue } from './valueFormatter.js';
 
-export const drawTextDiagram = (
-  svg: SVG,
-  textDiagram: TextDiagram,
-  yOffset: number,
-  component_id: number
-) => {
+export const drawTextDiagram = (svg: SVG, textDiagram: TextDiagram, component_id: number) => {
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   let currentY = 0; // Initialize the current Y position
 

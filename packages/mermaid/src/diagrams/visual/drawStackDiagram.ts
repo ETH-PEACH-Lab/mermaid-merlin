@@ -3,12 +3,7 @@ import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
-export const drawStackDiagram = (
-  svg: SVG,
-  stackDiagram: StackDiagram,
-  yOffset: number,
-  component_id: number
-) => {
+export const drawStackDiagram = (svg: SVG, stackDiagram: StackDiagram, component_id: number) => {
   // Add marker definition for the arrowhead
   svg
     .append('defs')
@@ -25,10 +20,7 @@ export const drawStackDiagram = (
     .attr('fill', 'black');
 
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   // Draw the framework of the stack
   const stackHeight = stackDiagram.size * 40;
