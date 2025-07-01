@@ -180,7 +180,11 @@ LayoutDefinition:
 ;
 
 PositionDefinition:
-  '(' column=NUMBER ',' row=NUMBER ')' | 'previous'
+  '(' column=PositionRange ',' row=PositionRange ')' | 'previous'
+;
+
+PositionRange:
+  single=NUMBER | (start=NUMBER '..' end=NUMBER)
 ;
 
 terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;

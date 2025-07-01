@@ -17,12 +17,22 @@ export interface PositionDefinition {
   row: number;
 }
 
+export interface RangePositionDefinition {
+  columnStart: number;
+  columnEnd: number;
+  rowStart: number;
+  rowEnd: number;
+}
+
 export interface RelativePositionDefinition {
   type: 'previous';
   placement: 'above' | 'below' | 'left' | 'right';
 }
 
-export type PositionType = PositionDefinition | RelativePositionDefinition;
+export type PositionType =
+  | PositionDefinition
+  | RangePositionDefinition
+  | RelativePositionDefinition;
 
 // Array interfaces
 export interface ArrayElement {

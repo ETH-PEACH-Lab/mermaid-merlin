@@ -22,12 +22,30 @@ const populate = (ast: VisualDiagram) => {
       return undefined;
     }
 
-    // Check if it has column and row (absolute position)
+    // Check if it has column and row (position definition)
     if ('column' in position && 'row' in position) {
-      return {
-        column: position.column, // Keep user input as-is for 0-based indexing
-        row: position.row, // Keep user input as-is for 0-based indexing
-      };
+      const column = position.column;
+      const row = position.row;
+
+      // Check if either column or row is a range
+      const isColumnRange = column && 'start' in column && 'end' in column;
+      const isRowRange = row && 'start' in row && 'end' in row;
+
+      if (isColumnRange || isRowRange) {
+        // Range position
+        return {
+          column: isColumnRange
+            ? { start: column.start, end: column.end }
+            : column.single ?? column,
+          row: isRowRange ? { start: row.start, end: row.end } : row.single ?? row,
+        };
+      } else {
+        // Single cell position
+        return {
+          column: column.single ?? column, // Keep user input as-is for 0-based indexing
+          row: row.single ?? row, // Keep user input as-is for 0-based indexing
+        };
+      }
     }
 
     // Otherwise it's a relative position ('previous')

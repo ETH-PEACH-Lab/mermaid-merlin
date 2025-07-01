@@ -24,7 +24,10 @@ import { drawTextDiagram } from './drawTextDiagram.js';
 
 interface ProcessedGroup {
   type: string;
-  position?: { column: number; row: number };
+  position?: {
+    column: number | { start: number; end: number };
+    row: number | { start: number; end: number };
+  };
   mainItem: any;
   textItems: Array<{ item: any; placement: 'above' | 'below' | 'left' | 'right' }>;
 }
@@ -63,7 +66,9 @@ const processItemsWithRelativePositioning = (subDiagrams: any[]): ProcessedGroup
     const group: ProcessedGroup = {
       type: subDiagram.type,
       position:
-        subDiagram.position && 'column' in subDiagram.position ? subDiagram.position : undefined,
+        subDiagram.position && ('column' in subDiagram.position || 'col' in subDiagram.position)
+          ? subDiagram.position
+          : undefined,
       mainItem: { ...subDiagram, index }, // Ensure the index is preserved here too
       textItems: [],
     };
@@ -252,38 +257,59 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     const processedGroups = processItemsWithRelativePositioning(page.subDiagrams);
 
     // Pre-calculate: Count items with and without positions
-    const itemsWithPositions: Array<{ item: any; position: { column: number; row: number } }> = [];
+    const itemsWithPositions: Array<{
+      item: any;
+      position: {
+        colStart: number;
+        colEnd: number;
+        rowStart: number;
+        rowEnd: number;
+      };
+    }> = [];
     const itemsWithoutPositions: Array<any> = [];
 
-    processedGroups.forEach((group, groupIndex) => {
+    processedGroups.forEach((group) => {
       if (group.position) {
-        // Position is already 0-based from parser
-        const col = group.position.column;
-        const row = group.position.row;
+        const { column, row } = group.position;
+        const colStart = typeof column === 'object' ? column.start : column;
+        const colEnd = typeof column === 'object' ? column.end : column;
+        const rowStart = typeof row === 'object' ? row.start : row;
+        const rowEnd = typeof row === 'object' ? row.end : row;
 
-        if (row >= 0 && row < layout.rows && col >= 0 && col < layout.columns) {
+        if (
+          rowStart >= 0 &&
+          rowEnd < layout.rows &&
+          colStart >= 0 &&
+          colEnd < layout.columns &&
+          rowStart <= rowEnd &&
+          colStart <= colEnd
+        ) {
           itemsWithPositions.push({
-            item: group, // Don't override the existing index
-            position: { column: col, row },
+            item: group,
+            position: { colStart, colEnd, rowStart, rowEnd },
           });
         } else {
-          // Invalid position, treat as item without position
-          itemsWithoutPositions.push(group); // Don't override the existing index
+          itemsWithoutPositions.push(group);
         }
       } else {
-        itemsWithoutPositions.push(group); // Don't override the existing index
+        itemsWithoutPositions.push(group);
       }
     });
 
     // Pre-calculate grid expansion: Check if we need more space
+    let occupiedCellCount = 0;
+    itemsWithPositions.forEach(({ position }) => {
+      occupiedCellCount +=
+        (position.colEnd - position.colStart + 1) * (position.rowEnd - position.rowStart + 1);
+    });
+
     const totalCells = layout.columns * layout.rows;
-    const occupiedCells = itemsWithPositions.length;
-    const availableCells = totalCells - occupiedCells;
+    const availableCells = totalCells - occupiedCellCount;
     const itemsNeedingSpace = itemsWithoutPositions.length;
 
     // Smart grid expansion: maintain balanced proportions
     if (itemsNeedingSpace > availableCells) {
-      const totalItemsNeeded = occupiedCells + itemsNeedingSpace;
+      const totalItemsNeeded = occupiedCellCount + itemsNeedingSpace;
 
       // Start with current layout and expand intelligently
       let newColumns = layout.columns;
@@ -338,13 +364,29 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
     // Mark positions as occupied for explicitly positioned items
     itemsWithPositions.forEach(({ position }) => {
-      gridPositions[position.row][position.column].occupied = true;
+      for (let r = position.rowStart; r <= position.rowEnd; r++) {
+        for (let c = position.colStart; c <= position.colEnd; c++) {
+          if (gridPositions[r] && gridPositions[r][c]) {
+            gridPositions[r][c].occupied = true;
+          }
+        }
+      }
     });
 
     // Place items with explicit positions
     itemsWithPositions.forEach(({ item, position }) => {
-      const gridPos = gridPositions[position.row][position.column];
-      drawGroupAtPosition(pageGroup, item, gridPos.x, gridPos.y, cellWidth, cellHeight, config);
+      const startPos = gridPositions[position.rowStart][position.colStart];
+      const itemCellWidth = (position.colEnd - position.colStart + 1) * cellWidth;
+      const itemCellHeight = (position.rowEnd - position.rowStart + 1) * cellHeight;
+      drawGroupAtPosition(
+        pageGroup,
+        item,
+        startPos.x,
+        startPos.y,
+        itemCellWidth,
+        itemCellHeight,
+        config
+      );
     });
 
     // Place remaining items in available positions
@@ -514,11 +556,12 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     const availableWidth = maxWidth - padding;
     const availableHeight = maxHeight - padding;
 
+    // Step 5: Calculate scaling to fit the diagram in the available space
     const scaleX = availableWidth / totalWidth;
     const scaleY = availableHeight / totalHeight;
-    const scale = Math.min(scaleX, scaleY, 1);
+    const scale = Math.min(1, scaleX, scaleY); // Do not scale up
 
-    // Step 5: Calculate positions for centering the entire group
+    // Step 6: Calculate positions for centering the entire group
     const cellCenterX = x + maxWidth / 2;
     const cellCenterY = y + maxHeight / 2;
 
@@ -528,10 +571,10 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     const groupX = cellCenterX - groupCenterX;
     const groupY = cellCenterY - groupCenterY;
 
-    // Step 6: Apply transform to container
+    // Step 7: Apply transform to container
     containerGroup.attr('transform', `translate(${groupX}, ${groupY}) scale(${scale})`);
 
-    // Step 7: Position and draw the main diagram
+    // Step 8: Position and draw the main diagram
     const mainX = leftSpace - mainBBox.x;
     const mainY = topSpace - mainBBox.y;
 
@@ -542,7 +585,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
     drawSingleDiagram(mainGroup, group.mainItem, config);
 
-    // Step 8: Position and draw text items
+    // Step 9: Position and draw text items
     textMeasurements.forEach(({ bbox, placement, item }) => {
       const textGroup = containerGroup.append('g').attr('class', 'text-item');
 
@@ -614,7 +657,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     // Step 5: Calculate scaling to fit the diagram in the available space
     const scaleX = availableWidth / actualWidth;
     const scaleY = availableHeight / actualHeight;
-    const scale = Math.min(scaleX, scaleY, 1); // Don't scale up
+    const scale = Math.min(1, scaleX, scaleY); // Do not scale up
 
     // Step 6: Calculate positioning to center the diagram in the cell
     const cellCenterX = x + maxWidth / 2;
@@ -637,11 +680,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
       .attr('id', `viewport-${subDiagram.index}`);
 
     // Apply the calculated transform
-    if (scale < 1) {
-      viewportGroup.attr('transform', `translate(${translateX}, ${translateY}) scale(${scale})`);
-    } else {
-      viewportGroup.attr('transform', `translate(${translateX}, ${translateY})`);
-    }
+    viewportGroup.attr('transform', `translate(${translateX}, ${translateY}) scale(${scale})`);
 
     // Step 9: Draw the diagram again in the final position
     drawSingleDiagram(viewportGroup, subDiagram, config);
