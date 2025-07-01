@@ -25,8 +25,8 @@ const populate = (ast: VisualDiagram) => {
     // Check if it has column and row (absolute position)
     if ('column' in position && 'row' in position) {
       return {
-        column: position.column,
-        row: position.row,
+        column: position.column, // Keep user input as-is for 0-based indexing
+        row: position.row, // Keep user input as-is for 0-based indexing
       };
     }
 

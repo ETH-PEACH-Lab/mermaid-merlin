@@ -257,9 +257,9 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
     processedGroups.forEach((group, groupIndex) => {
       if (group.position) {
-        // Convert 1-based to 0-based indexing and validate
-        const col = group.position.column - 1;
-        const row = group.position.row - 1;
+        // Position is already 0-based from parser
+        const col = group.position.column;
+        const row = group.position.row;
 
         if (row >= 0 && row < layout.rows && col >= 0 && col < layout.columns) {
           itemsWithPositions.push({
