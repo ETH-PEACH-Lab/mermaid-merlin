@@ -7,6 +7,54 @@ import { db } from './db.js';
 
 const populate = (ast: VisualDiagram) => {
   populateCommonDb(ast, db);
+
+  // Handle optional size parameter
+  if (ast.size && db.setSize) {
+    db.setSize({
+      width: ast.size.width,
+      height: ast.size.height,
+    });
+  }
+
+  // Helper function to process position data
+  const processPosition = (position: any, placement?: string) => {
+    if (!position) {
+      return undefined;
+    }
+
+    // Check if it has column and row (position definition)
+    if ('column' in position && 'row' in position) {
+      const column = position.column;
+      const row = position.row;
+
+      // Check if either column or row is a range
+      const isColumnRange = column && 'start' in column && 'end' in column;
+      const isRowRange = row && 'start' in row && 'end' in row;
+
+      if (isColumnRange || isRowRange) {
+        // Range position
+        return {
+          column: isColumnRange
+            ? { start: column.start, end: column.end }
+            : column.single ?? column,
+          row: isRowRange ? { start: row.start, end: row.end } : row.single ?? row,
+        };
+      } else {
+        // Single cell position
+        return {
+          column: column.single ?? column, // Keep user input as-is for 0-based indexing
+          row: row.single ?? row, // Keep user input as-is for 0-based indexing
+        };
+      }
+    }
+
+    // Otherwise it's a relative position ('previous')
+    return {
+      type: 'previous' as const,
+      placement: (placement || 'below') as 'left' | 'right' | 'above' | 'below',
+    };
+  };
+
   for (const page of ast.pages) {
     const subDiagrams = page.subDiagrams.map((subDiagram) => {
       switch (subDiagram.diagramType) {
@@ -14,10 +62,11 @@ const populate = (ast: VisualDiagram) => {
           return {
             type: 'array',
             orientation: subDiagram.orientation,
-            title: subDiagram.title,
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
             showIndex: subDiagram.showIndex,
             label: subDiagram.label,
-            elements: subDiagram.elements.map((e) => ({
+            elements: subDiagram.elements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
@@ -27,9 +76,10 @@ const populate = (ast: VisualDiagram) => {
         case 'matrix':
           return {
             type: 'matrix',
-            title: subDiagram.title,
-            rows: subDiagram.rows.map((row) => ({
-              elements: row.elements.map((e) => ({
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
+            rows: subDiagram.rows.map((row: any) => ({
+              elements: row.elements.map((e: any) => ({
                 value: e.value,
                 color: e.color,
                 arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
@@ -43,11 +93,12 @@ const populate = (ast: VisualDiagram) => {
           return {
             type: 'stack',
             orientation: subDiagram.orientation,
-            title: subDiagram.title,
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
             showIndex: subDiagram.showIndex,
             label: subDiagram.label,
             size: subDiagram.size,
-            elements: subDiagram.elements.map((e) => ({
+            elements: subDiagram.elements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
@@ -57,9 +108,10 @@ const populate = (ast: VisualDiagram) => {
         case 'tree':
           return {
             type: 'tree',
-            title: subDiagram.title,
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((element) => ({
+            elements: subDiagram.elements.map((element: any) => ({
               nodeId: element.nodeId,
               left: element.left == 'None' ? undefined : element.left,
               right: element.right == 'None' ? undefined : element.right,
@@ -72,9 +124,10 @@ const populate = (ast: VisualDiagram) => {
         case 'graph':
           return {
             type: 'graph',
-            title: subDiagram.title,
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((element) => {
+            elements: subDiagram.elements.map((element: any) => {
               if (element.$type == 'NodeDefinition') {
                 return {
                   type: 'node',
@@ -101,9 +154,10 @@ const populate = (ast: VisualDiagram) => {
         case 'linkedList':
           return {
             type: 'linkedList',
-            title: subDiagram.title,
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((e) => ({
+            elements: subDiagram.elements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel ? true : false,
@@ -113,15 +167,44 @@ const populate = (ast: VisualDiagram) => {
         case 'text':
           return {
             type: 'text',
-            title: subDiagram.title,
-            elements: subDiagram.elements.map((e) => e.value),
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position, subDiagram.placement),
+            fontSize: subDiagram.fontSize,
+            color: subDiagram.color,
+            fontWeight: subDiagram.fontWeight,
+            fontFamily: subDiagram.fontFamily,
+            align: subDiagram.align,
+            lineSpacing: subDiagram.lineSpacing,
+            width: subDiagram.width,
+            height: subDiagram.height,
+            label: subDiagram.label,
+            elements: subDiagram.elements.map((e: any) => {
+              if (e.attributes && e.attributes.length > 0) {
+                // Build element properties from attributes array
+                const elementProps: any = { value: e.value };
+                e.attributes.forEach((attr: any) => {
+                  elementProps[attr.name] = attr.value;
+                });
+                return elementProps;
+              } else {
+                return e.value;
+              }
+            }),
           };
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
       }
     });
 
-    db.addPage({ subDiagrams });
+    db.addPage({
+      layout: page.layout
+        ? {
+            columns: page.layout.columns,
+            rows: page.layout.rows,
+          }
+        : undefined,
+      subDiagrams,
+    });
   }
 };
 

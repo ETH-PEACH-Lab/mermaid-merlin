@@ -1,18 +1,11 @@
 import type { TreeDiagram } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
-export const drawTreeDiagram = (
-  svg: SVG,
-  treeDiagram: TreeDiagram,
-  yOffset: number,
-  component_id: number
-) => {
+export const drawTreeDiagram = (svg: SVG, treeDiagram: TreeDiagram, component_id: number) => {
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   // Define the marker for the arrowhead
   group
@@ -162,10 +155,10 @@ const drawNode = (svg: SVG, node: any, position: { x: number; y: number }, unit_
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'nodeLabel')
-    .text(node.value || node.nodeId);
+    .text(formatValue(node.value || node.nodeId));
 
   // Draw the arrow on the right side of the node, pointing towards the node
-  if (node.arrow && node.arrowLabel !== 'null') {
+  if (node.arrow && shouldDisplayArrowLabel(node.arrowLabel)) {
     const arrowXStart = nodeX + 45; // Move further right to avoid overlap
     const arrowXEnd = nodeX + 25; // End near the node edge
 
@@ -189,7 +182,7 @@ const drawNode = (svg: SVG, node: any, position: { x: number; y: number }, unit_
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'start')
       .attr('class', 'arrowLabel')
-      .text(node.arrowLabel);
+      .text(formatValue(node.arrowLabel || ''));
   }
 };
 
@@ -228,7 +221,7 @@ const drawEdge = (
         .attr('dominant-baseline', 'middle')
         .attr('text-anchor', 'middle')
         .attr('class', 'edgeLabel')
-        .text(edge.value);
+        .text(formatValue(edge.value));
     }
   }
 };

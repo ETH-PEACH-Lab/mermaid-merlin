@@ -1,6 +1,39 @@
 import type { VisualDiagramConfig } from '../../config.type.js';
 import type { DiagramDBBase } from '../../diagram-api/types.js';
 
+// Common interfaces
+export interface SizeDefinition {
+  width: number;
+  height: number;
+}
+
+export interface LayoutDefinition {
+  columns: number;
+  rows: number;
+}
+
+export interface PositionDefinition {
+  column: number;
+  row: number;
+}
+
+export interface RangePositionDefinition {
+  columnStart: number;
+  columnEnd: number;
+  rowStart: number;
+  rowEnd: number;
+}
+
+export interface RelativePositionDefinition {
+  type: 'previous';
+  placement: 'above' | 'below' | 'left' | 'right';
+}
+
+export type PositionType =
+  | PositionDefinition
+  | RangePositionDefinition
+  | RelativePositionDefinition;
+
 // Array interfaces
 export interface ArrayElement {
   value: string | number;
@@ -13,6 +46,7 @@ export interface ArrayDiagram {
   type: string;
   orientation?: string;
   title?: string;
+  position?: PositionType;
   elements: ArrayElement[];
   showIndex?: boolean;
   label?: string;
@@ -33,6 +67,7 @@ export interface MatrixRow {
 export interface MatrixDiagram {
   type: string;
   title?: string;
+  position?: PositionType;
   rows: MatrixRow[];
   showIndex?: boolean;
   label?: string;
@@ -50,6 +85,7 @@ export interface StackDiagram {
   type: string;
   orientation?: string;
   title?: string;
+  position?: PositionType;
   elements: StackElement[];
   showIndex?: boolean;
   size: number;
@@ -87,6 +123,7 @@ export interface TreeDiagram {
   type: string;
   orientation?: string;
   title?: string;
+  position?: PositionType;
   //TODO: should be changed to required field
   elements?: TreeElement[];
   label?: string;
@@ -112,6 +149,7 @@ export interface GraphEdge {
 export interface GraphDiagram {
   type: string;
   title?: string;
+  position?: PositionType;
   elements: any[];
   label?: string;
 }
@@ -126,19 +164,40 @@ export interface LinkedListElement {
 export interface LinkedListDiagram {
   type: string;
   title?: string;
+  position?: PositionType;
   label?: string;
   elements: LinkedListElement[];
+}
+
+export interface TextElement {
+  value: string;
+  fontSize?: number;
+  color?: string;
+  fontWeight?: string;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
 }
 
 export interface TextDiagram {
   type: string;
   title?: string;
-  elements: string[];
+  position?: PositionType;
+  placement?: 'above' | 'below' | 'left' | 'right';
+  elements: (string | TextElement)[];
   label?: string;
+  fontSize?: number;
+  color?: string;
+  fontWeight?: string;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
+  lineSpacing?: number;
+  width?: number;
+  height?: number;
 }
 
 // Page interface
 export interface VisualPage {
+  layout?: LayoutDefinition;
   subDiagrams: (
     | ArrayDiagram
     | MatrixDiagram
@@ -154,4 +213,6 @@ export interface VisualPage {
 export interface VisualDB extends DiagramDBBase<VisualDiagramConfig> {
   addPage: (page: VisualPage) => void;
   getPages: () => VisualPage[];
+  getSize?: () => SizeDefinition | undefined;
+  setSize?: (size: SizeDefinition) => void;
 }

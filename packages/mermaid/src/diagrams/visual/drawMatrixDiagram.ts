@@ -2,21 +2,18 @@ import type { MatrixDiagram, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getColor } from './getColor.js';
+import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 
 export const drawMatrixDiagram = (
   svg: SVG,
   matrixDiagram: MatrixDiagram,
-  yOffset: number,
   config: Required<MatrixDiagramConfig>,
   component_id: number
 ) => {
   const xOffset = 50; // Adjust this value to shift the matrix to the right
   const titleOffset = matrixDiagram.title ? 100 : 0; // Space for the title if it exists
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   const rowCount = matrixDiagram.rows.length;
   const colCount = Math.max(...matrixDiagram.rows.map((row) => row.elements.length));
@@ -26,7 +23,7 @@ export const drawMatrixDiagram = (
     svg
       .append('text')
       .attr('x', xOffset)
-      .attr('y', yOffset)
+      .attr('y', 0)
       .attr('fill', config.labelColor)
       .attr('font-size', config.labelFontSize)
       .attr('dominant-baseline', 'hanging')
@@ -93,6 +90,9 @@ const drawElement = (
     .attr('stroke-width', borderWidth)
     .attr('class', 'matrixElement');
 
+  // Format the element value using the utility function
+  const formattedValue = formatValue(element.value);
+
   // Draw the text inside the matrix element
   group
     .append('text')
@@ -103,10 +103,10 @@ const drawElement = (
     .attr('dominant-baseline', 'middle')
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
-    .text(element.value.toString());
+    .text(formattedValue);
 
   // Draw the red circle and arrow label if the arrow exists
-  if (element.arrow && element.arrowLabel !== 'null') {
+  if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
     // Draw the red circle around the element
     group
       .append('circle')
@@ -127,7 +127,7 @@ const drawElement = (
       .attr('dominant-baseline', 'middle')
       .attr('text-anchor', 'start')
       .attr('class', 'arrowLabel')
-      .text(element.arrowLabel || '');
+      .text(formatValue(element.arrowLabel || ''));
   }
 };
 

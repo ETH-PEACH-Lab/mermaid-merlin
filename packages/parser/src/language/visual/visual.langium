@@ -4,12 +4,13 @@ import "../common/common"
 entry VisualDiagram:
   NEWLINE*
   "visual" NEWLINE*
-  ( TitleAndAccessibilities )?
+  ('size:' size=SizeDefinition NEWLINE*)?
   pages+=VisualPage+
 ;
 
 VisualPage:
   "page" NEWLINE*
+  ('layout:' layout=LayoutDefinition NEWLINE*)?
   subDiagrams+=SubDiagram+
 ;
 
@@ -19,8 +20,9 @@ SubDiagram:
 
 ArrayDiagram:
   diagramType="array" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
   (orientation=Orientation NEWLINE*)?
-  ('title:' title=STRING NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   '@' NEWLINE
   elements+=ArrayElement* NEWLINE*
@@ -34,7 +36,8 @@ ArrayElement:
 
 MatrixDiagram:
   diagramType="matrix" NEWLINE*
-  ('title:' title=STRING NEWLINE*)?
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   '@' NEWLINE
   rows+=MatrixRow+
@@ -56,10 +59,11 @@ MatrixAttributes:
 
 StackDiagram:
   diagramType="stack" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
   (orientation=Orientation NEWLINE*)?
-  ('title:' title=STRING NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
-  'size:' size=INT NEWLINE*
+  'size:' size=NUMBER NEWLINE*
   '@' NEWLINE
   elements+=StackElement* NEWLINE*
   '@' NEWLINE*
@@ -76,7 +80,8 @@ StackAttribute:
 
 GraphDiagram:
   diagramType="graph" NEWLINE*
-  ('title:' title=STRING NEWLINE*)?
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   '@' NEWLINE
   elements+=GraphElement+
   '@' NEWLINE*
@@ -105,7 +110,8 @@ EdgeAttributes:
 
 TreeDiagram:
   diagramType="tree" NEWLINE*
-  ('title:' title=STRING NEWLINE*)?
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   '@' NEWLINE
   elements+=TreeElement+
   '@' NEWLINE*
@@ -118,8 +124,9 @@ TreeElement:
 
 LinkedListDiagram:
   diagramType="linkedList" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
   (double='double' NEWLINE*)?
-  ('title:' title=STRING NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   '@' NEWLINE
   elements+=LinkedListElement* NEWLINE*
@@ -133,20 +140,54 @@ LinkedListElement:
 
 TextDiagram:
   diagramType="text" NEWLINE*
-  ('title:' title=STRING NEWLINE*)?
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('placement:' placement=('above' | 'below' | 'left' | 'right') NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
+  ('fontSize:' fontSize=NUMBER NEWLINE*)?
+  ('color:' color=STRING NEWLINE*)?
+  ('fontWeight:' fontWeight=STRING NEWLINE*)?
+  ('fontFamily:' fontFamily=STRING NEWLINE*)?
+  ('align:' align=STRING NEWLINE*)?
+  ('lineSpacing:' lineSpacing=NUMBER NEWLINE*)?
+  ('width:' width=NUMBER NEWLINE*)?
+  ('height:' height=NUMBER NEWLINE*)?
   elements+=TextElement* NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
 
 TextElement:
-  value=STRING NEWLINE*
+  value=STRING ('{' attributes+=TextElementAttribute (',' attributes+=TextElementAttribute)* '}')? NEWLINE*
+;
+
+TextElementAttribute:
+  (name='fontSize' ':' value=NUMBER) |
+  (name='color' ':' value=STRING) |
+  (name='fontWeight' ':' value=STRING) |
+  (name='fontFamily' ':' value=STRING) |
+  (name='align' ':' value=STRING)
 ;
 
 Value returns string:
-  INT | ID
+  NUMBER | ID | STRING | 'null' | '\\null'
 ;
 
-terminal INT returns number: /0|[1-9][0-9]*/;
+SizeDefinition:
+  '(' width=NUMBER ',' height=NUMBER ')'
+;
+
+LayoutDefinition:
+  '(' columns=NUMBER ',' rows=NUMBER ')'
+;
+
+PositionDefinition:
+  '(' column=PositionRange ',' row=PositionRange ')' | 'previous'
+;
+
+PositionRange:
+  single=NUMBER | (start=NUMBER '..' end=NUMBER)
+;
+
+terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
 terminal Orientation: "TD" | "LR";
