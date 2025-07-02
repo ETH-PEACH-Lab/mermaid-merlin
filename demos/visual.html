@@ -16,35 +16,47 @@
     <h1>Array Diagram Demo</h1>
 
     <div>
-      <textarea id="arrayInput" rows="10" cols="50">
-        visual
-        page
-        array
-        @1
-        @2
-        @3
-        stack
-        size:8
-        @1
-        @2
-        @3 
-        @4
-        @6{color:"blue"}
-        @7{color:"red"}
-        @8
-        label:"label1 this is a stack"
-        page
-        array
-        @1{color:"blue"}
-        label:"this is an array"
-        matrix
-        showIndex
-        @
-        1{color:"blue"},2
-        1{color:"blue"},2
-        1{color:"blue"},2,3
-        @
-        label:"this is a matrix"
+      <textarea id="arrayInput" rows="20" cols="70">
+visual
+size: (600,400)
+page
+layout: (2,2)
+array
+position: (0,0)
+@
+1 {color:"blue", arrow:"null"}
+2 {color:"green", arrow:"null"}
+3 {color:"red", arrow:"null"}
+@
+text
+position: previous
+placement: below
+"This is below the array"
+text
+position: previous
+placement: above
+"This is above the array"
+graph
+position: (1,0)
+@
+node:A {value:"A", color:"lightblue", arrow:"null", hidden:"null"}
+node:B {value:"B", color:"lightgreen", arrow:"null", hidden:"null"}
+edge:(A,B)
+@
+text
+position: previous
+placement: right
+"Right of graph"
+matrix
+position: (1,1)
+@
+1,2,3
+4,5,6
+@
+text
+position: previous
+placement: left
+"Left of matrix"
         </textarea
       >
       <br />

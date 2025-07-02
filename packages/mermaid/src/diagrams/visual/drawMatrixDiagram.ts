@@ -7,17 +7,13 @@ import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 export const drawMatrixDiagram = (
   svg: SVG,
   matrixDiagram: MatrixDiagram,
-  yOffset: number,
   config: Required<MatrixDiagramConfig>,
   component_id: number
 ) => {
   const xOffset = 50; // Adjust this value to shift the matrix to the right
   const titleOffset = matrixDiagram.title ? 100 : 0; // Space for the title if it exists
   const group = svg.append('g');
-  group
-    .attr('transform', `translate(0, ${yOffset})`)
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`);
+  group.attr('class', 'component').attr('id', `component_${component_id}`);
 
   const rowCount = matrixDiagram.rows.length;
   const colCount = Math.max(...matrixDiagram.rows.map((row) => row.elements.length));
@@ -27,7 +23,7 @@ export const drawMatrixDiagram = (
     svg
       .append('text')
       .attr('x', xOffset)
-      .attr('y', yOffset)
+      .attr('y', 0)
       .attr('fill', config.labelColor)
       .attr('font-size', config.labelFontSize)
       .attr('dominant-baseline', 'hanging')
