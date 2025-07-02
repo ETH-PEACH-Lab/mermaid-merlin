@@ -112,8 +112,13 @@ TreeDiagram:
   ('label:' label=STRING NEWLINE*)?
 ;
 
+// Node identifier that allows keywords like 'left' and 'right'
+NodeID returns string:
+  ID | 'left' | 'right' | 'above' | 'below'
+;
+
 TreeElement:
-  nodeId=ID ':' '[' left=(ID | 'None') ',' right=(ID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  nodeId=NodeID ':' '[' left=(NodeID | 'None') ',' right=(NodeID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
 ;
 
 LinkedListDiagram:
