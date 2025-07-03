@@ -165,11 +165,11 @@ TextElement:
 ;
 
 TextElementAttribute:
-  (name='fontSize' ':' value=NUMBER) |
-  (name='color' ':' value=STRING) |
-  (name='fontWeight' ':' value=STRING) |
-  (name='fontFamily' ':' value=STRING) |
-  (name='align' ':' value=STRING)
+  ('fontSize:' fontSize=NUMBER) |
+  ('color:' color=STRING) |
+  ('fontWeight:' fontWeight=STRING) |
+  ('fontFamily:' fontFamily=STRING) |
+  ('align:' align=STRING)
 ;
 
 Value returns string:
