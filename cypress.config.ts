@@ -1,5 +1,5 @@
 import { defineConfig } from 'cypress';
-import { addMatchImageSnapshotPlugin } from 'cypress-image-snapshot/plugin';
+import { addMatchImageSnapshotPlugin } from 'cypress-image-snapshot/plugin.js';
 import coverage from '@cypress/code-coverage/task';
 import eyesPlugin from '@applitools/eyes-cypress';
 export default eyesPlugin(
