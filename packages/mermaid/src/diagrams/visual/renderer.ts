@@ -1,4 +1,3 @@
-import * as d3 from 'd3';
 import type { Diagram } from '../../Diagram.js';
 import type { DiagramRenderer, DrawDefinition, SVG } from '../../diagram-api/types.js';
 import { selectSvgElement } from '../../rendering-util/selectSvgElement.js';
@@ -49,9 +48,18 @@ const processItemsWithRelativePositioning = (subDiagrams: any[]): ProcessedGroup
       'type' in subDiagram.position &&
       subDiagram.position.type === 'previous'
     ) {
-      // This text item should be associated with the previous non-text item
-      // Find the most recent group that's not a standalone text
-      const targetGroup = groups[groups.length - 1];
+      // Find the most recent group that represents a main diagram (not a standalone text)
+      // We need to find the last group that has a mainItem that's not a standalone text
+      let targetGroup = null;
+      for (let i = groups.length - 1; i >= 0; i--) {
+        const group = groups[i];
+        // Check if this group is a main diagram (not text with absolute position)
+        if (group.type !== 'text' || group.position) {
+          targetGroup = group;
+          break;
+        }
+      }
+
       if (targetGroup) {
         targetGroup.textItems.push({
           item: { ...subDiagram, index }, // Ensure the index is preserved
@@ -63,12 +71,17 @@ const processItemsWithRelativePositioning = (subDiagrams: any[]): ProcessedGroup
     }
 
     // Regular item (including text with absolute position or no position)
+    const positionCheck =
+      subDiagram.position &&
+      typeof subDiagram.position === 'object' &&
+      'column' in subDiagram.position &&
+      'row' in subDiagram.position;
+
+    // Debug logging removed for production
+
     const group: ProcessedGroup = {
       type: subDiagram.type,
-      position:
-        subDiagram.position && ('column' in subDiagram.position || 'col' in subDiagram.position)
-          ? subDiagram.position
-          : undefined,
+      position: positionCheck ? subDiagram.position : undefined,
       mainItem: { ...subDiagram, index }, // Ensure the index is preserved here too
       textItems: [],
     };
@@ -248,13 +261,37 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     }
 
     // Handle layout and positioning
-    const layout = page.layout || { columns: 1, rows: 1 };
+    // Create a copy of the layout to avoid mutating the original layout object
+    const layout = page.layout
+      ? { columns: page.layout.columns, rows: page.layout.rows }
+      : { columns: 1, rows: 1 };
     const titleOffset = title ? 50 : 20;
     const availableWidth = svgWidth - 40; // 20px margin on each side
     const availableHeight = svgHeight - titleOffset - 20; // Title + bottom margin
 
     // Process positioning and group text elements with their reference items
     const processedGroups = processItemsWithRelativePositioning(page.subDiagrams);
+
+    // Pre-calculate grid expansion: First pass to determine max coordinates needed
+    let maxColumn = layout.columns - 1;
+    let maxRow = layout.rows - 1;
+
+    processedGroups.forEach((group) => {
+      if (group.position) {
+        const { column, row } = group.position;
+        const colStart = typeof column === 'object' ? column.start : column;
+        const colEnd = typeof column === 'object' ? column.end : column;
+        const rowStart = typeof row === 'object' ? row.start : row;
+        const rowEnd = typeof row === 'object' ? row.end : row;
+
+        maxColumn = Math.max(maxColumn, colEnd);
+        maxRow = Math.max(maxRow, rowEnd);
+      }
+    });
+
+    // Expand layout if necessary to accommodate positioned items
+    layout.columns = Math.max(layout.columns, maxColumn + 1);
+    layout.rows = Math.max(layout.rows, maxRow + 1);
 
     // Pre-calculate: Count items with and without positions
     const itemsWithPositions: Array<{
@@ -307,7 +344,7 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     const availableCells = totalCells - occupiedCellCount;
     const itemsNeedingSpace = itemsWithoutPositions.length;
 
-    // Smart grid expansion: maintain balanced proportions
+    // Smart grid expansion: maintain balanced proportions if we need more space for items without positions
     if (itemsNeedingSpace > availableCells) {
       const totalItemsNeeded = occupiedCellCount + itemsNeedingSpace;
 
@@ -374,6 +411,9 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     });
 
     // Place items with explicit positions
+    // Sort by index to ensure consistent rendering order
+    itemsWithPositions.sort((a, b) => a.item.mainItem.index - b.item.mainItem.index);
+
     itemsWithPositions.forEach(({ item, position }) => {
       const startPos = gridPositions[position.rowStart][position.colStart];
       const itemCellWidth = (position.colEnd - position.colStart + 1) * cellWidth;
@@ -392,6 +432,9 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
     // Place remaining items in available positions
     let currentRow = 0;
     let currentCol = 0;
+
+    // Sort items without positions by their original index to ensure consistent placement
+    itemsWithoutPositions.sort((a, b) => a.mainItem.index - b.mainItem.index);
 
     itemsWithoutPositions.forEach((item) => {
       // Find next available position
