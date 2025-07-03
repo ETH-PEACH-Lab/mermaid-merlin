@@ -1,9 +1,15 @@
 name: Draft Release
-
+# DISABLED: Changed to workflow_dispatch to disable automatic runs
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run release drafter (disabled by default)'
+        required: false
+        default: 'false'
+  # push:
+  #   branches:
+  #     - master
 
 permissions:
   contents: read
