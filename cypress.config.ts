@@ -1,7 +1,10 @@
 import { defineConfig } from 'cypress';
-import { addMatchImageSnapshotPlugin } from 'cypress-image-snapshot/plugin.js';
 import coverage from '@cypress/code-coverage/task';
 import eyesPlugin from '@applitools/eyes-cypress';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { addMatchImageSnapshotPlugin } = require('cypress-image-snapshot/plugin');
+
 export default eyesPlugin(
   defineConfig({
     projectId: 'n2sma2',

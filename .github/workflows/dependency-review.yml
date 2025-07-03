@@ -8,7 +8,7 @@ name: 'Dependency Review'
 
 # NOTE: Disabled Dependency Review as it's not needed for our project (and not available in our repo)
 # DISABLED: Changed to workflow_dispatch to disable automatic runs
-on: 
+on:
   workflow_dispatch:
     inputs:
       force_run:
