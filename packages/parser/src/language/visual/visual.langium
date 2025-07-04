@@ -118,8 +118,13 @@ TreeDiagram:
   ('label:' label=STRING NEWLINE*)?
 ;
 
+// Node identifier that allows keywords like 'left' and 'right'
+NodeID returns string:
+  ID | 'left' | 'right' | 'above' | 'below'
+;
+
 TreeElement:
-  nodeId=ID ':' '[' left=(ID | 'None') ',' right=(ID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  nodeId=NodeID ':' '[' left=(NodeID | 'None') ',' right=(NodeID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
 ;
 
 LinkedListDiagram:
@@ -160,11 +165,11 @@ TextElement:
 ;
 
 TextElementAttribute:
-  (name='fontSize' ':' value=NUMBER) |
-  (name='color' ':' value=STRING) |
-  (name='fontWeight' ':' value=STRING) |
-  (name='fontFamily' ':' value=STRING) |
-  (name='align' ':' value=STRING)
+  ('fontSize:' fontSize=NUMBER) |
+  ('color:' color=STRING) |
+  ('fontWeight:' fontWeight=STRING) |
+  ('fontFamily:' fontFamily=STRING) |
+  ('align:' align=STRING)
 ;
 
 Value returns string:

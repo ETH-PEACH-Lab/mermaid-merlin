@@ -1,3 +1,3 @@
-import { processDocs } from './docs.mjs';
+import { processDocs } from './docs.mts';
 
 void processDocs();

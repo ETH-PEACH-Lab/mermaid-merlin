@@ -183,7 +183,22 @@ const populate = (ast: VisualDiagram) => {
                 // Build element properties from attributes array
                 const elementProps: any = { value: e.value };
                 e.attributes.forEach((attr: any) => {
-                  elementProps[attr.name] = attr.value;
+                  // Each attribute now has the property directly assigned
+                  if (attr.fontSize !== undefined) {
+                    elementProps.fontSize = attr.fontSize;
+                  }
+                  if (attr.color !== undefined) {
+                    elementProps.color = attr.color;
+                  }
+                  if (attr.fontWeight !== undefined) {
+                    elementProps.fontWeight = attr.fontWeight;
+                  }
+                  if (attr.fontFamily !== undefined) {
+                    elementProps.fontFamily = attr.fontFamily;
+                  }
+                  if (attr.align !== undefined) {
+                    elementProps.align = attr.align;
+                  }
                 });
                 return elementProps;
               } else {

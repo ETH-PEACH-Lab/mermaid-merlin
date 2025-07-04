@@ -53,7 +53,7 @@ import mm from 'micromatch';
 import flatmap from 'unist-util-flatmap';
 import { visit } from 'unist-util-visit';
 
-export const MERMAID_RELEASE_VERSION = JSON.parse(readFileSync('../mermaid/package.json', 'utf8'))
+export const MERMAID_RELEASE_VERSION = JSON.parse(readFileSync('./package.json', 'utf8'))
   .version as string;
 const MERMAID_MAJOR_VERSION = MERMAID_RELEASE_VERSION.split('.')[0];
 const CDN_URL = 'https://cdn.jsdelivr.net/npm'; // 'https://unpkg.com';

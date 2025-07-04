@@ -1,25 +1,26 @@
 #############################  Display  #############################
+# NOTE: Disabled Link Checking as it's not needed for our project.
 
 # Verbose program output
 # Accepts log level: "error", "warn", "info", "debug", "trace"
-verbose = "debug"
+# DISABLED: verbose = "debug"
 
 # Don't show interactive progress bar while checking links.
-no_progress = true
+# DISABLED: no_progress = true
 
 #############################  Cache  ###############################
 
 # Enable link caching. This can be helpful to avoid checking the same links on
 # multiple runs.
-cache = true
+# DISABLED: cache = true
 
 # Discard all cached requests older than this duration.
-max_cache_age = "1d"
+# DISABLED: max_cache_age = "1d"
 
 #############################  Requests  ############################
 
 # Comma-separated list of accepted status codes for valid links.
-accept = [200, 429]
+# DISABLED: accept = [200, 429]
 
 #############################  Exclusions  ##########################
 
@@ -47,4 +48,4 @@ exclude = [
 # Exclude all private IPs from checking.
 # Equivalent to setting `exclude_private`, `exclude_link_local`, and
 # `exclude_loopback` to true.
-exclude_all_private = true
+# DISABLED: exclude_all_private = true

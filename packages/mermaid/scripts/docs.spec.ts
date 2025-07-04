@@ -1,8 +1,32 @@
-import { transformMarkdownAst, transformToBlockQuote } from './docs.mjs';
-
+// @vitest-environment node
 import { remark } from 'remark'; // import it this way so we can mock it
 import remarkFrontmatter from 'remark-frontmatter';
 import { vi, afterEach, describe, it, expect } from 'vitest';
+
+// Mock Node.js modules BEFORE any imports that might use them
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+}));
+
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(() => '{"version": "11.0.0-alpha.7"}'),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  existsSync: vi.fn(() => false),
+  rmSync: vi.fn(),
+  rmdirSync: vi.fn(),
+}));
+
+vi.mock('chokidar', () => ({
+  default: {
+    watch: vi.fn(() => ({
+      on: vi.fn().mockReturnThis(),
+    })),
+  },
+}));
+
+// Import the docs module after mocking
+import { transformMarkdownAst, transformToBlockQuote } from './docs.mts';
 
 afterEach(() => {
   vi.restoreAllMocks();
