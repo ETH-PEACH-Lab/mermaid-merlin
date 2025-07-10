@@ -172,6 +172,12 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
 
     let yOffset = 50;
 
+    // If the page has no subDiagrams, just leave it empty (but still render the group)
+    if (!page.subDiagrams || page.subDiagrams.length === 0) {
+      // Optionally, you could add a placeholder or leave it truly empty
+      return;
+    }
+
     for (const subDiagram of page.subDiagrams) {
       if ((subDiagram as ArrayDiagram).elements) {
         drawArrayDiagram(pageGroup as unknown as SVG, subDiagram as ArrayDiagram, yOffset, config);
