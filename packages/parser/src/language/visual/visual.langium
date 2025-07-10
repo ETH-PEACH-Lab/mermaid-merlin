@@ -11,7 +11,7 @@ entry VisualDiagram:
 VisualPage:
   "page" NEWLINE*
   ('layout:' layout=LayoutDefinition NEWLINE*)?
-  subDiagrams+=SubDiagram+
+  subDiagrams+=SubDiagram*
 ;
 
 SubDiagram:
