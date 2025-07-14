@@ -138,34 +138,27 @@ const calculateNodePositions = (
     if (!label) {
       return 0;
     }
-    const avgCharWidth = 10; // px, rough estimate for font-size 14-16
+    const avgCharWidth = 16; // px, rough estimate for font-size 14-16
     return label.length * avgCharWidth + 16; // add some padding
   };
 
-  const calculateSubtreeWidth = (nodeId: string, depth: number): number => {
+  const calculateSubtreeWidth = (nodeId: string, depth: number, parentId?: string): number => {
     const children = childRelations.filter((rel) => rel.parent === nodeId);
     const baseWidth = 50;
-    const node = nodeById(nodeId);
-    let extraWidth = 0;
+
     if (children.length === 0) {
-      // If this node has an arrow label, reserve extra width to the right
-      if (node && node.arrow && shouldDisplayArrowLabel(node.arrowLabel)) {
-        extraWidth = estimateArrowLabelWidth(node.arrowLabel ? String(node.arrowLabel) : '');
-      }
-      return baseWidth + extraWidth;
+      // For leaf nodes, always use base width to ensure consistent subtree calculations
+      // Arrow positioning will be handled separately to avoid overlaps
+      return baseWidth;
     }
 
+    // For nodes with children, calculate based purely on children's subtree widths
     let totalChildrenWidth = 0;
     children.forEach((child) => {
-      totalChildrenWidth += calculateSubtreeWidth(child.child, depth + 1);
+      totalChildrenWidth += calculateSubtreeWidth(child.child, depth + 1, nodeId);
     });
 
-    // If this node has an arrow label, reserve extra width to the right (for centering correction)
-    if (node && node.arrow && shouldDisplayArrowLabel(node.arrowLabel)) {
-      extraWidth = estimateArrowLabelWidth(node.arrowLabel ? String(node.arrowLabel) : '');
-    }
-
-    return Math.max(baseWidth, totalChildrenWidth + (children.length - 1) * 20) + extraWidth;
+    return Math.max(baseWidth, totalChildrenWidth + (children.length - 1) * 20);
   };
 
   const calculatePosition = (
@@ -175,14 +168,8 @@ const calculateNodePositions = (
     availableWidth: number,
     isRoot = false
   ) => {
-    // If this node has an arrow label, shift center to the left by half the extra width, unless it's the root
-    const node = nodeById(nodeId);
-    let extraWidth = 0;
-    if (!isRoot && node && node.arrow && shouldDisplayArrowLabel(node.arrowLabel)) {
-      extraWidth = estimateArrowLabelWidth(node.arrowLabel ? String(node.arrowLabel) : '');
-    }
-    const nodeCenterX = x - extraWidth / 2;
-    positions[nodeId] = { x: nodeCenterX, y };
+    // Position the node at the center of its available space
+    positions[nodeId] = { x, y };
 
     const children = childRelations.filter((rel) => rel.parent === nodeId);
     if (children.length === 0) {
@@ -190,11 +177,30 @@ const calculateNodePositions = (
     }
 
     // Calculate width needed for each child subtree
-    const childWidths = children.map((child) => calculateSubtreeWidth(child.child, 0));
+    const childWidths = children.map((child) => calculateSubtreeWidth(child.child, 0, nodeId));
     const totalChildrenWidth = childWidths.reduce((sum, width) => sum + width, 0);
-    // No extra spacing between subtrees, just a minimal gap
+
+    // Calculate additional spacing needed for arrow labels
+    let totalArrowWidth = 0;
+    const childNodes = children.map((child) => nodeById(child.child));
+    childNodes.forEach((childNode, index) => {
+      if (
+        childNode &&
+        childNode.arrow &&
+        shouldDisplayArrowLabel(childNode.arrowLabel) && // Add arrow width only if there's a next sibling that could be affected
+        index < childNodes.length - 1
+      ) {
+        totalArrowWidth += estimateArrowLabelWidth(
+          childNode.arrowLabel ? String(childNode.arrowLabel) : ''
+        );
+      }
+    });
+
+    // Base gap between children
     const minGap = 20;
-    const totalGap = Math.max(minGap * (children.length - 1), availableWidth - totalChildrenWidth);
+    // Total gap needed including space for arrows
+    const neededGap = (children.length - 1) * minGap + totalArrowWidth;
+    const totalGap = Math.max(neededGap, availableWidth - totalChildrenWidth);
     const gap = children.length > 1 ? totalGap / (children.length - 1) : 0;
 
     // Start at left edge of availableWidth
@@ -210,9 +216,35 @@ const calculateNodePositions = (
     });
   };
 
-  // Center the root node horizontally in the SVG
-  const rootWidth = calculateSubtreeWidth(rootNode.nodeId, 0);
-  const usedWidth = Math.min(rootWidth, baseWidth);
+  // Calculate root width including space for any arrow labels at the top level
+  const rootChildren = childRelations.filter((rel) => rel.parent === rootNode.nodeId);
+  let rootArrowWidth = 0;
+
+  // Add space for root's own arrow if it has one
+  if (rootNode.arrow && shouldDisplayArrowLabel(rootNode.arrowLabel)) {
+    rootArrowWidth += estimateArrowLabelWidth(
+      rootNode.arrowLabel ? String(rootNode.arrowLabel) : ''
+    );
+  }
+
+  // Add space for children's arrows that might extend to the right
+  const rootChildNodes = rootChildren.map((child) => nodeById(child.child));
+  rootChildNodes.forEach((childNode, index) => {
+    if (
+      childNode &&
+      childNode.arrow &&
+      shouldDisplayArrowLabel(childNode.arrowLabel) &&
+      index < rootChildNodes.length - 1
+    ) {
+      rootArrowWidth += estimateArrowLabelWidth(
+        childNode.arrowLabel ? String(childNode.arrowLabel) : ''
+      );
+    }
+  });
+
+  const baseSubtreeWidth = calculateSubtreeWidth(rootNode.nodeId, 0, undefined);
+  const rootWidth = baseSubtreeWidth + rootArrowWidth;
+  const usedWidth = Math.min(rootWidth, baseWidth + rootArrowWidth);
   const rootX = svgWidth / 2;
   const rootY = 50;
   calculatePosition(rootNode.nodeId, rootX, rootY, usedWidth, true);
