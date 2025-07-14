@@ -124,7 +124,15 @@ NodeID returns string:
 ;
 
 TreeElement:
-  nodeId=NodeID ':' '[' left=(NodeID | 'None') ',' right=(NodeID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  TreeNodeDefinition | TreeChildDefinition
+;
+
+TreeNodeDefinition:
+  type='node:' nodeId=NodeID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE*
+;
+
+TreeChildDefinition:
+  type='child:' '(' parent=NodeID ',' child=NodeID ')' NEWLINE*
 ;
 
 LinkedListDiagram:
