@@ -111,15 +111,29 @@ const populate = (ast: VisualDiagram) => {
             title: subDiagram.diagramTitle,
             position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((element: any) => ({
-              nodeId: element.nodeId,
-              left: element.left == 'None' ? undefined : element.left,
-              right: element.right == 'None' ? undefined : element.right,
-              value: element.value,
-              color: element.color,
-              arrow: element.arrowLabel !== undefined && element.arrowLabel !== null, //if with arrow then True, else False
-              arrowLabel: element.arrowLabel,
-            })),
+            elements: subDiagram.elements.map((element: any) => {
+              if (element.$type === 'TreeNodeDefinition') {
+                return {
+                  nodeDefinition: {
+                    nodeId: element.nodeId,
+                    value: element.value,
+                    color: element.color,
+                    arrow: element.arrowLabel !== undefined && element.arrowLabel !== null,
+                    arrowLabel: element.arrowLabel,
+                    hidden: (element.hidden || '').toLowerCase() === 'true',
+                  },
+                };
+              } else if (element.$type === 'TreeChildDefinition') {
+                return {
+                  childDefinition: {
+                    parent: element.parent,
+                    child: element.child,
+                  },
+                };
+              } else {
+                throw new Error(`Unknown tree element type: ${element.$type}`);
+              }
+            }),
           };
         case 'graph':
           return {
