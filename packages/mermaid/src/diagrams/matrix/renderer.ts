@@ -3,6 +3,7 @@ import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
 import { selectSvgElement } from '../../rendering-util/selectSvgElement.js';
 import { configureSvgSize } from '../../setupGraphViewbox.js';
+import { getLightenedColor } from '../visual/getColor.js';
 import type { MatrixDB, MatrixRow, MatrixElement } from './types.js';
 
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
@@ -41,19 +42,6 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   }
 };
 
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.4)'; // Semi-transparent blue
-    case 'green':
-      return 'rgba(0, 255, 0, 0.4)'; // Semi-transparent green
-    case 'red':
-      return 'rgba(255, 0, 0, 0.4)'; // Semi-transparent red
-    default:
-      return 'none';
-  }
-};
-
 const drawElement = (
   svg: SVG,
   element: MatrixElement,
@@ -66,7 +54,7 @@ const drawElement = (
   const elementX = colIndex * 50 + 50;
   const elementY = rowIndex * 50 + 50;
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   group
     .append('rect')

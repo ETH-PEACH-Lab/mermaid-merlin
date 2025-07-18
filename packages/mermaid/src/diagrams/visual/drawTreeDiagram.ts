@@ -1,7 +1,7 @@
 import type { TreeDiagram } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
+import { getLightenedColor } from './getColor.js';
 
 export const drawTreeDiagram = (svg: SVG, treeDiagram: TreeDiagram, component_id: number) => {
   const group = svg.append('g');
@@ -130,7 +130,7 @@ const drawNode = (svg: SVG, node: any, position: { x: number; y: number }, unit_
   const nodeX = position.x;
   const nodeY = position.y;
 
-  const fillColor = getColor(node.color);
+  const fillColor = getLightenedColor(node.color);
 
   const group = svg.append('g');
   group.attr('class', 'unit').attr('id', `unit_${unit_id}`);

@@ -1,6 +1,7 @@
 import type { MatrixDiagram, MatrixRow, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
+import { getLightenedColor } from '../visual/getColor.js';
 
 export const drawMatrixDiagram = (
   svg: SVG,
@@ -28,7 +29,7 @@ const drawElement = (
   const elementX = colIndex * 50 + 50;
   const elementY = rowIndex * 50 + 50;
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   group
     .append('rect')
@@ -51,17 +52,4 @@ const drawElement = (
     .attr('text-anchor', 'middle')
     .attr('class', 'elementLabel')
     .text(element.value.toString());
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
-  }
 };

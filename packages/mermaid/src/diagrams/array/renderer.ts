@@ -3,6 +3,7 @@ import type { ArrayDiagramConfig } from '../../config.type.js';
 import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
 import { selectSvgElement } from '../../rendering-util/selectSvgElement.js';
 import { configureSvgSize } from '../../setupGraphViewbox.js';
+import { getLightenedColor } from '../visual/getColor.js';
 import type { ArrayDB, ArrayElement } from './types.js';
 
 // cspell:ignore showindex
@@ -57,19 +58,6 @@ const drawElement = (
   const elementX = index * 50 + 50; // Adjust the x coordinate based on the index
   const elementY = 100; // Increased the y coordinate to provide more space above
 
-  const getColor = (color: string) => {
-    switch (color) {
-      case 'blue':
-        return 'rgba(0, 0, 255, 0.3)'; // Semi-transparent blue
-      case 'red':
-        return 'rgba(255, 0, 0, 0.3)'; // Semi-transparent red
-      case 'green':
-        return 'rgba(0, 255, 0, 0.3)'; // Semi-transparent green
-      default:
-        return 'none';
-    }
-  };
-
   if (element.arrow) {
     // Draw arrow
     const arrowYStart = elementY - 40; // Position the arrow head higher
@@ -104,7 +92,7 @@ const drawElement = (
     .attr('y', elementY)
     .attr('width', 40)
     .attr('height', 40)
-    .style('fill', getColor(element.color ? element.color : 'none')) // Apply the semi-transparent fill color if specified, else none
+    .style('fill', getLightenedColor(element.color ? element.color : 'none')) // Apply the semi-transparent fill color if specified, else none
     .attr('stroke', '#69b3a2')
     .attr('stroke-width', '3px')
     .attr('class', 'arrayElement');

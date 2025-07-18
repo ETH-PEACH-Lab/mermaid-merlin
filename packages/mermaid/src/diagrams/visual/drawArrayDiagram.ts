@@ -1,8 +1,8 @@
 import type { ArrayDiagram, ArrayElement } from './types.js';
 import type { ArrayDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
+import { getLightenedColor } from './getColor.js';
 
 export const drawArrayDiagram = (
   svg: SVG,
@@ -106,7 +106,7 @@ const drawElement = (
   const elementX = index * elementSize;
   const elementY = 50;
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
     const arrowYStart = elementY - 40;
