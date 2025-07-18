@@ -1,8 +1,8 @@
 import type { MatrixDiagram, MatrixElement } from './types.js';
 import type { MatrixDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
+import { getLightenedColor } from './getColor.js';
 
 export const drawMatrixDiagram = (
   svg: SVG,
@@ -76,7 +76,7 @@ const drawElement = (
   const borderColor = '#000000';
   const borderWidth = '1.2px';
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   // Draw the rectangle for the matrix element
   group

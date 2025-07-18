@@ -1,6 +1,7 @@
 import type { ArrayDiagram, ArrayElement } from './types.js';
 import type { ArrayDiagramConfig } from '../../config.type.js';
 import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-api/types.js';
+import { getLightenedColor } from '../visual/getColor.js';
 
 export const drawArrayDiagram = (
   svg: SVG,
@@ -32,7 +33,7 @@ const drawElement = (
   const elementX = index * 50 + 50;
   const elementY = 50;
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   if (element.arrow) {
     const arrowYStart = elementY - 40;
@@ -93,18 +94,5 @@ const drawElement = (
       .attr('text-anchor', 'middle')
       .attr('class', 'indexLabel')
       .text(index);
-  }
-};
-
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)';
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)';
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)';
-    default:
-      return 'none';
   }
 };

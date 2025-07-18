@@ -1,7 +1,7 @@
 import type { TreeDiagram, TreeNodeDefinition, TreeChildDefinition } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
+import { getLightenedColor } from './getColor.js';
 
 const MAX_CHILDREN_PER_NODE = 10;
 
@@ -261,7 +261,7 @@ const drawNode = (
   const nodeX = position.x;
   const nodeY = position.y;
 
-  const fillColor = getColor(node.color);
+  const fillColor = getLightenedColor(node.color);
 
   const group = svg.append('g');
   group.attr('class', 'unit').attr('id', `unit_${unit_id}`);

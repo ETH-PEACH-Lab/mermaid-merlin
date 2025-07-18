@@ -1,7 +1,7 @@
 import type { StackDiagram, StackElement } from './types.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getColor } from './getColor.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
+import { getLightenedColor } from './getColor.js';
 
 export const drawStackDiagram = (svg: SVG, stackDiagram: StackDiagram, component_id: number) => {
   // Add marker definition for the arrowhead
@@ -59,7 +59,7 @@ const drawElement = (svg: SVG, element: StackElement, positionIndex: number, uni
   const elementX = 50;
   const elementY = positionIndex * 40;
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   group
     .append('rect')

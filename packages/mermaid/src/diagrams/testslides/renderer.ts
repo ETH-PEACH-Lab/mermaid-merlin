@@ -272,6 +272,7 @@ import type { DiagramRenderer, DrawDefinition, Group, SVG } from '../../diagram-
 import { selectSvgElement } from '../../rendering-util/selectSvgElement.js';
 import { configureSvgSize } from '../../setupGraphViewbox.js';
 import type { TestSlidesDB, ArraySlide, ArrayElement } from './types.js';
+import { getLightenedColor } from '../visual/getColor.js';
 
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const db = diagram.db as TestSlidesDB;
@@ -485,19 +486,6 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   svg.append('script').attr('type', 'text/ecmascript').text(switchPageScript);
 };
 
-const getColor = (color?: string): string => {
-  switch (color) {
-    case 'blue':
-      return 'rgba(0, 0, 255, 0.3)'; // Semi-transparent blue
-    case 'green':
-      return 'rgba(0, 255, 0, 0.3)'; // Semi-transparent green
-    case 'red':
-      return 'rgba(255, 0, 0, 0.3)'; // Semi-transparent red
-    default:
-      return 'none';
-  }
-};
-
 const drawElement = (
   svg: SVG,
   element: ArrayElement,
@@ -515,7 +503,7 @@ const drawElement = (
   const elementX = index * 50 + 50; // Adjust the x coordinate based on the index
   const elementY = 100; // Increased the y coordinate to provide more space above
 
-  const fillColor = getColor(element.color);
+  const fillColor = getLightenedColor(element.color);
 
   if (element.arrow) {
     // Draw arrow
