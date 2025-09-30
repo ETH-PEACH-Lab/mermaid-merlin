@@ -93,7 +93,7 @@ export interface StackDiagram {
 }
 
 // Tree interfaces
-export interface TreeNode {
+export interface TreeNodeDefinition {
   nodeId: string;
   value?: string;
   color?: string;
@@ -102,21 +102,14 @@ export interface TreeNode {
   hidden?: boolean;
 }
 
-export interface TreeEdge {
-  start: string;
-  end: string;
-  value?: string;
-  color?: string;
+export interface TreeChildDefinition {
+  parent: string;
+  child: string;
 }
 
 export interface TreeElement {
-  nodeId: string;
-  value?: string;
-  color?: string;
-  arrow?: boolean;
-  arrowLabel?: string;
-  left: string;
-  right: string;
+  nodeDefinition?: TreeNodeDefinition;
+  childDefinition?: TreeChildDefinition;
 }
 
 export interface TreeDiagram {
@@ -124,7 +117,6 @@ export interface TreeDiagram {
   orientation?: string;
   title?: string;
   position?: PositionType;
-  //TODO: should be changed to required field
   elements?: TreeElement[];
   label?: string;
 }

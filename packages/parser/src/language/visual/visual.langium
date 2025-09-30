@@ -11,7 +11,7 @@ entry VisualDiagram:
 VisualPage:
   "page" NEWLINE*
   ('layout:' layout=LayoutDefinition NEWLINE*)?
-  subDiagrams+=SubDiagram+
+  subDiagrams+=SubDiagram*
 ;
 
 SubDiagram:
@@ -124,20 +124,18 @@ NodeID returns string:
 ;
 
 TreeElement:
-  TreeLegacyElement | TreeNodeDefinition | TreeChildDefinition
-;
-
-TreeLegacyElement:
-  nodeId=NodeID ':' '[' left=(NodeID | 'None') ',' right=(NodeID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  TreeNodeDefinition | TreeChildDefinition
 ;
 
 TreeNodeDefinition:
-  type='node:' nodeId=NodeID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  type='node:' nodeId=NodeID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)? '}')? NEWLINE*
 ;
 
 TreeChildDefinition:
-  type='child:' '(' parent=NodeID ',' child=NodeID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+  type='child:' '(' parent=NodeID ',' child=NodeID ')' NEWLINE*
 ;
+
+
 
 LinkedListDiagram:
   diagramType="linkedList" NEWLINE*
