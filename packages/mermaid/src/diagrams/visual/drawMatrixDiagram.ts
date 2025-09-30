@@ -4,6 +4,21 @@ import type { SVG } from '../../diagram-api/types.js';
 import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 import { getLightenedColor } from './getColor.js';
 
+interface ArrowAnnotation {
+  circle: {
+    cx: number;
+    cy: number;
+    r: number;
+    color: string;
+  };
+  text: {
+    x: number;
+    y: number;
+    value: string;
+    color: string;
+  };
+}
+
 export const drawMatrixDiagram = (
   svg: SVG,
   matrixDiagram: MatrixDiagram,
@@ -17,6 +32,7 @@ export const drawMatrixDiagram = (
 
   const rowCount = matrixDiagram.rows.length;
   const colCount = Math.max(...matrixDiagram.rows.map((row) => row.elements.length));
+  const arrowAnnotations: ArrowAnnotation[] = [];
 
   // Add title if it exists
   if (matrixDiagram.title) {
@@ -34,10 +50,46 @@ export const drawMatrixDiagram = (
 
   matrixDiagram.rows.forEach((row, rowIndex) => {
     row.elements.forEach((element, colIndex) => {
-      drawElement(group as unknown as SVG, element, rowIndex, colIndex, config);
+      const arrowAnnotation = drawElement(
+        group as unknown as SVG,
+        element,
+        rowIndex,
+        colIndex,
+        config
+      );
+      if (arrowAnnotation) {
+        arrowAnnotations.push(arrowAnnotation);
+      }
       drawGrid(group as unknown as SVG, rowIndex, colIndex, config); // Draw grid only for existing elements
     });
   });
+
+  if (arrowAnnotations.length > 0) {
+    const overlayGroup = group.append('g').attr('class', 'matrixArrowOverlay');
+    arrowAnnotations.forEach((annotation) => {
+      const annotationGroup = overlayGroup.append('g').attr('class', 'matrixArrowAnnotation');
+
+      annotationGroup
+        .append('circle')
+        .attr('cx', annotation.circle.cx)
+        .attr('cy', annotation.circle.cy)
+        .attr('r', annotation.circle.r)
+        .attr('stroke', annotation.circle.color)
+        .attr('stroke-width', '2')
+        .attr('fill', 'none');
+
+      annotationGroup
+        .append('text')
+        .attr('x', annotation.text.x)
+        .attr('y', annotation.text.y)
+        .attr('fill', annotation.text.color)
+        .attr('font-size', config.labelFontSize)
+        .attr('dominant-baseline', 'middle')
+        .attr('text-anchor', 'start')
+        .attr('class', 'arrowLabel')
+        .text(annotation.text.value);
+    });
+  }
 
   if (matrixDiagram.label) {
     const labelYPosition = rowCount * 50 + 50; // Increase the gap between the matrix and the label
@@ -66,7 +118,7 @@ const drawElement = (
   rowIndex: number,
   colIndex: number,
   { labelColor, labelFontSize }: Required<MatrixDiagramConfig>
-) => {
+): ArrowAnnotation | null => {
   const group = svg.append('g');
   group.attr('class', 'unit').attr('id', `unit_(${rowIndex},${colIndex})`);
 
@@ -107,28 +159,24 @@ const drawElement = (
 
   // Draw the red circle and arrow label if the arrow exists
   if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
-    // Draw the red circle around the element
-    group
-      .append('circle')
-      .attr('cx', elementX + 25)
-      .attr('cy', elementY + 25)
-      .attr('r', 23)
-      .attr('stroke', 'red')
-      .attr('stroke-width', '2')
-      .attr('fill', 'none');
-
-    // Draw the arrow label near the circle
-    group
-      .append('text')
-      .attr('x', elementX + 52) // Position to the right of the circle
-      .attr('y', elementY + 25)
-      .attr('fill', 'red')
-      .attr('font-size', labelFontSize)
-      .attr('dominant-baseline', 'middle')
-      .attr('text-anchor', 'start')
-      .attr('class', 'arrowLabel')
-      .text(formatValue(element.arrowLabel || ''));
+    const arrowColor = 'red';
+    return {
+      circle: {
+        cx: elementX + 25,
+        cy: elementY + 25,
+        r: 23,
+        color: arrowColor,
+      },
+      text: {
+        x: elementX + 52,
+        y: elementY + 25,
+        value: formatValue(element.arrowLabel || ''),
+        color: arrowColor,
+      },
+    };
   }
+
+  return null;
 };
 
 const addIndices = (
