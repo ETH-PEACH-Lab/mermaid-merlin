@@ -24,7 +24,7 @@ ArrayDiagram:
   (orientation=Orientation NEWLINE*)?
   ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
-  '@' NEWLINE
+  '@' NEWLINE*
   elements+=ArrayElement* NEWLINE*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
@@ -39,8 +39,8 @@ MatrixDiagram:
   ('position:' position=PositionDefinition NEWLINE*)?
   ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
-  '@' NEWLINE
-  rows+=MatrixRow+
+  '@' NEWLINE*
+  rows+=MatrixRow*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
@@ -64,7 +64,7 @@ StackDiagram:
   ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
   'size:' size=NUMBER NEWLINE*
-  '@' NEWLINE
+  '@' NEWLINE*
   elements+=StackElement* NEWLINE*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
@@ -82,8 +82,8 @@ GraphDiagram:
   diagramType="graph" NEWLINE*
   ('position:' position=PositionDefinition NEWLINE*)?
   ('title:' diagramTitle=STRING NEWLINE*)?
-  '@' NEWLINE
-  elements+=GraphElement+
+  '@' NEWLINE*
+  elements+=GraphElement*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
@@ -112,8 +112,8 @@ TreeDiagram:
   diagramType="tree" NEWLINE*
   ('position:' position=PositionDefinition NEWLINE*)?
   ('title:' diagramTitle=STRING NEWLINE*)?
-  '@' NEWLINE
-  elements+=TreeElement+
+  '@' NEWLINE*
+  elements+=TreeElement*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?
 ;
@@ -124,7 +124,19 @@ NodeID returns string:
 ;
 
 TreeElement:
+  TreeLegacyElement | TreeNodeDefinition | TreeChildDefinition
+;
+
+TreeLegacyElement:
   nodeId=NodeID ':' '[' left=(NodeID | 'None') ',' right=(NodeID | 'None')']' ('{' 'value:' value=STRING (',' 'color:' color=STRING)?  (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+;
+
+TreeNodeDefinition:
+  type='node:' nodeId=NodeID ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
+;
+
+TreeChildDefinition:
+  type='child:' '(' parent=NodeID ',' child=NodeID ')' ('{' 'value:' value=STRING (',' 'color:' color=STRING)? (',' 'arrow:' arrowLabel=STRING)? (',' 'hidden:' hidden=STRING)?'}')? NEWLINE*
 ;
 
 LinkedListDiagram:
@@ -133,7 +145,7 @@ LinkedListDiagram:
   (double='double' NEWLINE*)?
   ('title:' diagramTitle=STRING NEWLINE*)?
   (showIndex="showIndex" NEWLINE*)?
-  '@' NEWLINE
+  '@' NEWLINE*
   elements+=LinkedListElement* NEWLINE*
   '@' NEWLINE*
   ('label:' label=STRING NEWLINE*)?

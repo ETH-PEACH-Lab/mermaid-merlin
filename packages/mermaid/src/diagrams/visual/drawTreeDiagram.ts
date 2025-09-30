@@ -64,13 +64,17 @@ export const drawTreeDiagram = (svg: SVG, treeDiagram: TreeDiagram, component_id
 
 const calculateNodePositions = (nodes: any[]): { [key: string]: { x: number; y: number } } => {
   const positions: { [key: string]: { x: number; y: number } } = {};
+  if (!nodes || nodes.length === 0) {
+    return positions;
+  }
   const levelHeight = 100;
   const maxDepth = calculateMaxDepth(nodes);
   const maxDistance = maxDepth > 2 ? 100 : 70; // Adjust this value based on the total number of layers
+  const depthDivisor = maxDepth === 0 ? 1 : maxDepth;
   const currentY = 0;
 
   const calculatePosition = (node: any, currentX: number, depth: number) => {
-    const adjustedSiblingDistance = maxDistance - depth * (maxDistance / maxDepth);
+    const adjustedSiblingDistance = maxDistance - depth * (maxDistance / depthDivisor);
     const x = currentX;
     const y = currentY + depth * levelHeight;
     positions[node.nodeId] = { x, y };
@@ -127,6 +131,9 @@ const calculateTreeEdges = (
 };
 
 const drawNode = (svg: SVG, node: any, position: { x: number; y: number }, unit_id: number) => {
+  if (!position) {
+    return;
+  }
   const nodeX = position.x;
   const nodeY = position.y;
 
@@ -231,6 +238,15 @@ const calculateEdgePosition = (start: { x: number; y: number }, end: { x: number
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  if (distance === 0) {
+    return {
+      startX: start.x,
+      startY: start.y,
+      endX: end.x,
+      endY: end.y,
+    };
+  }
 
   const offsetX = (deltaX * radius) / distance;
   const offsetY = (deltaY * radius) / distance;

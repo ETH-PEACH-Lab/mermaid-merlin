@@ -55,10 +55,11 @@ const populate = (ast: VisualDiagram) => {
     };
   };
 
-  for (const page of ast.pages) {
-    const subDiagrams = page.subDiagrams.map((subDiagram) => {
+  for (const page of ast.pages ?? []) {
+    const subDiagrams = (page.subDiagrams ?? []).map((subDiagram: any) => {
       switch (subDiagram.diagramType) {
-        case 'array':
+        case 'array': {
+          const arrayElements = subDiagram.elements ?? [];
           return {
             type: 'array',
             orientation: subDiagram.orientation,
@@ -66,20 +67,22 @@ const populate = (ast: VisualDiagram) => {
             position: processPosition(subDiagram.position),
             showIndex: subDiagram.showIndex,
             label: subDiagram.label,
-            elements: subDiagram.elements.map((e: any) => ({
+            elements: arrayElements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
               arrowLabel: e.arrowLabel,
             })),
           };
-        case 'matrix':
+        }
+        case 'matrix': {
+          const matrixRows = subDiagram.rows ?? [];
           return {
             type: 'matrix',
             title: subDiagram.diagramTitle,
             position: processPosition(subDiagram.position),
-            rows: subDiagram.rows.map((row: any) => ({
-              elements: row.elements.map((e: any) => ({
+            rows: matrixRows.map((row: any) => ({
+              elements: (row.elements ?? []).map((e: any) => ({
                 value: e.value,
                 color: e.color,
                 arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
@@ -89,7 +92,9 @@ const populate = (ast: VisualDiagram) => {
             showIndex: subDiagram.showIndex,
             label: subDiagram.label,
           };
-        case 'stack':
+        }
+        case 'stack': {
+          const stackElements = subDiagram.elements ?? [];
           return {
             type: 'stack',
             orientation: subDiagram.orientation,
@@ -98,36 +103,102 @@ const populate = (ast: VisualDiagram) => {
             showIndex: subDiagram.showIndex,
             label: subDiagram.label,
             size: subDiagram.size,
-            elements: subDiagram.elements.map((e: any) => ({
+            elements: stackElements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
               arrowLabel: e.arrowLabel,
             })),
           };
-        case 'tree':
+        }
+        case 'tree': {
+          const treeElements = subDiagram.elements ?? [];
+          const legacyNodes: any[] = [];
+          const nodeDefinitions = new Map<string, any>();
+          const childDefinitions = new Map<string, any[]>();
+
+          treeElements.forEach((element: any) => {
+            switch (element.$type) {
+              case 'TreeLegacyElement':
+              case 'TreeElement':
+                legacyNodes.push({
+                  nodeId: element.nodeId,
+                  left: element.left == 'None' ? undefined : element.left,
+                  right: element.right == 'None' ? undefined : element.right,
+                  value: element.value,
+                  color: element.color,
+                  arrow: element.arrowLabel !== undefined && element.arrowLabel !== null,
+                  arrowLabel: element.arrowLabel,
+                });
+                break;
+              case 'TreeNodeDefinition':
+                nodeDefinitions.set(element.nodeId, {
+                  value: element.value,
+                  color: element.color,
+                  arrowLabel: element.arrowLabel,
+                });
+                break;
+              case 'TreeChildDefinition':
+                if (!childDefinitions.has(element.parent)) {
+                  childDefinitions.set(element.parent, []);
+                }
+                childDefinitions.get(element.parent)?.push({
+                  childId: element.child,
+                });
+                break;
+              default:
+                break;
+            }
+          });
+
+          let processedNodes;
+          if (
+            legacyNodes.length > 0 ||
+            (nodeDefinitions.size === 0 && childDefinitions.size === 0)
+          ) {
+            processedNodes = legacyNodes;
+          } else {
+            const nodeIds = new Set<string>();
+            nodeDefinitions.forEach((_value, nodeId) => nodeIds.add(nodeId));
+            childDefinitions.forEach((children, parentId) => {
+              nodeIds.add(parentId);
+              children.forEach((child) => nodeIds.add(child.childId));
+            });
+
+            processedNodes = [...nodeIds].map((nodeId) => {
+              const nodeInfo = nodeDefinitions.get(nodeId) ?? {};
+              const children = childDefinitions.get(nodeId) ?? [];
+              const leftChild = children[0]?.childId;
+              const rightChild = children[1]?.childId;
+
+              return {
+                nodeId,
+                left: leftChild,
+                right: rightChild,
+                value: nodeInfo.value,
+                color: nodeInfo.color,
+                arrow: nodeInfo.arrowLabel !== undefined && nodeInfo.arrowLabel !== null,
+                arrowLabel: nodeInfo.arrowLabel,
+              };
+            });
+          }
+
           return {
             type: 'tree',
             title: subDiagram.diagramTitle,
             position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((element: any) => ({
-              nodeId: element.nodeId,
-              left: element.left == 'None' ? undefined : element.left,
-              right: element.right == 'None' ? undefined : element.right,
-              value: element.value,
-              color: element.color,
-              arrow: element.arrowLabel !== undefined && element.arrowLabel !== null, //if with arrow then True, else False
-              arrowLabel: element.arrowLabel,
-            })),
+            elements: processedNodes,
           };
-        case 'graph':
+        }
+        case 'graph': {
+          const graphElements = subDiagram.elements ?? [];
           return {
             type: 'graph',
             title: subDiagram.diagramTitle,
             position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((element: any) => {
+            elements: graphElements.map((element: any) => {
               if (element.$type == 'NodeDefinition') {
                 return {
                   type: 'node',
@@ -151,20 +222,24 @@ const populate = (ast: VisualDiagram) => {
               }
             }),
           };
-        case 'linkedList':
+        }
+        case 'linkedList': {
+          const linkedListElements = subDiagram.elements ?? [];
           return {
             type: 'linkedList',
             title: subDiagram.diagramTitle,
             position: processPosition(subDiagram.position),
             label: subDiagram.label,
-            elements: subDiagram.elements.map((e: any) => ({
+            elements: linkedListElements.map((e: any) => ({
               value: e.value,
               color: e.color,
               arrow: e.arrowLabel ? true : false,
               arrowLabel: e.arrowLabel,
             })),
           };
-        case 'text':
+        }
+        case 'text': {
+          const textElements = subDiagram.elements ?? [];
           return {
             type: 'text',
             title: subDiagram.diagramTitle,
@@ -178,7 +253,7 @@ const populate = (ast: VisualDiagram) => {
             width: subDiagram.width,
             height: subDiagram.height,
             label: subDiagram.label,
-            elements: subDiagram.elements.map((e: any) => {
+            elements: textElements.map((e: any) => {
               if (e.attributes && e.attributes.length > 0) {
                 // Build element properties from attributes array
                 const elementProps: any = { value: e.value };
@@ -206,6 +281,7 @@ const populate = (ast: VisualDiagram) => {
               }
             }),
           };
+        }
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
       }

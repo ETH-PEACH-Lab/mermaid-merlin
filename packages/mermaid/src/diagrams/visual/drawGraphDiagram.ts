@@ -22,18 +22,19 @@ export const drawGraphDiagram = (svg: SVG, graphDiagram: GraphDiagram, component
     .attr('d', 'M 0 0 L 10 5 L 0 10 z')
     .attr('fill', 'black');
 
-  const graphNodes = graphDiagram.elements.filter((ele) => ele.type == 'node');
+  const graphElements = graphDiagram.elements ?? [];
+  const graphNodes = graphElements.filter((ele) => ele.type == 'node');
   const hiddenNodeIds = new Set(
     graphNodes.filter((node) => node.hidden).map((node) => node.nodeId)
   );
   const visibleGraphNodes = graphNodes.filter((node) => !node.hidden);
 
-  const graphEdges = graphDiagram.elements.filter(
+  const graphEdges = graphElements.filter(
     (ele) => ele.type == 'edge' && !hiddenNodeIds.has(ele.start) && !hiddenNodeIds.has(ele.end)
   );
 
   // Calculate node positions in a circular layout (including hidden nodes)
-  const nodePositions = calculateNodePositions(graphNodes || []);
+  const nodePositions = calculateNodePositions(graphNodes);
 
   // Draw graph edges first (excluding those connected to hidden nodes)
   if (graphEdges) {
@@ -75,6 +76,9 @@ const calculateNodePositions = (
   nodes: GraphNode[]
 ): { [key: string]: { x: number; y: number } } => {
   const positions: { [key: string]: { x: number; y: number } } = {};
+  if (nodes.length === 0) {
+    return positions;
+  }
   const radius = 100; // Radius of the circle
   const centerX = 150; // Center X position of the circle
   const centerY = 150; // Center Y position of the circle
@@ -205,6 +209,15 @@ const calculateEdgePosition = (start: { x: number; y: number }, end: { x: number
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  if (distance === 0) {
+    return {
+      startX: start.x,
+      startY: start.y,
+      endX: end.x,
+      endY: end.y,
+    };
+  }
 
   const offsetX = (deltaX * radius) / distance;
   const offsetY = (deltaY * radius) / distance;
