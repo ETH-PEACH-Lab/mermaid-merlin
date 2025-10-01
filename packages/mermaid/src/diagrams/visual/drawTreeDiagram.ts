@@ -118,14 +118,16 @@ const calculateNodePositions = (
   nodes: TreeNodeDefinition[]
 ): { [key: string]: { x: number; y: number } } => {
   const positions: { [key: string]: { x: number; y: number } } = {};
-  const levelHeight = 100;
-  const svgWidth = 959; // match your default SVG width
-  const svgHeight = 400; // match your default SVG height
-  const baseWidth = svgWidth - 100; // leave some margin
-
-  if (rootNodes.length === 0) {
+  if (!nodes || nodes.length === 0) {
     return positions;
   }
+  const levelHeight = 100;
+  const maxDepth = calculateMaxDepth(nodes);
+  const maxDistance = maxDepth > 2 ? 100 : 70; // Adjust this value based on the total number of layers
+  const depthDivisor = maxDepth === 0 ? 1 : maxDepth;
+  const currentY = 0;
+  const baseWidth = 800;
+  const svgWidth = 800;
 
   // Start with the first root node
   const rootNode = rootNodes[0];
@@ -252,12 +254,43 @@ const calculateNodePositions = (
   return positions;
 };
 
-const drawNode = (
-  svg: SVG,
-  node: TreeNodeDefinition,
-  position: { x: number; y: number },
-  unit_id: number
-) => {
+const calculateMaxDepth = (nodes: any[]): number => {
+  const findDepth = (node: any, depth: number): number => {
+    const leftChild = nodes.find((n) => n.nodeId === node.left);
+    const rightChild = nodes.find((n) => n.nodeId === node.right);
+    const leftDepth = leftChild ? findDepth(leftChild, depth + 1) : depth;
+    const rightDepth = rightChild ? findDepth(rightChild, depth + 1) : depth;
+    return Math.max(leftDepth, rightDepth);
+  };
+
+  const rootNode = nodes.find((node) => !node.parentId);
+  if (rootNode) {
+    return findDepth(rootNode, 0);
+  }
+  return 0;
+};
+
+const calculateTreeEdges = (
+  nodes: any[]
+): { start: string; end: string; value?: string; color?: string }[] => {
+  const edges: { start: string; end: string; value?: string; color?: string }[] = [];
+
+  nodes.forEach((node) => {
+    if (node.left) {
+      edges.push({ start: node.nodeId, end: node.left });
+    }
+    if (node.right) {
+      edges.push({ start: node.nodeId, end: node.right });
+    }
+  });
+
+  return edges;
+};
+
+const drawNode = (svg: SVG, node: any, position: { x: number; y: number }, unit_id: number) => {
+  if (!position) {
+    return;
+  }
   const nodeX = position.x;
   const nodeY = position.y;
 

@@ -30,8 +30,10 @@ export const drawMatrixDiagram = (
   const group = svg.append('g');
   group.attr('class', 'component').attr('id', `component_${component_id}`);
 
-  const rowCount = matrixDiagram.rows.length;
-  const colCount = Math.max(...matrixDiagram.rows.map((row) => row.elements.length));
+  const matrixRows = matrixDiagram.rows ?? [];
+  const rowCount = matrixRows.length;
+  const colCount =
+    rowCount > 0 ? Math.max(...matrixRows.map((row) => (row.elements ?? []).length)) : 0;
   const arrowAnnotations: ArrowAnnotation[] = [];
 
   // Add title if it exists
@@ -48,8 +50,9 @@ export const drawMatrixDiagram = (
       .text(matrixDiagram.title);
   }
 
-  matrixDiagram.rows.forEach((row, rowIndex) => {
-    row.elements.forEach((element, colIndex) => {
+  matrixRows.forEach((row, rowIndex) => {
+    const rowElements = row.elements ?? [];
+    rowElements.forEach((element, colIndex) => {
       const arrowAnnotation = drawElement(
         group as unknown as SVG,
         element,
