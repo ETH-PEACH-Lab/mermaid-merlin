@@ -22,6 +22,7 @@ import mindmap from '../diagrams/mindmap/detector.js';
 import sankey from '../diagrams/sankey/sankeyDetector.js';
 import { packet } from '../diagrams/packet/detector.js';
 import { array } from '../diagrams/array/detector.js';
+import { neuralNetwork } from '../diagrams/neural-network/detector.js';
 import { matrix } from '../diagrams/matrix/detector.js';
 import { testslides } from '../diagrams/testslides/detector.js';
 import { visslides } from '../diagrams/visslides/detector.js';
@@ -100,6 +101,7 @@ export const addDiagrams = () => {
     matrix,
     testslides,
     visslides,
-    visual
+    visual,
+    neuralNetwork
   );
 };

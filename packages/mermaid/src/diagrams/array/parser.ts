@@ -9,6 +9,7 @@ const populate = (ast: ArrayDiagram) => {
   populateCommonDb(ast, db);
   for (const element of ast.elements) {
     const index = ast.elements.indexOf(element);
+
     if (index < 0) {
       throw new Error(`Array index ${index} is invalid. Index must be non-negative.`);
     }

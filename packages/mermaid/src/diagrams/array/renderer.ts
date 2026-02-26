@@ -92,7 +92,7 @@ const drawElement = (
     .attr('y', elementY)
     .attr('width', 40)
     .attr('height', 40)
-    .style('fill', getLightenedColor(element.color ? element.color : 'none')) // Apply the semi-transparent fill color if specified, else none
+    .style('fill', getLightenedColor(element.color ? element.color : 'none'))
     .attr('stroke', '#69b3a2')
     .attr('stroke-width', '3px')
     .attr('class', 'arrayElement');

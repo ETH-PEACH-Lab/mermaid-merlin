@@ -30,6 +30,7 @@ const MERMAID_CONFIG_DIAGRAM_KEYS = [
   'testslides',
   'visslides',
   'visual',
+  'neuralNetwork',
 ] as const;
 
 /**

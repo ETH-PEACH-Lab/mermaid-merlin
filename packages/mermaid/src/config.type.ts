@@ -163,6 +163,7 @@ export interface MermaidConfig {
   sankey?: SankeyDiagramConfig;
   packet?: PacketDiagramConfig;
   array?: ArrayDiagramConfig;
+  neuralNetwork?: NeuralNetworkDiagramConfig;
   matrix?: MatrixDiagramConfig;
   testslides?: TestSlidesDiagramConfig;
   visslides?: VisSlidesDiagramConfig;
@@ -1468,6 +1469,34 @@ export interface PacketDiagramConfig extends BaseDiagramConfig {
 export interface ArrayDiagramConfig extends BaseDiagramConfig {
   /**
    * Color of the array elements.
+   */
+  elementColor?: string;
+  /**
+   * Border color of the elements.
+   */
+  borderColor?: string;
+  /**
+   * Width of the border.
+   */
+  borderWidth?: number;
+  /**
+   * Color of the labels.
+   */
+  labelColor?: string;
+  /**
+   * Font size of the labels.
+   */
+  labelFontSize?: string;
+}
+/**
+ * The object containing configurations specific for neuralNetwork diagrams.
+ *
+ * This interface was referenced by `MermaidConfig`'s JSON-Schema
+ * via the `definition` "NeuralNetworkDiagramConfig".
+ */
+export interface NeuralNetworkDiagramConfig extends BaseDiagramConfig {
+  /**
+   * Color of the neuralNetwork elements.
    */
   elementColor?: string;
   /**

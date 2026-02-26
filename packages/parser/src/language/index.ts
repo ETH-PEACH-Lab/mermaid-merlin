@@ -1,5 +1,6 @@
 export {
   Info,
+  NeuralNetworkDiagram,
   ArrayDiagram,
   MatrixDiagram,
   TestSlidesDiagram,
@@ -30,5 +31,6 @@ export * from './common/index.js';
 export * from './info/index.js';
 export * from './packet/index.js';
 export * from './pie/index.js';
+export * from './neural-network/index.js';
 export * from './array/index.js';
 export * from './visual/index.js';

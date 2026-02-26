@@ -1,7 +1,18 @@
 import type { LangiumParser, ParseResult } from 'langium';
 import { expect, vi } from 'vitest';
-import type { Info, InfoServices, Pie, PieServices } from '../src/language/index.js';
-import { createInfoServices, createPieServices } from '../src/language/index.js';
+import type {
+  Info,
+  InfoServices,
+  Pie,
+  PieServices,
+  NeuralNetworkServices,
+  NeuralNetworkDiagram,
+} from '../src/language/index.js';
+import {
+  createInfoServices,
+  createPieServices,
+  createNeuralNetworkServices,
+} from '../src/language/index.js';
 
 const consoleMock = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
@@ -40,3 +51,16 @@ export function createPieTestServices() {
   return { services: pieServices, parse };
 }
 export const pieParse = createPieTestServices().parse;
+
+const nnServices: NeuralNetworkServices = createNeuralNetworkServices().NeuralNetwork;
+const nnParser: LangiumParser = nnServices.parser.LangiumParser;
+
+export function createNeuralNetworkTestServices() {
+  const parse = (input: string) => {
+    return nnParser.parse<NeuralNetworkDiagram>(input);
+  };
+
+  return { services: nnServices, parse };
+}
+
+export const neuralNetworkParse = createNeuralNetworkTestServices().parse;

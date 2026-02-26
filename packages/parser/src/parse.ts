@@ -9,6 +9,7 @@ import type {
   TestSlidesDiagram,
   VisSlidesDiagram,
   VisualDiagram,
+  NeuralNetworkDiagram,
 } from './index.js';
 
 export type DiagramAST =
@@ -19,7 +20,8 @@ export type DiagramAST =
   | MatrixDiagram
   | TestSlidesDiagram
   | VisSlidesDiagram
-  | VisualDiagram;
+  | VisualDiagram
+  | NeuralNetworkDiagram;
 
 const parsers: Record<string, LangiumParser> = {};
 const initializers = {
@@ -43,6 +45,7 @@ const initializers = {
     const parser = createArrayServices().Array.parser.LangiumParser;
     parsers['array'] = parser;
   },
+
   matrix: async () => {
     const { createMatrixServices } = await import('./language/matrix/index.js');
     const parser = createMatrixServices().Matrix.parser.LangiumParser;
@@ -66,6 +69,12 @@ const initializers = {
     // cspell:ignore testslides
     parsers['visual'] = parser;
   },
+
+  'neural-network': async () => {
+    const { createNeuralNetworkServices } = await import('./language/neural-network/index.js');
+    const parser = createNeuralNetworkServices().NeuralNetwork.parser.LangiumParser;
+    parsers['neural-network'] = parser;
+  },
 } as const;
 
 export async function parse(diagramType: 'info', text: string): Promise<Info>;
@@ -73,6 +82,10 @@ export async function parse(diagramType: 'packet', text: string): Promise<Packet
 export async function parse(diagramType: 'pie', text: string): Promise<Pie>;
 export async function parse(diagramType: 'array', text: string): Promise<ArrayDiagram>;
 export async function parse(diagramType: 'matrix', text: string): Promise<MatrixDiagram>;
+export async function parse(
+  diagramType: 'neural-network',
+  text: string
+): Promise<NeuralNetworkDiagram>;
 // cspell:ignore testslides
 export async function parse(diagramType: 'testslides', text: string): Promise<TestSlidesDiagram>;
 // cspell:ignore visslides
