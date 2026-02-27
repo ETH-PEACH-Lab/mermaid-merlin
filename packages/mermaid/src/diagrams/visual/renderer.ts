@@ -12,6 +12,7 @@ import type {
   TreeDiagram,
   LinkedListDiagram,
   TextDiagram,
+  NeuralNetworkDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
@@ -20,6 +21,7 @@ import { drawGraphDiagram } from './drawGraphDiagram.js';
 import { drawTreeDiagram } from './drawTreeDiagram.js';
 import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 import { drawTextDiagram } from './drawTextDiagram.js';
+import { drawNeuralNetworkDiagram } from './drawNeuralNetworkDiagram.js';
 
 interface ProcessedGroup {
   type: string;
@@ -483,6 +485,19 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         drawStackDiagram(group as unknown as SVG, subDiagram as StackDiagram, subDiagram.index);
         break;
       }
+
+      case 'neural-network': {
+        drawNeuralNetworkDiagram(
+          group as unknown as SVG,
+          subDiagram as NeuralNetworkDiagram,
+          config,
+          subDiagram.index,
+          customSize?.height || 800,
+          customSize?.width || 300
+        );
+        break;
+      }
+
       case 'graph': {
         drawGraphDiagram(group as unknown as SVG, subDiagram as GraphDiagram, subDiagram.index);
         break;

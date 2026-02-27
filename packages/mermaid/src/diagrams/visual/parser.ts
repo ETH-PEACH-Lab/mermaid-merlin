@@ -75,6 +75,30 @@ const populate = (ast: VisualDiagram) => {
             })),
           };
         }
+
+        case 'neural-network': {
+          const neuralNetworkLayer = subDiagram.elements ?? [];
+          return {
+            type: 'neural-network',
+            orientation: subDiagram.orientation,
+            title: subDiagram.diagramTitle,
+            showWeights: subDiagram.showWeights,
+            showLabels: subDiagram.showLabels,
+            positionLabels: subDiagram.positionLabels ?? 'bottom',
+            showArrowheads: subDiagram.showArrowheads,
+            showBias: subDiagram.showBias,
+            position: processPosition(subDiagram.position),
+            elements: neuralNetworkLayer.map((e1: any) => ({
+              layer: e1.layer,
+              color: e1.color ?? 'none',
+              nodes: (e1.nodes ?? []).map((e2: any) => ({
+                value: e2.value,
+                color: e2.color ?? 'none',
+              })),
+            })),
+          };
+        }
+
         case 'matrix': {
           const matrixRows = subDiagram.rows ?? [];
           return {

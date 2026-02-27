@@ -15,7 +15,30 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram
+;
+
+NeuralNetworkDiagram:
+  diagramType="neural-network" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
+  (orientation=Orientation NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
+  (showWeights?="showWeights" NEWLINE*)?
+  (showLabels?="showLabels" NEWLINE*)?
+  ('positionLabels:' positionLabels=PositionLabels NEWLINE*)?
+  (showArrowheads?="showArrowheads" NEWLINE*)?
+  (showBias?="showBias" NEWLINE*)?
+  '@' NEWLINE*
+  elements+=NeuralNetworkLayer* NEWLINE*
+  '@' NEWLINE*
+;
+
+NeuralNetworkLayer:
+   layer=Layer ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement+ NEWLINE* 
+;
+
+NeuralNetworkElement:
+   value=Value2 ('{' 'color:' color=STRING '}')?
 ;
 
 ArrayDiagram:
@@ -186,6 +209,14 @@ Value returns string:
   NUMBER | ID | STRING | 'null' | '\\null'
 ;
 
+Value2 returns string:
+  NUMBER | ID | STRING | 'null'
+;
+
+Layer returns string:
+  NUMBER | ID | STRING
+;
+
 SizeDefinition:
   '(' width=NUMBER ',' height=NUMBER ')'
 ;
@@ -205,4 +236,12 @@ PositionRange:
 terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
-terminal Orientation: "TD" | "LR";
+Orientation returns string:
+  'TD' | 'LR'
+;
+
+PositionLabels returns string:
+  'top' | 'bottom'
+;
+
+  

@@ -52,6 +52,30 @@ export interface ArrayDiagram {
   label?: string;
 }
 
+export interface NeuralNetworkDiagram {
+  type: string;
+  position?: PositionType;
+  orientation?: string;
+  title?: string;
+  showWeights?: boolean;
+  showLabels?: boolean;
+  positionLabels: string;
+  showArrowheads?: boolean;
+  showBias?: boolean;
+  elements: NeuralNetworkLayer[];
+}
+
+export interface NeuralNetworkLayer {
+  layer: string | number;
+  color: string;
+  nodes: NeuralNetworkElement[];
+}
+
+export interface NeuralNetworkElement {
+  value: string | number;
+  color: string;
+}
+
 // Matrix interfaces
 export interface MatrixElement {
   value: string | number;

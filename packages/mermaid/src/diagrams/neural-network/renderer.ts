@@ -22,7 +22,6 @@ interface NodePos {
 const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
   const db = diagram.db as NeuralNetworkDB;
   const config = db.getConfig();
-  const { elementColor, borderColor, borderWidth, labelColor, labelFontSize } = config;
   const elements = db.getNeuralNetworkElementArray();
   const { showWeights, showLabels, alignmentLabel, showArrowheads, showBias } = db.getGlobal();
   const title = db.getDiagramTitle();
