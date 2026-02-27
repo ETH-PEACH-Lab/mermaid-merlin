@@ -6,7 +6,7 @@ import { populateCommonDb } from '../common/populateCommonDb.js';
 import { db } from './db.js';
 
 const populate = (ast: NeuralNetworkDiagram) => {
-  db.setGlobal({
+  /*db.setGlobal({
     showLabels: ast.showLabels,
     showArrowheads: ast.showArrowheads,
     showWeights: ast.showWeights,
@@ -17,7 +17,7 @@ const populate = (ast: NeuralNetworkDiagram) => {
   for (const element of ast.elements) {
     db.addElement({
       layer: element.layer,
-      layerColor: element.layerColor || 'none',
+      layerColor: element.color || 'none',
       items: element.items.map((it) => {
         return {
           value: it.value,
@@ -25,7 +25,7 @@ const populate = (ast: NeuralNetworkDiagram) => {
         };
       }),
     });
-  }
+  }*/
 };
 
 export const parser: ParserDefinition = {
