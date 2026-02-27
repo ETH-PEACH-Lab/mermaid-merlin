@@ -6,10 +6,12 @@ import { expectNoErrorsOrAlternatives, neuralNetworkParse as parse } from './tes
 describe('neural-network', () => {
   it.each([
     `neural-network
+showLabels:top
 showWeights
-@ Layer1 x0:arrow::left & green & x1 x2 x3
+showBias
+@ Layer1 x0 x1 x2 x3
 @ Layer2 v0 v1 v2 v3
-@ LastL y
+@ LastL y 21 4 44 4 4 4 4
 `,
   ])('should handle empty info', (context: string) => {
     const result = parse(context);
