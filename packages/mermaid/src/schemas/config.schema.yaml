@@ -343,7 +343,7 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
       labelFontSize:
         type: string
         description: Font size of the labels.
-  
+
   MatrixDiagramConfig:
     title: Matrix Diagram Config
     allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]

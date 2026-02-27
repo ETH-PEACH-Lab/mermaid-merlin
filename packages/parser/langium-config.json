@@ -21,7 +21,7 @@
       "grammar": "src/language/array/array.langium",
       "fileExtensions": [".mmd", ".mermaid"]
     },
-     {
+    {
       "id": "neural-network",
       "grammar": "src/language/neural-network/neural-network.langium",
       "fileExtensions": [".mmd", ".mermaid"]
