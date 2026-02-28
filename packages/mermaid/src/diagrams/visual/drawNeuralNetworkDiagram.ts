@@ -1,7 +1,6 @@
 import type { NeuralNetworkDiagram, NeuralNetworkLayer, NeuralNetworkElement } from './types.js';
 import type { NeuralNetworkDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { formatValue, shouldDisplayArrowLabel } from './valueFormatter.js';
 import { getLightenedColor } from './getColor.js';
 
 interface NodePos {
@@ -40,31 +39,11 @@ export const drawNeuralNetworkDiagram = (
     .append('path')
     .attr('d', 'M 0 0 L 10 5 L 0 10 z')
     .attr('fill', 'black');
-  /*
-    if (neuralNetworkDiagram.title) {
-    svg
-      .append('text')
-      .text(neuralNetworkDiagram.title)
-      .attr('x', +svg.attr("width")  / 2)
-      .attr('y', 25)
-      .attr('dominant-baseline', 'middle')
-      .attr('text-anchor', 'middle')
-      .attr('class', 'neuralNetworkTitle');
-  }*/
-
-  // Apply right shift by adjusting the x translation value
-  /*const xOffset = 50;
-   const group = svg
-    .append('g')
-    .attr('class', 'component')
-    .attr('id', `component_${component_id}`)
-    .attr('transform', `translate(${xOffset}, 40)`);*/
 
   const titleFontSize = 22;
   const titlePadTop = 8;
   const titleBandH = 0;
-  const topLabelsBandH =
-    neuralNetworkDiagram.showLabels && neuralNetworkDiagram.positionLabels === 'top' ? 40 : 0;
+  const topLabelsBandH = 0;
 
   const elements = neuralNetworkDiagram.elements;
 
@@ -290,24 +269,29 @@ export const drawNeuralNetworkDiagram = (
     }
   }
 
-  // layer labels
-  let labelY: number;
+  const allNodes = layers.flat();
+  const yMin = Math.min(...allNodes.map((n) => n.y));
+  const yMax = Math.max(...allNodes.map((n) => n.y));
 
+  const labelGapFromNodes = nodeRadius + 40;
+
+  let labelY: number;
   if (neuralNetworkDiagram.positionLabels === 'top') {
-    labelY = -topLabelsBandH;
+    labelY = yMin - labelGapFromNodes;
   } else {
-    labelY = innerH2 + margin.bottom / 1.5;
+    labelY = yMax + labelGapFromNodes;
   }
 
   const labelPaddingX = 10;
   const labelPaddingY = 6;
-  const minBoxW = 70;
-  const boxH = 24;
+
+  const maxBoxW = layerXGap > 0 ? Math.max(40, layerXGap * 0.85) : 200;
+  const minBoxW = Math.max(40, nodeRadius * 2.2);
+  const minBoxH = Math.max(20, nodeRadius * 1.4);
 
   if (neuralNetworkDiagram.showLabels) {
     elements.forEach((layer, layerIndex) => {
       const x = layerIndex * layerXGap;
-
       const g = root.append('g').attr('transform', `translate(${x}, ${labelY})`);
 
       const text = g
@@ -322,130 +306,25 @@ export const drawNeuralNetworkDiagram = (
 
       const bb = (text.node() as SVGTextElement).getBBox();
 
-      const boxW = Math.max(minBoxW, bb.width + labelPaddingX * 2);
-      const boxHeight = Math.max(boxH, bb.height + labelPaddingY * 2);
+      const desiredW = bb.width + labelPaddingX * 2;
+      const desiredH = bb.height + labelPaddingY * 2;
+
+      const boxW = Math.min(maxBoxW, Math.max(minBoxW, desiredW));
+      const boxH = Math.max(minBoxH, desiredH);
+
+      const innerTextMaxW = boxW - labelPaddingX * 2;
+      if (bb.width > innerTextMaxW) {
+        const scale = Math.max(0.6, innerTextMaxW / bb.width);
+        text.attr('font-size', 13 * scale);
+      }
 
       g.insert('rect', 'text')
         .attr('x', -boxW / 2)
-        .attr('y', -boxHeight / 2)
+        .attr('y', -boxH / 2)
         .attr('width', boxW)
-        .attr('height', boxHeight)
+        .attr('height', boxH)
         .attr('fill', 'white')
         .attr('stroke', 'black');
     });
   }
-
-  /*let unit_id = 0;
-
-  neuralNetworkDiagram.elements.forEach((element, index) => {
-    drawElement(
-      group as unknown as SVG,
-      element,
-      index,
-      config,
-      arrayDiagram.showIndex || false,
-      unit_id
-    );
-    unit_id += 1;
-  });
-
-  if (arrayDiagram.label) {
-    const labelYPosition = label_Y;
-    const labelXPosition = label_X;
-
-    group
-      .append('text')
-      .attr('x', labelXPosition)
-      .attr('y', labelYPosition)
-      .attr('fill', config.labelColor)
-      .attr('font-size', labelFontSize)
-      .attr('dominant-baseline', 'hanging')
-      .attr('text-anchor', 'middle')
-      .attr('class', 'arrayDiagramLabel')
-      .text(arrayDiagram.label);
-  }*/
 };
-/*
-const drawElement = (
-  svg: SVG,
-  element: ArrayElement,
-  index: number,
-  { labelColor, labelFontSize }: Required<ArrayDiagramConfig>,
-  showIndex: boolean,
-  unit_id: number
-) => {
-  // array element style parameters
-  const indexFontSize = '16';
-  const elementFontSize = '16';
-
-  const group = svg.append('g');
-  group.attr('class', 'unit').attr('id', `unit_${unit_id}`);
-  const elementSize = 40;
-  const elementX = index * elementSize;
-  const elementY = 50;
-
-  const fillColor = getLightenedColor(element.color);
-
-  if (element.arrow && shouldDisplayArrowLabel(element.arrowLabel)) {
-    const arrowYStart = elementY - 40;
-    const arrowYEnd = elementY - 10;
-    group
-      .append('line')
-      .attr('x1', elementX + 20)
-      .attr('y1', arrowYStart)
-      .attr('x2', elementX + 20)
-      .attr('y2', arrowYEnd)
-      .attr('stroke', 'black')
-      .attr('stroke-width', '1.5')
-      .attr('marker-end', 'url(#arrowhead)');
-
-    if (shouldDisplayArrowLabel(element.arrowLabel)) {
-      group
-        .append('text')
-        .attr('x', elementX + 20)
-        .attr('y', arrowYStart - 20)
-        .attr('fill', labelColor)
-        .attr('font-size', '16')
-        .attr('dominant-baseline', 'hanging')
-        .attr('text-anchor', 'middle')
-        .attr('class', 'arrowContext')
-        .text(formatValue(element.arrowLabel || ''));
-    }
-  }
-
-  group
-    .append('rect')
-    .attr('x', elementX)
-    .attr('y', elementY)
-    .attr('width', elementSize)
-    .attr('height', elementSize)
-    .style('fill', fillColor)
-    .attr('stroke', '#000000')
-    .attr('stroke-width', '2px')
-    .attr('class', 'arrayElement');
-
-  group
-    .append('text')
-    .attr('x', elementX + elementSize / 2)
-    .attr('y', elementY + elementSize / 2)
-    .attr('fill', labelColor)
-    .attr('font-size', elementFontSize)
-    .attr('dominant-baseline', 'middle')
-    .attr('text-anchor', 'middle')
-    .attr('class', 'elementLabel')
-    .text(formatValue(element.value));
-
-  if (showIndex) {
-    group
-      .append('text')
-      .attr('x', elementX + elementSize / 2)
-      .attr('y', elementY + elementSize + 20)
-      .attr('fill', labelColor)
-      .attr('font-size', indexFontSize)
-      .attr('dominant-baseline', 'middle')
-      .attr('text-anchor', 'middle')
-      .attr('class', 'indexLabel')
-      .text(index);
-  }
-};
-*/

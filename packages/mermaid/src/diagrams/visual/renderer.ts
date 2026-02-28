@@ -492,8 +492,8 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
           subDiagram as NeuralNetworkDiagram,
           config,
           subDiagram.index,
-          customSize?.height || 800,
-          customSize?.width || 300
+          customSize?.height || 847,
+          customSize?.width || 700
         );
         break;
       }
