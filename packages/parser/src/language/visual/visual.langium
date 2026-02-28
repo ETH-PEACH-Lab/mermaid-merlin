@@ -1,5 +1,4 @@
 grammar VisualDiagram
-import "../common/common"
 
 entry VisualDiagram:
   NEWLINE*
@@ -210,7 +209,7 @@ Value returns string:
 ;
 
 Value2 returns string:
-  NUMBER | ID | STRING | 'null'
+  MIXED | NUMBER | ID | STRING | 'null' 
 ;
 
 Layer returns string:
@@ -233,9 +232,11 @@ PositionRange:
   single=NUMBER | (start=NUMBER '..' end=NUMBER)
 ;
 
-terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
+terminal NUMBER returns number:
+/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?![a-zA-Z_])/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
+terminal MIXED: /(?=[a-zA-Z0-9_]*[a-zA-Z])[a-zA-Z0-9_]+/;
 Orientation returns string:
   'TD' | 'LR'
 ;
@@ -243,5 +244,26 @@ Orientation returns string:
 PositionLabels returns string:
   'top' | 'bottom'
 ;
+
+  
+
+fragment TitleAndAccessibilities:
+  ((accDescr=ACC_DESCR | accTitle=ACC_TITLE | title=TITLE) EOL)+
+;
+
+fragment EOL returns string:
+  NEWLINE+ | EOF
+;
+
+terminal NEWLINE: /\r?\n/;
+terminal ACC_DESCR: /[\t ]*accDescr(?:[\t ]*:([^\n\r]*?(?=%%)|[^\n\r]*)|\s*{([^}]*)})/;
+terminal ACC_TITLE: /[\t ]*accTitle[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)/;
+terminal TITLE: /[\t ]*title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|)/;
+
+hidden terminal WHITESPACE: /[\t ]+/;
+hidden terminal YAML: /---[\t ]*\r?\n(?:[\S\s]*?\r?\n)?---(?:\r?\n|(?!\S))/;
+hidden terminal DIRECTIVE: /[\t ]*%%{[\S\s]*?}%%(?:\r?\n|(?!\S))/;
+hidden terminal SINGLE_LINE_COMMENT: /[\t ]*%%[^\n\r]*/;
+
 
   

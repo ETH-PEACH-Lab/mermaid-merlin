@@ -115,7 +115,7 @@ export const drawNeuralNetworkDiagram = (
         nodeIndex,
         x,
         y: ys[nodeIndex],
-        value: item.value,
+        value: item.value == 'null' ? '' : item.value,
         color: item.color,
         isBias: false,
       })
