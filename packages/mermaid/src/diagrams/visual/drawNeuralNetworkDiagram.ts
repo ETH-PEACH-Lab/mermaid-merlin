@@ -47,8 +47,6 @@ export const drawNeuralNetworkDiagram = (
 
   const elements = neuralNetworkDiagram.elements;
 
-  svg.attr('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
-
   if (neuralNetworkDiagram.title) {
     svg
       .append('text')
@@ -90,8 +88,6 @@ export const drawNeuralNetworkDiagram = (
 
   const requiredInnerH = maxNodes <= 1 ? innerH : (maxNodes - 1) * minGap;
   const innerH2 = Math.max(innerH, requiredInnerH);
-  const svgHeight2 = innerH2 + margin.top + margin.bottom + titleBandH + topLabelsBandH;
-  svg.attr('viewBox', `0 0 ${svgWidth} ${svgHeight2}`);
 
   const root = svg
     .append('g')
