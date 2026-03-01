@@ -146,88 +146,90 @@ export const drawNeuralNetworkDiagram = (
 
     for (const [i, a] of left.entries()) {
       for (const [j, b] of right.entries()) {
-        const x1 = a.x + nodeRadius;
-        const y1 = a.y;
-        const x2 = b.x - nodeRadius;
-        const y2 = b.y;
+        if (a.layer !== 'undefined' && b.layer !== 'undefined') {
+          const x1 = a.x + nodeRadius;
+          const y1 = a.y;
+          const x2 = b.x - nodeRadius;
+          const y2 = b.y;
 
-        const isBiasEdge = !!a.isBias;
+          const isBiasEdge = !!a.isBias;
 
-        root
-          .append('line')
-          .attr('x1', x1)
-          .attr('y1', y1)
-          .attr('x2', x2)
-          .attr('y2', y2)
-          .attr('class', 'nn-line')
-          .attr('stroke', isBiasEdge ? 'red' : 'black')
-          .attr('stroke-dasharray', isBiasEdge ? '6 4' : null)
-          .attr('stroke-width', 1.5)
-          .attr('marker-end', neuralNetworkDiagram.showArrowheads ? 'url(#arrowhead)' : null);
+          root
+            .append('line')
+            .attr('x1', x1)
+            .attr('y1', y1)
+            .attr('x2', x2)
+            .attr('y2', y2)
+            .attr('class', 'nn-line')
+            .attr('stroke', isBiasEdge ? 'red' : 'black')
+            .attr('stroke-dasharray', isBiasEdge ? '6 4' : null)
+            .attr('stroke-width', 1.5)
+            .attr('marker-end', neuralNetworkDiagram.showArrowheads ? 'url(#arrowhead)' : null);
 
-        if (neuralNetworkDiagram.showWeights) {
-          // midpoint
-          const mx = (x1 + x2) / 2;
-          const my = (y1 + y2) / 2;
+          if (neuralNetworkDiagram.showWeights) {
+            // midpoint
+            const mx = (x1 + x2) / 2;
+            const my = (y1 + y2) / 2;
 
-          // direction
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const len = Math.hypot(dx, dy) || 1;
+            // direction
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const len = Math.hypot(dx, dy) || 1;
 
-          // perpendicular unit vector
-          let px = -dy / len;
-          let py = dx / len;
+            // perpendicular unit vector
+            let px = -dy / len;
+            let py = dx / len;
 
-          // choose the perpendicular that points UP (negative y)
-          if (py > 0) {
-            px = -px;
-            py = -py;
-          }
+            // choose the perpendicular that points UP (negative y)
+            if (py > 0) {
+              px = -px;
+              py = -py;
+            }
 
-          const offset = 8;
+            const offset = 8;
 
-          const tx = mx + px * offset;
-          const ty = my + py * offset;
-          let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-          if (angle > 90 || angle < -90) {
-            angle += 180;
-          }
+            const tx = mx + px * offset;
+            const ty = my + py * offset;
+            let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+            if (angle > 90 || angle < -90) {
+              angle += 180;
+            }
 
-          const t = root
-            .append('text')
-            .attr('x', tx)
-            .attr('y', ty)
-            .attr('transform', `rotate(${angle}, ${tx}, ${ty})`)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .attr('font-family', 'Times New Roman')
-            .attr('fill', 'black');
+            const t = root
+              .append('text')
+              .attr('x', tx)
+              .attr('y', ty)
+              .attr('transform', `rotate(${angle}, ${tx}, ${ty})`)
+              .attr('text-anchor', 'middle')
+              .attr('dominant-baseline', 'middle')
+              .attr('font-family', 'Times New Roman')
+              .attr('fill', 'black');
 
-          t.append('tspan').attr('font-style', 'italic').attr('font-size', 13).text('w');
+            t.append('tspan').attr('font-style', 'italic').attr('font-size', 13).text('w');
 
-          if (z === layers.length - 2 && layers[layers.length - 1].length === 1) {
-            t.append('tspan')
-              .attr('font-size', 8)
-              .attr('dy', 5)
-              .text(`${i + 1}`);
+            if (z === layers.length - 2 && layers[layers.length - 1].length === 1) {
+              t.append('tspan')
+                .attr('font-size', 8)
+                .attr('dy', 5)
+                .text(`${i + 1}`);
 
-            t.append('tspan')
-              .attr('font-size', 8)
-              .attr('dx', -5)
-              .attr('dy', -10)
-              .text(`(${z + 1})`);
-          } else {
-            t.append('tspan')
-              .attr('font-size', 8)
-              .attr('dy', 5)
-              .text(isBiasEdge ? `${j + 1},0` : `${j + 1},${i + 1}`);
+              t.append('tspan')
+                .attr('font-size', 8)
+                .attr('dx', -5)
+                .attr('dy', -10)
+                .text(`(${z + 1})`);
+            } else {
+              t.append('tspan')
+                .attr('font-size', 8)
+                .attr('dy', 5)
+                .text(isBiasEdge ? `${j + 1},0` : `${j + 1},${i + 1}`);
 
-            t.append('tspan')
-              .attr('font-size', 8)
-              .attr('dx', -10)
-              .attr('dy', -9)
-              .text(`(${z + 1})`);
+              t.append('tspan')
+                .attr('font-size', 8)
+                .attr('dx', -10)
+                .attr('dy', -9)
+                .text(`(${z + 1})`);
+            }
           }
         }
       }
@@ -237,35 +239,37 @@ export const drawNeuralNetworkDiagram = (
   // nodes
   for (const layerNodes of layers) {
     for (const node of layerNodes) {
-      const g = root.append('g').attr('transform', `translate(${node.x},${node.y})`);
+      if (node.layer !== 'undefined') {
+        const g = root.append('g').attr('transform', `translate(${node.x},${node.y})`);
 
-      g.append('circle')
-        .attr('r', nodeRadius)
-        .attr('class', 'nn-node')
-        .attr(
-          'fill',
-          node.color === 'none'
-            ? node.layerColor === 'none'
-              ? 'white'
-              : getLightenedColor(node.layerColor)
-            : getLightenedColor(node.color)
-        )
-        .attr('stroke', 'black')
-        .attr('stroke-width', 2);
+        g.append('circle')
+          .attr('r', nodeRadius)
+          .attr('class', 'nn-node')
+          .attr(
+            'fill',
+            node.color === 'none'
+              ? node.layerColor === 'none'
+                ? 'white'
+                : getLightenedColor(node.layerColor)
+              : getLightenedColor(node.color)
+          )
+          .attr('stroke', 'black')
+          .attr('stroke-width', 2);
 
-      const text = g
-        .append('text')
-        .text(String(node.value))
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-family', 'Arial')
-        .attr('font-size', 13);
+        const text = g
+          .append('text')
+          .text(String(node.value))
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-family', 'Arial')
+          .attr('font-size', 13);
 
-      const bbox = (text.node() as SVGTextElement).getBBox();
-      const maxWidth = nodeRadius * 1.6;
-      const maxHeight = nodeRadius * 1.2;
-      const scale = Math.min(maxWidth / bbox.width, maxHeight / bbox.height, 1);
-      text.attr('font-size', (node.isBias ? 12 : 13) * scale);
+        const bbox = (text.node() as SVGTextElement).getBBox();
+        const maxWidth = nodeRadius * 1.6;
+        const maxHeight = nodeRadius * 1.2;
+        const scale = Math.min(maxWidth / bbox.width, maxHeight / bbox.height, 1);
+        text.attr('font-size', (node.isBias ? 12 : 13) * scale);
+      }
     }
   }
 
@@ -291,40 +295,42 @@ export const drawNeuralNetworkDiagram = (
 
   if (neuralNetworkDiagram.showLabels) {
     elements.forEach((layer, layerIndex) => {
-      const x = layerIndex * layerXGap;
-      const g = root.append('g').attr('transform', `translate(${x}, ${labelY})`);
+      if (layer.layer !== 'undefined') {
+        const x = layerIndex * layerXGap;
+        const g = root.append('g').attr('transform', `translate(${x}, ${labelY})`);
 
-      const text = g
-        .append('text')
-        .text(String(layer.layer))
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('dominant-baseline', 'middle')
-        .attr('text-anchor', 'middle')
-        .attr('font-family', 'Arial')
-        .attr('font-size', 13);
+        const text = g
+          .append('text')
+          .text(String(layer.layer))
+          .attr('x', 0)
+          .attr('y', 0)
+          .attr('dominant-baseline', 'middle')
+          .attr('text-anchor', 'middle')
+          .attr('font-family', 'Arial')
+          .attr('font-size', 13);
 
-      const bb = (text.node() as SVGTextElement).getBBox();
+        const bb = (text.node() as SVGTextElement).getBBox();
 
-      const desiredW = bb.width + labelPaddingX * 2;
-      const desiredH = bb.height + labelPaddingY * 2;
+        const desiredW = bb.width + labelPaddingX * 2;
+        const desiredH = bb.height + labelPaddingY * 2;
 
-      const boxW = Math.min(maxBoxW, Math.max(minBoxW, desiredW));
-      const boxH = Math.max(minBoxH, desiredH);
+        const boxW = Math.min(maxBoxW, Math.max(minBoxW, desiredW));
+        const boxH = Math.max(minBoxH, desiredH);
 
-      const innerTextMaxW = boxW - labelPaddingX * 2;
-      if (bb.width > innerTextMaxW) {
-        const scale = Math.max(0.6, innerTextMaxW / bb.width);
-        text.attr('font-size', 13 * scale);
+        const innerTextMaxW = boxW - labelPaddingX * 2;
+        if (bb.width > innerTextMaxW) {
+          const scale = Math.max(0.6, innerTextMaxW / bb.width);
+          text.attr('font-size', 13 * scale);
+        }
+
+        g.insert('rect', 'text')
+          .attr('x', -boxW / 2)
+          .attr('y', -boxH / 2)
+          .attr('width', boxW)
+          .attr('height', boxH)
+          .attr('fill', 'white')
+          .attr('stroke', 'black');
       }
-
-      g.insert('rect', 'text')
-        .attr('x', -boxW / 2)
-        .attr('y', -boxH / 2)
-        .attr('width', boxW)
-        .attr('height', boxH)
-        .attr('fill', 'white')
-        .attr('stroke', 'black');
     });
   }
 };
