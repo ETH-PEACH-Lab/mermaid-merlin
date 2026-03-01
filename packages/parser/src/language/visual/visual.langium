@@ -14,7 +14,102 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram | BlockDiagram
+;
+
+ 
+BlockDiagram:
+  diagramType="architecture" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
+  '@' NEWLINE*
+  (elements += Block NEWLINE*)*
+  (diagram=Diagram NEWLINE*)?
+  '@' NEWLINE*
+;
+
+Diagram:
+   'diagram' NEWLINE*
+   ('layout:' layout=LayoutDiagram NEWLINE*)?
+   ('gap:' gap=NUMBER NEWLINE*)?
+   (uses=UseBlock NEWLINE*)?
+   (connects=ConnectSection NEWLINE*)?
+;
+
+UseBlock:
+   'use:' NEWLINE*
+    items+=Use* NEWLINE* 
+;
+
+Use:
+   name=ID ':' block=ID
+;
+
+ConnectSection:
+  'connect:' NEWLINE*
+   connections+=Connection* NEWLINE*
+;
+
+Connection:
+  from=ScopedEndpoint '->' to=ScopedEndpoint ('style:' style=EdgeStyle)? ('color:' color=STRING)? ('label:' label=STRING)? ('arrowheads:' arrowheads=NUMBER)?
+;
+
+ScopedEndpoint:
+    instanceName=ID '.' nodeName=ID '.' anchor=Anchor ('[' portIndex=NUMBER ']')?
+  | instanceName=ID '.' edgeName=ID '.' edgeAnchor=EdgeAnchor
+;
+
+Block:
+   'block' name=ID NEWLINE*
+   ('layout:' layout=LayoutBlock NEWLINE*)?
+   ('gap:' gap=NUMBER NEWLINE*)?
+   ('size:' size=SizeDefinition NEWLINE*)?
+   ('color:' color=STRING NEWLINE*)?
+   ('style:' style=BlockStyle NEWLINE*)?
+   (annotations+=Annotation NEWLINE*)*
+   (nodes=Nodes NEWLINE*)?
+   (edges=Edges NEWLINE*)?
+   (groups=Groups NEWLINE*)?
+
+;
+
+Groups:
+   'groups' NEWLINE*
+   (items+=Group NEWLINE*)*
+;
+
+Group:
+   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? (annotations+=Annotation)*
+;
+
+Annotation:
+  'annotation' '.' side=Side ':' value=STRING
+;
+
+Nodes:
+   'nodes' NEWLINE*
+   (nodes+=Node NEWLINE*)*
+;
+
+Node:
+   type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('subtext:' subText=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
+   | type=NodeTypeSpecial name=ID ('label:' label=STRING)? 
+  
+;
+
+Edges:
+   'edges' NEWLINE*
+   (edges+=Edge NEWLINE*)*
+;
+
+Edge:
+   name=ID ':' from=Endpoint '->' to=Endpoint ('label:' label=STRING)? ('style:' style=EdgeStyle)? ('color:' color=STRING)? ('arrowheads:' arrowheads=NUMBER)?
+
+;
+
+Endpoint:
+    nodeName=ID '.' anchor=Anchor ('[' portIndex=NUMBER ']')?
+  | edgeName=ID '.' edgeAnchor=EdgeAnchor
 ;
 
 NeuralNetworkDiagram:
@@ -33,7 +128,7 @@ NeuralNetworkDiagram:
 ;
 
 NeuralNetworkLayer:
-   layer=Layer ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement+ NEWLINE* 
+   layer=Layer ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement* NEWLINE* 
 ;
 
 NeuralNetworkElement:
@@ -209,11 +304,11 @@ Value returns string:
 ;
 
 Value2 returns string:
-  MIXED | NUMBER | ID | STRING | 'null' 
+   NUMBER | ID | STRING | 'null' 
 ;
 
 Layer returns string:
-  NUMBER | ID | STRING
+   NUMBER | ID | STRING | 'null'
 ;
 
 SizeDefinition:
@@ -232,11 +327,11 @@ PositionRange:
   single=NUMBER | (start=NUMBER '..' end=NUMBER)
 ;
 
-terminal NUMBER returns number:
-/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?![a-zA-Z_])/;
+
+
+terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
-terminal MIXED: /(?=[a-zA-Z0-9_]*[a-zA-Z])[a-zA-Z0-9_]+/;
 Orientation returns string:
   'TD' | 'LR'
 ;
@@ -245,7 +340,47 @@ PositionLabels returns string:
   'top' | 'bottom'
 ;
 
-  
+LabelOrientation returns string:
+  'horizontal' | 'vertical'
+;
+
+BlockStyle returns string:
+  'box' | 'rounded'
+;
+
+LayoutBlock returns string:
+  'horizontal' | 'vertical' | 'grid'
+;
+
+LayoutDiagram returns string:
+  'horizontal' | 'vertical' | 'grid'
+;
+
+NodeTypeDefault returns string:
+  'rect' | 'circle'
+;
+
+NodeTypeSpecial returns string:
+  'text'
+;
+
+Anchor returns string:
+  'left' | 'right' | 'top' | 'bottom'
+;
+
+EdgeAnchor returns string:
+  'start' | 'mid' | 'end' 
+;
+
+
+EdgeStyle returns string:
+  'straight' | 'bow'
+;
+
+Side returns string :
+  'left' | 'top' | 'right' | 'bottom'
+;
+
 
 fragment TitleAndAccessibilities:
   ((accDescr=ACC_DESCR | accTitle=ACC_TITLE | title=TITLE) EOL)+

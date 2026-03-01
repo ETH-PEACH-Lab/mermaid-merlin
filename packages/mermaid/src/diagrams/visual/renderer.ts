@@ -13,6 +13,7 @@ import type {
   LinkedListDiagram,
   TextDiagram,
   NeuralNetworkDiagram,
+  BlockDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
@@ -22,6 +23,7 @@ import { drawTreeDiagram } from './drawTreeDiagram.js';
 import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 import { drawTextDiagram } from './drawTextDiagram.js';
 import { drawNeuralNetworkDiagram } from './drawNeuralNetworkDiagram.js';
+import { drawBlockDiagram } from './drawBlockDiagram.js';
 
 interface ProcessedGroup {
   type: string;
@@ -492,8 +494,18 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
           subDiagram as NeuralNetworkDiagram,
           config,
           subDiagram.index,
-          customSize?.height || 847,
-          customSize?.width || 700
+          customSize?.height || 800,
+          customSize?.width || 300
+        );
+        break;
+      }
+
+      case 'architecture': {
+        drawBlockDiagram(
+          group as unknown as SVG,
+          subDiagram as BlockDiagram,
+          config,
+          subDiagram.index
         );
         break;
       }

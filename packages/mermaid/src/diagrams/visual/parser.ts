@@ -4,6 +4,7 @@ import type { ParserDefinition } from '../../diagram-api/types.js';
 import { log } from '../../logger.js';
 import { populateCommonDb } from '../common/populateCommonDb.js';
 import { db } from './db.js';
+import type { Use, Annotation, Node } from './types.js';
 
 const populate = (ast: VisualDiagram) => {
   populateCommonDb(ast, db);
@@ -73,6 +74,137 @@ const populate = (ast: VisualDiagram) => {
               arrow: e.arrowLabel !== undefined && e.arrowLabel !== null, //if with arrow then True, else False
               arrowLabel: e.arrowLabel,
             })),
+          };
+        }
+
+        case 'architecture': {
+          const blockDiagramElements = subDiagram.elements;
+          const blockDiagramDiagram = subDiagram.diagram;
+          return {
+            type: 'architecture',
+            position: processPosition(subDiagram.position),
+            title: subDiagram.diagramTitle,
+
+            elements: (blockDiagramElements ?? []).map((e1: any) => ({
+              name: e1.name,
+              layout: e1.layout,
+              gap: e1.gap,
+              size: e1.size
+                ? {
+                    width: e1.size.width,
+                    height: e1.size.height,
+                  }
+                : undefined,
+              color: e1.color,
+              style: e1.style,
+              annotations: (e1.annotations ?? []).map((e2: Annotation) => ({
+                side: e2.side,
+                value: e2.value,
+              })),
+              nodes: (e1.nodes?.nodes ?? []).map((e2: Node) => ({
+                type: e2.type,
+                name: e2.name,
+                label: e2.label,
+                labelOrientation: e2.labelOrientation,
+                subText: e2.subText,
+                annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
+                  side: e3.side,
+                  value: e3.value,
+                })),
+                size: e2.size
+                  ? {
+                      width: e2.size.width,
+                      height: e2.size.height,
+                    }
+                  : undefined,
+                color: e2.color,
+                style: e2.style,
+                stroke: e2.stroke,
+              })),
+
+              groups: (e1.groups?.items ?? []).map((e2: any) => ({
+                name: e2.name,
+                members: e2.members,
+                layout: e2.layout,
+                anchor: e2.anchor,
+                gap: e2.gap,
+                color: e2.color,
+                annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
+                  side: e3.side,
+                  value: e3.value,
+                })),
+              })),
+
+              edges: (e1.edges?.edges ?? []).map((e2: any) => ({
+                name: e2.name,
+                from: e2.from.nodeName
+                  ? {
+                      nodeName: e2.from.nodeName,
+                      anchor: e2.from.anchor,
+                      portIndex: e2.from.portIndex,
+                    }
+                  : {
+                      edgeName: e2.from.edgeName,
+                      edgeAnchor: e2.from.edgeAnchor,
+                    },
+                to: e2.to.nodeName
+                  ? {
+                      nodeName: e2.to.nodeName,
+                      anchor: e2.to.anchor,
+                      portIndex: e2.to.portIndex,
+                    }
+                  : {
+                      edgeName: e2.to.edgeName,
+                      edgeAnchor: e2.to.edgeAnchor,
+                    },
+                style: e2.style,
+                color: e2.color,
+                label: e2.label,
+                arrowheads: e2.arrowheads,
+              })),
+            })),
+
+            diagram: blockDiagramDiagram
+              ? {
+                  layout: blockDiagramDiagram.layout,
+                  gap: blockDiagramDiagram.gap,
+                  uses: (blockDiagramDiagram.uses?.items ?? []).map((e: Use) => ({
+                    name: e.name,
+                    block: e.block,
+                  })),
+                  connections: (blockDiagramDiagram.connects?.connections ?? []).map((e: any) => ({
+                    from: e.from.nodeName
+                      ? {
+                          instanceName: e.from.instanceName,
+                          nodeName: e.from.nodeName,
+                          anchor: e.from.anchor,
+                          portIndex: e.from.portIndex,
+                        }
+                      : {
+                          instanceName: e.from.instanceName,
+                          edgeName: e.from.edgeName,
+                          edgeAnchor: e.from.edgeAnchor,
+                        },
+                    to: e.to.nodeName
+                      ? {
+                          instanceName: e.to.instanceName,
+                          nodeName: e.to.nodeName,
+                          anchor: e.to.anchor,
+                          portIndex: e.to.portIndex,
+                        }
+                      : {
+                          instanceName: e.to.instanceName,
+                          edgeName: e.to.edgeName,
+                          edgeAnchor: e.to.edgeAnchor,
+                        },
+
+                    style: e.style,
+                    color: e.color,
+                    label: e.label,
+                    arrowheads: e.arrowheads,
+                  })),
+                }
+              : undefined,
           };
         }
 

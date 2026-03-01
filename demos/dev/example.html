@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>Mermaid Array Diagram Demo</title>
+    <title>Mermaid NeuralNetwork Diagram Demo</title>
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=" />
     <style>
       div.mermaid {
@@ -18,51 +18,82 @@
     <div>
       <textarea id="arrayInput" rows="10" cols="50">
 visual
-size: (600,400)
+size: (600, 400)
 page
-layout: (2,2)
-array
-position: (0,0)
+architecture
+title: "Hello"
 @
-1 {color:"blue", arrow:"null"}
-2 {color:"green", arrow:"null"}
-3 {color:"red", arrow:"null"}
+block ResidualUnit
+layout: horizontal
+gap: 22
+color: "white"
+style: box
+
+nodes
+text x label: "x"
+rect l1 label: "l1" subtext: "3x3 stride=2" size: (150,50) style: rounded stroke: "black"
+rect l2 label: "l2"subtext: "3x3 stride=2" size: (110,50) stroke: "black"
+circle add label: "+" size: (28,28)
+rect l3 label: "l3" style: rounded
+circle r1 label: "r1" 
+circle r2 label: "r2"
+circle r3 label: "r3"
+circle r4 label: "r3"
+circle r5 label: "r3"
+
+edges
+e1: x.bottom -> l3.top label: "1" style: straight 
+e2: x.left -> l3.left label: "2" style: bow 
+e2: l3.right -> l1.left label: "3" style:straight
+e3: l1.right -> l2.left label: "4" style: straight color: "yellow" 
+e4: l2.right -> add.left label: "5" style: straight color: "yellow" 
+e5: r1.top -> l1.bottom[0] label: "6" style: straight color: "yellow" 
+e6: r2.top -> l1.bottom[1] label: "7" style: straight color: "yellow" 
+e6: r3.top -> l1.bottom[2] label: "8" style: straight 
+e6: r4.top -> l1.bottom[3] label: "9" style: straight 
+e6: r5.top -> l1.bottom[4] label: "10" style: straight 
+e6: e2.mid -> add.top label: "identity" style: bow color: "blue" 
+
+groups
+row1: x l3 layout: vertical
+row3: r1 r2 r3 r4 r5  layout: horizontal gap:5
+row4: l1 row3 layout: vertical
+row5: l2 layout: horizontal
+
+block DecoderUnit
+layout: vertical
+gap: 18
+color: "white"
+style: rounded
+annotation.top: "Decoder"
+annotation.bottom: "Decoder"
+annotation.right: "Decoder"
+
+nodes
+rect q label: "Query" 
+rect att label: "Attention" 
+rect ff label: "Feed Forward" 
+circle add label: "+" 
+
+edges
+e1: q.bottom -> att.top label: "5dasdadsadsa" 
+e2: att.bottom -> ff.top label: "5" 
+e3: ff.bottom -> add.top label: "5" 
+e3: q.left -> ff.left label: "5" style: bow 
+e4: q.right -> add.right style: bow 
+
+groups
+row1: q layout: horizontal
+row2: att layout: horizontal
+row3: ff layout: horizontal
+row4: add layout: horizontal
+
+diagram
+layout: horizontal
+gap: 100
 @
-text
-position: previous
-placement: below
-"This is below the array"
-text
-position: previous
-placement: above
-"This is above the array"
-graph
-position: (1,0)
-@
-node:A {value:"A", color:"lightblue", arrow:"null", hidden:"null"}
-node:B {value:"B", color:"lightgreen", arrow:"null", hidden:"null"}
-edge:(A,B)
-@
-text
-position: previous
-placement: right
-"Right of graph"
-matrix
-position: (1,1)
-@
-1,2,3
-4,5,6
-@
-text
-position: previous
-placement: left
-"Left of matrix"
-neural-network
-position: (0,1)
-@
-firstlayer {color: "blue"} v1 v1 v2 {color "blue"}
-firstlayer v3 v4 f1
-@</textarea
+
+ </textarea
       >
       <br />
       <button id="renderButton">Render Diagram</button>

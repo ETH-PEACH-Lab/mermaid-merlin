@@ -2,6 +2,7 @@ import type { NeuralNetworkDiagram, NeuralNetworkLayer, NeuralNetworkElement } f
 import type { NeuralNetworkDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getLightenedColor } from './getColor.js';
+import * as d3 from 'd3';
 
 interface NodePos {
   layer: string | number;
@@ -21,29 +22,32 @@ export const drawNeuralNetworkDiagram = (
   svg: SVG,
   neuralNetworkDiagram: NeuralNetworkDiagram,
   config: Required<NeuralNetworkDiagramConfig>,
-  component_id: number,
+  component_id: number | string,
   svgHeight: number,
   svgWidth: number
 ) => {
-  // Add marker definition for the arrowhead
-  svg
-    .append('defs')
-    .append('marker')
-    .attr('id', 'arrowhead')
-    .attr('viewBox', '0 0 10 10')
-    .attr('refX', '5')
-    .attr('refY', '5')
-    .attr('markerWidth', '6')
-    .attr('markerHeight', '6')
-    .attr('orient', 'auto-start-reverse')
-    .append('path')
-    .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-    .attr('fill', 'black');
+  const ownerSvgEl = (svg.node() as any)?.ownerSVGElement as SVGSVGElement | null;
+  const rootSvg = ownerSvgEl ? (d3.select(ownerSvgEl) as unknown as SVG) : svg;
 
-  const titleFontSize = 22;
-  const titlePadTop = 8;
-  const titleBandH = 0;
-  const topLabelsBandH = 0;
+  const defs = rootSvg.select('defs').empty() ? rootSvg.append('defs') : rootSvg.select('defs');
+
+  const idSuffix = String(component_id).replace(/[^\w-]/g, '_');
+  const arrowId = `nn-arrowhead-${idSuffix}`;
+
+  if (defs.select(`#${arrowId}`).empty()) {
+    defs
+      .append('marker')
+      .attr('id', arrowId)
+      .attr('viewBox', '0 0 10 10')
+      .attr('refX', 10)
+      .attr('refY', 5)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+      .attr('fill', 'black');
+  }
 
   const elements = neuralNetworkDiagram.elements;
 
@@ -51,13 +55,14 @@ export const drawNeuralNetworkDiagram = (
     svg
       .append('text')
       .attr('x', svgWidth / 2)
-      .attr('y', titlePadTop)
+      .attr('y', 8)
       .attr('fill', config.labelColor)
-      .attr('font-size', titleFontSize)
+      .attr('font-size', 22)
       .attr('font-weight', 700)
       .attr('dominant-baseline', 'hanging')
       .attr('text-anchor', 'middle')
       .attr('class', 'neuralNetworkTitle')
+      .attr('pointer-events', 'none')
       .text(neuralNetworkDiagram.title);
   }
 
@@ -70,7 +75,6 @@ export const drawNeuralNetworkDiagram = (
 
   const innerW = svgWidth - margin.left - margin.right;
   const innerH = svgHeight - margin.top - margin.bottom;
-
   const layerXGap = elements.length > 1 ? innerW / (elements.length - 1) : 0;
   const nodeRadius = 18;
 
@@ -89,12 +93,15 @@ export const drawNeuralNetworkDiagram = (
   const requiredInnerH = maxNodes <= 1 ? innerH : (maxNodes - 1) * minGap;
   const innerH2 = Math.max(innerH, requiredInnerH);
 
-  const root = svg
+  const root = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const componentGroup = root
     .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top + titleBandH + topLabelsBandH})`);
+    .attr('class', 'component')
+    .attr('id', `component_${component_id}`);
 
   const layers: NodePos[][] = elements.map((elem: NeuralNetworkLayer, layerIndex: number) => {
-    const hasBiasHere = neuralNetworkDiagram.showBias && layerIndex < elements.length - 1; // no bias in last layer
+    const hasBiasHere = neuralNetworkDiagram.showBias && layerIndex < elements.length - 1;
     const n = elem.nodes.length + (hasBiasHere ? 1 : 0);
     const x = layerIndex * layerXGap;
 
@@ -125,10 +132,10 @@ export const drawNeuralNetworkDiagram = (
       layer: elem.layer,
       layerColor: elem.color,
       layerIndex,
-      nodeIndex: elem.nodes.length, // last index
+      nodeIndex: elem.nodes.length,
       x,
-      y: ys[ys.length - 1], // bottom-most position
-      value: 1, // classic bias constant
+      y: ys[ys.length - 1],
+      value: 1,
       color: 'none',
       isBias: true,
     };
@@ -136,135 +143,171 @@ export const drawNeuralNetworkDiagram = (
     return [...normalNodes, biasNode];
   });
 
+  // edges
   for (let z = 0; z < layers.length - 1; z++) {
     const left = layers[z];
-    const right = layers[z + 1].filter((n) => !n.isBias); // no incoming to bias
+    const right = layers[z + 1].filter((n) => !n.isBias);
 
     for (const [i, a] of left.entries()) {
       for (const [j, b] of right.entries()) {
-        if (a.layer !== 'undefined' && b.layer !== 'undefined') {
-          const x1 = a.x + nodeRadius;
-          const y1 = a.y;
-          const x2 = b.x - nodeRadius;
-          const y2 = b.y;
+        const x1 = a.x + nodeRadius;
+        const y1 = a.y;
+        const x2 = b.x - nodeRadius;
+        const y2 = b.y;
+        const isBiasEdge = !!a.isBias;
 
-          const isBiasEdge = !!a.isBias;
+        componentGroup
+          .append('line')
+          .attr('x1', x1)
+          .attr('y1', y1)
+          .attr('x2', x2)
+          .attr('y2', y2)
+          .attr('class', 'nn-line')
+          .attr('stroke', isBiasEdge ? 'red' : 'black')
+          .attr('stroke-dasharray', isBiasEdge ? '6 4' : null)
+          .attr('stroke-width', 1.5)
+          .attr('marker-end', neuralNetworkDiagram.showArrowheads ? `url(#${arrowId})` : null)
+          .attr('pointer-events', 'none');
 
-          root
-            .append('line')
-            .attr('x1', x1)
-            .attr('y1', y1)
-            .attr('x2', x2)
-            .attr('y2', y2)
-            .attr('class', 'nn-line')
-            .attr('stroke', isBiasEdge ? 'red' : 'black')
-            .attr('stroke-dasharray', isBiasEdge ? '6 4' : null)
-            .attr('stroke-width', 1.5)
-            .attr('marker-end', neuralNetworkDiagram.showArrowheads ? 'url(#arrowhead)' : null);
+        if (neuralNetworkDiagram.showWeights) {
+          const mx = (x1 + x2) / 2;
+          const my = (y1 + y2) / 2;
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
 
-          if (neuralNetworkDiagram.showWeights) {
-            // midpoint
-            const mx = (x1 + x2) / 2;
-            const my = (y1 + y2) / 2;
+          let px = -dy / len;
+          let py = dx / len;
+          if (py > 0) {
+            px = -px;
+            py = -py;
+          }
 
-            // direction
-            const dx = x2 - x1;
-            const dy = y2 - y1;
-            const len = Math.hypot(dx, dy) || 1;
+          const tx = mx + px * 8;
+          const ty = my + py * 8;
 
-            // perpendicular unit vector
-            let px = -dy / len;
-            let py = dx / len;
+          let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          if (angle > 90 || angle < -90) {
+            angle += 180;
+          }
 
-            // choose the perpendicular that points UP (negative y)
-            if (py > 0) {
-              px = -px;
-              py = -py;
-            }
+          const t = componentGroup
+            .append('text')
+            .attr('x', tx)
+            .attr('y', ty)
+            .attr('transform', `rotate(${angle}, ${tx}, ${ty})`)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('font-family', 'Times New Roman')
+            .attr('fill', 'black')
+            .attr('pointer-events', 'none');
 
-            const offset = 8;
+          t.append('tspan').attr('font-style', 'italic').attr('font-size', 13).text('w');
 
-            const tx = mx + px * offset;
-            const ty = my + py * offset;
-            let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            if (angle > 90 || angle < -90) {
-              angle += 180;
-            }
+          if (z === layers.length - 2 && layers[layers.length - 1].length === 1) {
+            t.append('tspan')
+              .attr('font-size', 8)
+              .attr('dy', 5)
+              .text(`${i + 1}`);
+            t.append('tspan')
+              .attr('font-size', 8)
+              .attr('dx', -5)
+              .attr('dy', -10)
+              .text(`(${z + 1})`);
+          } else {
+            t.append('tspan')
+              .attr('font-size', 8)
+              .attr('dy', 5)
+              .text(isBiasEdge ? `${j + 1},0` : `${j + 1},${i + 1}`);
 
-            const t = root
-              .append('text')
-              .attr('x', tx)
-              .attr('y', ty)
-              .attr('transform', `rotate(${angle}, ${tx}, ${ty})`)
-              .attr('text-anchor', 'middle')
-              .attr('dominant-baseline', 'middle')
-              .attr('font-family', 'Times New Roman')
-              .attr('fill', 'black');
-
-            t.append('tspan').attr('font-style', 'italic').attr('font-size', 13).text('w');
-
-            if (z === layers.length - 2 && layers[layers.length - 1].length === 1) {
-              t.append('tspan')
-                .attr('font-size', 8)
-                .attr('dy', 5)
-                .text(`${i + 1}`);
-
-              t.append('tspan')
-                .attr('font-size', 8)
-                .attr('dx', -5)
-                .attr('dy', -10)
-                .text(`(${z + 1})`);
-            } else {
-              t.append('tspan')
-                .attr('font-size', 8)
-                .attr('dy', 5)
-                .text(isBiasEdge ? `${j + 1},0` : `${j + 1},${i + 1}`);
-
-              t.append('tspan')
-                .attr('font-size', 8)
-                .attr('dx', -10)
-                .attr('dy', -9)
-                .text(`(${z + 1})`);
-            }
+            t.append('tspan')
+              .attr('font-size', 8)
+              .attr('dx', -10)
+              .attr('dy', -9)
+              .text(`(${z + 1})`);
           }
         }
       }
     }
   }
 
-  // nodes
   for (const layerNodes of layers) {
     for (const node of layerNodes) {
-      if (node.layer !== 'undefined') {
-        const g = root.append('g').attr('transform', `translate(${node.x},${node.y})`);
+      if (node.layer === 'undefined') {
+        continue;
+      }
 
-        g.append('circle')
-          .attr('r', nodeRadius)
-          .attr('class', 'nn-node')
-          .attr(
-            'fill',
-            node.color === 'none'
-              ? node.layerColor === 'none'
-                ? 'white'
-                : getLightenedColor(node.layerColor)
-              : getLightenedColor(node.color)
-          )
-          .attr('stroke', 'black')
-          .attr('stroke-width', 2);
+      const g = componentGroup
+        .append('g')
+        .attr('class', node.isBias ? 'bias' : 'unit')
+        .attr('id', `unit_(${node.layerIndex},${node.nodeIndex})`)
+        .attr('transform', `translate(${node.x},${node.y})`);
 
-        const text = g
-          .append('text')
-          .text(String(node.value))
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-family', 'Arial')
-          .attr('font-size', 13);
+      const circle = g
+        .append('circle')
+        .attr('r', nodeRadius)
+        .style('pointer-events', node.isBias ? 'none' : 'auto')
+        .attr('class', 'nn-node')
+        .attr(
+          'fill',
+          node.color === 'none'
+            ? node.layerColor === 'none'
+              ? 'white'
+              : getLightenedColor(node.layerColor)
+            : getLightenedColor(node.color)
+        )
+        .attr('stroke', 'black')
+        .attr('stroke-width', 2);
 
-        const bbox = (text.node() as SVGTextElement).getBBox();
-        const maxWidth = nodeRadius * 1.6;
-        const maxHeight = nodeRadius * 1.2;
-        const scale = Math.min(maxWidth / bbox.width, maxHeight / bbox.height, 1);
-        text.attr('font-size', (node.isBias ? 12 : 13) * scale);
+      const clipId = `nn-clip-${idSuffix}-${node.layerIndex}-${node.nodeIndex}`;
+      defs.select(`#${clipId}`).remove();
+
+      defs
+        .append('clipPath')
+        .attr('id', clipId)
+        .append('circle')
+        .attr('cx', 0)
+        .attr('cy', 0)
+        .attr('r', nodeRadius - 3);
+
+      const valueStr = String(node.value ?? '');
+
+      const text = g
+        .append('text')
+        .text(valueStr)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-family', 'Arial')
+        .attr('font-size', 13)
+        .attr('clip-path', `url(#${clipId})`)
+        .attr('pointer-events', 'none');
+
+      const maxWidth = nodeRadius * 1.55;
+      const minFont = 7;
+
+      let font = 13;
+      for (let k = 0; k < 20; k++) {
+        const bb = (text.node() as SVGTextElement).getBBox();
+        if (bb.width <= maxWidth || font <= minFont) {
+          break;
+        }
+        font -= 1;
+        text.attr('font-size', font);
+      }
+
+      let s = valueStr;
+      while (s.length > 1) {
+        const bb = (text.node() as SVGTextElement).getBBox();
+        if (bb.width <= maxWidth) {
+          break;
+        }
+        s = s.slice(0, -1);
+        text.text(s + '…');
+      }
+
+      const titleText = valueStr.trim();
+      if (titleText) {
+        circle.append('title').text(titleText);
       }
     }
   }
@@ -272,61 +315,31 @@ export const drawNeuralNetworkDiagram = (
   const allNodes = layers.flat();
   const yMin = Math.min(...allNodes.map((n) => n.y));
   const yMax = Math.max(...allNodes.map((n) => n.y));
-
   const labelGapFromNodes = nodeRadius + 40;
 
-  let labelY: number;
-  if (neuralNetworkDiagram.positionLabels === 'top') {
-    labelY = yMin - labelGapFromNodes;
-  } else {
-    labelY = yMax + labelGapFromNodes;
-  }
-
-  const labelPaddingX = 10;
-  const labelPaddingY = 6;
-
-  const maxBoxW = layerXGap > 0 ? Math.max(40, layerXGap * 0.85) : 200;
-  const minBoxW = Math.max(40, nodeRadius * 2.2);
-  const minBoxH = Math.max(20, nodeRadius * 1.4);
+  const labelY =
+    neuralNetworkDiagram.positionLabels === 'top'
+      ? yMin - labelGapFromNodes
+      : yMax + labelGapFromNodes;
 
   if (neuralNetworkDiagram.showLabels) {
     elements.forEach((layer, layerIndex) => {
-      if (layer.layer !== 'undefined') {
-        const x = layerIndex * layerXGap;
-        const g = root.append('g').attr('transform', `translate(${x}, ${labelY})`);
-
-        const text = g
-          .append('text')
-          .text(String(layer.layer))
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('dominant-baseline', 'middle')
-          .attr('text-anchor', 'middle')
-          .attr('font-family', 'Arial')
-          .attr('font-size', 13);
-
-        const bb = (text.node() as SVGTextElement).getBBox();
-
-        const desiredW = bb.width + labelPaddingX * 2;
-        const desiredH = bb.height + labelPaddingY * 2;
-
-        const boxW = Math.min(maxBoxW, Math.max(minBoxW, desiredW));
-        const boxH = Math.max(minBoxH, desiredH);
-
-        const innerTextMaxW = boxW - labelPaddingX * 2;
-        if (bb.width > innerTextMaxW) {
-          const scale = Math.max(0.6, innerTextMaxW / bb.width);
-          text.attr('font-size', 13 * scale);
-        }
-
-        g.insert('rect', 'text')
-          .attr('x', -boxW / 2)
-          .attr('y', -boxH / 2)
-          .attr('width', boxW)
-          .attr('height', boxH)
-          .attr('fill', 'white')
-          .attr('stroke', 'black');
+      if (layer.layer === 'undefined') {
+        return;
       }
+
+      const x = layerIndex * layerXGap;
+      const gg = componentGroup.append('g').attr('transform', `translate(${x}, ${labelY})`);
+
+      gg.append('text')
+        .text(layer.layer === 'null' ? '' : String(layer.layer))
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('dominant-baseline', 'middle')
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'Arial')
+        .attr('font-size', 17)
+        .attr('pointer-events', 'none');
     });
   }
 };

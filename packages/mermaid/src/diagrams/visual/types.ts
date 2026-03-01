@@ -52,14 +52,119 @@ export interface ArrayDiagram {
   label?: string;
 }
 
-export interface NeuralNetworkDiagram {
-  type: string;
+export interface BlockDiagram {
+  type: 'architecture';
   position?: PositionType;
-  orientation?: string;
+  orientation?: 'TD' | 'LR';
+  title?: string;
+  elements?: Block[];
+  diagram?: Diagram;
+}
+
+export interface Block {
+  name: string;
+  layout?: 'horizontal' | 'vertical' | 'grid';
+  gap?: number;
+  size?: SizeDefinition;
+  color?: string;
+  style?: 'box' | 'rounded';
+  annotations?: Annotation[];
+  nodes?: Node[];
+  groups?: Group[];
+  edges?: Edge[];
+}
+
+export interface Group {
+  name: string;
+  members: string[];
+  layout?: 'horizontal' | 'vertical' | 'grid';
+  anchor?: string;
+  gap?: number;
+  color?: string;
+  annotations?: Annotation[];
+}
+
+export interface Node {
+  type: 'text' | 'rect' | 'circle';
+  name: string;
+  label?: string;
+  labelOrientation?: 'horizontal' | 'vertical';
+  subText?: string;
+  annotations?: Annotation[];
+  size?: SizeDefinition;
+  color?: string;
+  style?: 'box' | 'rounded';
+  stroke?: string;
+}
+
+export interface Edge {
+  name: string;
+  from: EndpointEdge;
+  to: EndpointEdge;
+  style?: 'straight' | 'bow';
+  color?: string;
+  label?: string;
+  arrowheads?: number;
+}
+
+export type EndpointEdge =
+  | {
+      nodeName: string;
+      anchor: 'left' | 'right' | 'top' | 'bottom';
+      portIndex?: number;
+    }
+  | {
+      edgeName: string;
+      edgeAnchor: 'start' | 'mid' | 'end';
+    };
+
+export interface Annotation {
+  side: 'left' | 'right' | 'top' | 'bottom';
+  value: string;
+}
+
+export interface Diagram {
+  layout?: 'horizontal' | 'vertical' | 'grid';
+  gap?: number;
+  uses?: Use[];
+  connections?: Connection[];
+}
+
+export interface Use {
+  name: string;
+  block: string;
+}
+
+export interface Connection {
+  from: EndpointDiagram;
+  to: EndpointDiagram;
+  style?: 'straight' | 'bow';
+  color?: string;
+  label?: string;
+  arrowheads?: number;
+}
+
+export type EndpointDiagram =
+  | {
+      instanceName: string;
+      nodeName: string;
+      anchor: 'left' | 'right' | 'top' | 'bottom';
+      portIndex?: number;
+    }
+  | {
+      instanceName: string;
+      edgeName: string;
+      edgeAnchor: 'start' | 'mid' | 'end';
+    };
+
+export interface NeuralNetworkDiagram {
+  type: 'neural-network';
+  position?: PositionType;
+  orientation?: 'TD' | 'LR';
   title?: string;
   showWeights?: boolean;
   showLabels?: boolean;
-  positionLabels: string;
+  positionLabels: 'top' | 'bottom';
   showArrowheads?: boolean;
   showBias?: boolean;
   elements: NeuralNetworkLayer[];
