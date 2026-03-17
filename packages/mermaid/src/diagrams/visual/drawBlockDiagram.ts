@@ -69,13 +69,12 @@ interface RenderedBlock {
 
 const OUTER_MARGIN = 20;
 const TITLE_HEIGHT = 28;
-const BLOCK_PADDING_X = 18;
-const BLOCK_PADDING_Y = 16;
+const BLOCK_PADDING_X = 38;
+const BLOCK_PADDING_Y = 28;
 const ROW_GAP = 18;
 const NODE_GAP = 20;
 const DIAGRAM_GAP = 80;
 const ANNOTATION_SPACE = 24;
-const BLOCK_RADIUS = 10;
 
 const DEFAULT_CIRCLE = { width: 28, height: 28 };
 const DEFAULT_TEXT = { width: 20, height: 18 };
@@ -97,8 +96,8 @@ const RECT_MIN_HEIGHT = 34;
 const RECT_LINE_HEIGHT = BASE_FONT_SIZE + 2;
 const RECT_SUB_LINE_HEIGHT = BASE_SUB_FONT_SIZE + 1;
 
-const GROUP_PAD_X = 20;
-const GROUP_PAD_Y = 12;
+const GROUP_PAD_X = 33;
+const GROUP_PAD_Y = 30;
 const NODE_EDGE_GAP = 0.6;
 
 const defaultPortCounts = (): Record<Side, number> => ({
@@ -738,6 +737,7 @@ const computeBlockMetrics = (
     if (groupedNodeNames.has(node.name)) {
       continue;
     }
+
     const item = makeNodeItem(node.name);
     if (item) {
       topLevelItems.push(item);
@@ -1260,6 +1260,13 @@ const replacePolylineEnd = (points: Point[], newEnd: Point): Point[] => {
 const isHorizontalSide = (side?: Side) => side === 'left' || side === 'right';
 const isVerticalSide = (side?: Side) => side === 'top' || side === 'bottom';
 
+const getInnerRouteBounds = (box: Box, pad = 14) => ({
+  left: box.x + pad,
+  right: box.x + box.width - pad,
+  top: box.y + pad,
+  bottom: box.y + box.height - pad,
+});
+
 const connectorPoints = (
   start: Point,
   end: Point,
@@ -1269,13 +1276,14 @@ const connectorPoints = (
   startBox?: Box,
   endBox?: Box,
   isFromEdge = false,
-  isToEdge = false
+  isToEdge = false,
+  routeBoundary?: Box
 ): Point[] => {
   if (style === 'straight') {
     return [start, end];
   }
 
-  const SELF_LOOP_STUB = 22;
+  const SELF_LOOP_STUB = 21;
 
   const sameBox =
     !!startBox &&
@@ -1294,24 +1302,27 @@ const connectorPoints = (
     Math.abs(start.y - end.y) < 0.5;
 
   if (sameAnchor) {
+    const stub = SELF_LOOP_STUB;
+
     switch (startSide) {
       case 'top':
-        return dedupePoints([start, { x: start.x, y: start.y - SELF_LOOP_STUB }]);
+        return [start, { x: start.x, y: start.y - stub }];
       case 'bottom':
-        return dedupePoints([start, { x: start.x, y: start.y + SELF_LOOP_STUB }]);
+        return [start, { x: start.x, y: start.y + stub }];
       case 'left':
-        return dedupePoints([start, { x: start.x - SELF_LOOP_STUB, y: start.y }]);
+        return [start, { x: start.x - stub, y: start.y }];
       case 'right':
-        return dedupePoints([start, { x: start.x + SELF_LOOP_STUB, y: start.y }]);
+        return [start, { x: start.x + stub, y: start.y }];
     }
   }
-
   const EXTRA_CLEARANCE = 22;
 
   if (style === 'bow') {
     const bowStartBox = isFromEdge && startBox ? expandBox(startBox, 18, 14) : startBox;
     const bowEndBox = isToEdge && endBox ? expandBox(endBox, 18, 14) : endBox;
     const bounds = getBoundsForBow(start, end, bowStartBox, bowEndBox);
+
+    const inner = routeBoundary ? getInnerRouteBounds(routeBoundary, 14) : undefined;
 
     const clearanceX = bounds.padX;
     const clearanceY = bounds.padY;
@@ -1323,7 +1334,14 @@ const connectorPoints = (
 
     if (!startSide && endSide) {
       if (isHorizontalSide(endSide)) {
-        const corridorX = endSide === 'right' ? bounds.outerRight : bounds.outerLeft;
+        const corridorX = inner
+          ? endSide === 'right'
+            ? inner.right
+            : inner.left
+          : endSide === 'right'
+            ? bounds.outerRight
+            : bounds.outerLeft;
+
         return dedupePoints([
           start,
           { x: corridorX, y: start.y },
@@ -1333,7 +1351,14 @@ const connectorPoints = (
         ]);
       }
 
-      const corridorY = endSide === 'bottom' ? bounds.outerBottom : bounds.outerTop;
+      const corridorY = inner
+        ? endSide === 'bottom'
+          ? inner.bottom
+          : inner.top
+        : endSide === 'bottom'
+          ? bounds.outerBottom
+          : bounds.outerTop;
+
       return dedupePoints([
         start,
         { x: start.x, y: corridorY },
@@ -1345,7 +1370,14 @@ const connectorPoints = (
 
     if (startSide && !endSide) {
       if (isHorizontalSide(startSide)) {
-        const corridorX = startSide === 'right' ? bounds.outerRight : bounds.outerLeft;
+        const corridorX = inner
+          ? startSide === 'right'
+            ? inner.right
+            : inner.left
+          : startSide === 'right'
+            ? bounds.outerRight
+            : bounds.outerLeft;
+
         return dedupePoints([
           start,
           s1,
@@ -1355,7 +1387,14 @@ const connectorPoints = (
         ]);
       }
 
-      const corridorY = startSide === 'bottom' ? bounds.outerBottom : bounds.outerTop;
+      const corridorY = inner
+        ? startSide === 'bottom'
+          ? inner.bottom
+          : inner.top
+        : startSide === 'bottom'
+          ? bounds.outerBottom
+          : bounds.outerTop;
+
       return dedupePoints([start, s1, { x: s1.x, y: corridorY }, { x: end.x, y: corridorY }, end]);
     }
 
@@ -1376,25 +1415,63 @@ const connectorPoints = (
       const topToBottom = startSide === 'top' && endSide === 'bottom';
       const bottomToTop = startSide === 'bottom' && endSide === 'top';
 
-      let corridorY = bounds.outerTop;
+      let corridorY = inner ? inner.top : bounds.outerTop;
       if (bothBottom || bottomToTop) {
-        corridorY = bounds.outerBottom;
+        corridorY = inner ? inner.bottom : bounds.outerBottom;
       }
+      if (topToBottom) {
+        const endStub = 12;
+        const localE1 = endSide ? offsetFromSide(end, endSide, endStub) : end;
 
-      if (topToBottom || bottomToTop) {
+        const gapX = Math.abs((endBox?.x ?? end.x) - (startBox?.x ?? start.x));
+
+        // small local loop => keep tight
+        // large cross-block loop => allow a bit more space, but capped
+        const bendOffset = gapX < 120 ? 14 : gapX < 220 ? 45 : 14;
+
         let bendX: number;
 
         if (startBox && endBox) {
           const startCx = startBox.x + startBox.width / 2;
           const endCx = endBox.x + endBox.width / 2;
 
-          if (startCx < endCx) {
-            bendX = endBox.x - 14;
+          bendX = startCx < endCx ? endBox.x - bendOffset : endBox.x + endBox.width + bendOffset;
+        } else {
+          bendX = end.x < start.x ? end.x - bendOffset : end.x + bendOffset;
+        }
+
+        const startStub = 9;
+        const localS1 = startSide ? offsetFromSide(start, startSide, startStub) : start;
+
+        return dedupePoints([
+          start,
+          localS1,
+          { x: bendX, y: localS1.y },
+          { x: bendX, y: localE1.y },
+          localE1,
+          end,
+        ]);
+      }
+
+      if (bottomToTop) {
+        let bendX: number;
+        if (startBox && endBox) {
+          const startCx = startBox.x + startBox.width / 2;
+          const endCx = endBox.x + endBox.width / 2;
+
+          if (inner) {
+            bendX = startCx < endCx ? inner.left : inner.right;
           } else {
-            bendX = endBox.x + endBox.width + 14;
+            bendX = startCx < endCx ? endBox.x - 14 : endBox.x + endBox.width + 14;
           }
         } else {
-          bendX = end.x < start.x ? bounds.outerLeft : bounds.outerRight;
+          bendX = inner
+            ? end.x < start.x
+              ? inner.left
+              : inner.right
+            : end.x < start.x
+              ? bounds.outerLeft
+              : bounds.outerRight;
         }
 
         const endStub = 13;
@@ -1427,7 +1504,13 @@ const connectorPoints = (
         (startSide === 'right' && endSide === 'left' && start.x < end.x);
 
       if (facesEachOther) {
-        const corridorX = end.x < start.x ? bounds.outerLeft : bounds.outerRight;
+        const corridorX = inner
+          ? end.x < start.x
+            ? inner.left
+            : inner.right
+          : end.x < start.x
+            ? bounds.outerLeft
+            : bounds.outerRight;
         return dedupePoints([
           start,
           s1,
@@ -1438,8 +1521,15 @@ const connectorPoints = (
         ]);
       }
 
-      const corridorX =
-        startSide === 'left' && endSide === 'left'
+      const corridorX = inner
+        ? startSide === 'left' && endSide === 'left'
+          ? inner.left
+          : startSide === 'right' && endSide === 'right'
+            ? inner.right
+            : startSide === 'left' && endSide === 'right'
+              ? inner.left
+              : inner.right
+        : startSide === 'left' && endSide === 'left'
           ? bounds.outerLeft
           : startSide === 'right' && endSide === 'right'
             ? bounds.outerRight
@@ -1901,7 +1991,8 @@ const drawConnector = (
   startBox?: Box,
   endBox?: Box,
   isFromEdge = false,
-  isToEdge = false
+  isToEdge = false,
+  routeBoundary?: Box
 ): RenderedConnector => {
   const color = connector.color ?? 'black';
   const arrowheads = Math.max(0, Math.min(3, connector.arrowheads ?? 1));
@@ -1909,12 +2000,28 @@ const drawConnector = (
   const connectorId = `unit_${unitIndex}`;
 
   const connectorG = group.append('g').attr('class', 'connector').attr('id', connectorId);
+  const isSameAnchorSelfLoop =
+    !!startSide &&
+    !!endSide &&
+    !!startBox &&
+    !!endBox &&
+    startSide === endSide &&
+    Math.abs(start.x - end.x) < 0.75 &&
+    Math.abs(start.y - end.y) < 0.75 &&
+    Math.abs(startBox.x - endBox.x) < 0.75 &&
+    Math.abs(startBox.y - endBox.y) < 0.75 &&
+    Math.abs(startBox.width - endBox.width) < 0.75 &&
+    Math.abs(startBox.height - endBox.height) < 0.75;
 
-  const pathStart = startSide
-    ? insetFromSide(start, startSide, getStartInset(startSide, arrowheads))
-    : start;
+  const pathStart =
+    isSameAnchorSelfLoop || !startSide
+      ? start
+      : insetFromSide(start, startSide, getStartInset(startSide, arrowheads));
 
-  const pathEnd = endSide ? insetFromSide(end, endSide, getEndInset(endSide, arrowheads)) : end;
+  const pathEnd =
+    isSameAnchorSelfLoop || !endSide
+      ? end
+      : insetFromSide(end, endSide, getEndInset(endSide, arrowheads));
 
   const rawPoints = connectorPoints(
     pathStart,
@@ -1925,7 +2032,8 @@ const drawConnector = (
     startBox,
     endBox,
     isFromEdge,
-    isToEdge
+    isToEdge,
+    routeBoundary
   );
 
   let points = rawPoints;
@@ -2072,6 +2180,60 @@ const renderBlockGroupVisuals = (
   }
 };
 
+const getEndpointNodeName = (endpoint: any): string | undefined =>
+  endpoint?.nodeName ? String(endpoint.nodeName) : undefined;
+
+const getBoxArea = (box: Box) => box.width * box.height;
+
+const getSmallestCommonGroupBoundary = (
+  metrics: BlockMetrics,
+  endpoints: any[]
+): Box | undefined => {
+  const nodeNames = endpoints.map(getEndpointNodeName).filter(Boolean) as string[];
+
+  if (!nodeNames.length) {
+    return undefined;
+  }
+
+  let best: Box | undefined;
+  let bestArea = Infinity;
+
+  for (const [groupName, members] of metrics.groupNodeMembers.entries()) {
+    const containsAll = nodeNames.every((nodeName) => members.has(nodeName));
+    if (!containsAll) {
+      continue;
+    }
+
+    const visualBox = metrics.groupVisualBoxes.get(groupName) ?? metrics.groups.get(groupName);
+
+    if (!visualBox || visualBox.width <= 0 || visualBox.height <= 0) {
+      continue;
+    }
+
+    const area = getBoxArea(visualBox);
+    if (area < bestArea) {
+      best = visualBox;
+      bestArea = area;
+    }
+  }
+
+  return best;
+};
+
+const getEdgeRouteBoundary = (metrics: BlockMetrics, fromEndpoint: any, toEndpoint: any): Box => {
+  const groupBoundary = getSmallestCommonGroupBoundary(metrics, [fromEndpoint, toEndpoint]);
+  if (groupBoundary) {
+    return groupBoundary;
+  }
+
+  return {
+    x: metrics.bodyX,
+    y: metrics.bodyY,
+    width: metrics.bodyWidth,
+    height: metrics.bodyHeight,
+  };
+};
+
 const renderBlock = (
   svg: SVG,
   root: d3.Selection<SVGGElement, unknown, any, any>,
@@ -2093,15 +2255,18 @@ const renderBlock = (
     .attr('transform', `translate(${x}, ${y})`);
 
   g.append('rect')
+    .attr('class', 'block-body')
     .attr('x', metrics.bodyX)
     .attr('y', metrics.bodyY)
     .attr('width', metrics.bodyWidth)
     .attr('height', metrics.bodyHeight)
-    .attr('rx', block.style === 'rounded' ? 18 : BLOCK_RADIUS)
-    .attr('ry', block.style === 'rounded' ? 18 : BLOCK_RADIUS)
+    .attr('rx', block.style === 'rounded' ? 14 : 0)
+    .attr('ry', block.style === 'rounded' ? 14 : 0)
     .attr('fill', block.color ?? 'white')
-    .attr('stroke', block.color ?? 'white')
-    .attr('stroke-width', 1.5)
+    .style('stroke', block.color ?? 'white')
+    .style('stroke-width', '1.5px')
+    .style('outline', 'none')
+    .style('filter', 'none')
     .style('pointer-events', 'none');
 
   const groupLayer = g.append('g').attr('class', 'block-groups');
@@ -2150,7 +2315,9 @@ const renderBlock = (
         from = resolveNodeEndpointWithPreferredAxis(rendered, edge.from, to.point.x, undefined);
       }
     }
+
     const unitIndex = unitIndexAllocator.next++;
+    const routeBoundary = getEdgeRouteBoundary(metrics, edge.from, edge.to);
 
     renderedEdges.set(
       edge.name,
@@ -2167,7 +2334,8 @@ const renderBlock = (
         from.box,
         to.box,
         isEdgeEndpoint(edge.from),
-        isEdgeEndpoint(edge.to)
+        isEdgeEndpoint(edge.to),
+        routeBoundary
       )
     );
   }
