@@ -14,10 +14,9 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram | BlockDiagram
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram | BlockDiagram | CNNDiagram 
 ;
 
- 
 BlockDiagram:
   diagramType="architecture" NEWLINE*
   ('position:' position=PositionDefinition NEWLINE*)?
@@ -93,7 +92,7 @@ Nodes:
 
 Node:
    type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('subtext:' subText=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
-   | type=NodeTypeSpecial name=ID ('label:' label=STRING)? 
+   | type=NodeTypeSpecial name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? (annotations+=Annotation)* ('color:' color=STRING)?
   
 ;
 
@@ -112,6 +111,45 @@ Endpoint:
   | edgeName=ID '.' edgeAnchor=EdgeAnchor
 ;
 
+CNNDiagram:
+  diagramType="cnn" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
+  (orientation=Orientation NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
+  (showLabels?="showLabels" NEWLINE*)?
+  (showOpLabels?="showOpLabels" NEWLINE*)?
+  '@' NEWLINE*
+  stages+=CNNStage* NEWLINE*
+  groups+=CNNGroup* NEWLINE*
+  '@' NEWLINE*
+;
+
+CNNStage:
+   type=CNNStageTypeSpecial '{' 'shape:' shape=CNNShapeSpecial ',' 'kernelSize:' kernelSize=KernelSizeFormat (',' 'label:' label=STRING)? (',' 'subTextLabel:' subTextLabel=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'subTextOpLabel:' subTextOpLabel=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
+   | type=CNNStageType '{' 'shape:' shape=CNNShape (',' 'label:' label=STRING)? (',' 'subTextLabel:' subTextLabel=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'subTextOpLabel:' subTextOpLabel=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
+;
+
+CNNGroup:
+ type=CNNGroupType '{' 'from:' from=NUMBER ',' 'to:' to=NUMBER (',' 'label:' label=STRING)? (',' 'position:' position=CNNGroupPosition)? '}' NEWLINE* 
+
+;
+
+CNNColor:
+   color=STRING | '{' color+=STRING (',' color+=STRING)* '}'
+;
+
+CNNShapeSpecial:
+   shape3D=Shape3D 
+;
+
+CNNShape:
+   shape2D=Shape2D | '{' layers+=CNNNeurons (',' layers+=CNNNeurons)* '}'
+;
+
+CNNNeurons: 
+   neurons=NUMBER (':' '{' labels+=STRING (',' labels+=STRING)* '}')?
+;
+
 NeuralNetworkDiagram:
   diagramType="neural-network" NEWLINE*
   ('position:' position=PositionDefinition NEWLINE*)?
@@ -128,11 +166,11 @@ NeuralNetworkDiagram:
 ;
 
 NeuralNetworkLayer:
-   layer=Layer ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement* NEWLINE* 
+   layer=Value ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement* NEWLINE* 
 ;
 
 NeuralNetworkElement:
-   value=Value2 ('{' 'color:' color=STRING '}')?
+   value=Value ('{' 'color:' color=STRING '}')?
 ;
 
 ArrayDiagram:
@@ -252,8 +290,6 @@ TreeChildDefinition:
   type='child:' '(' parent=NodeID ',' child=NodeID ')' NEWLINE*
 ;
 
-
-
 LinkedListDiagram:
   diagramType="linkedList" NEWLINE*
   ('position:' position=PositionDefinition NEWLINE*)?
@@ -303,14 +339,6 @@ Value returns string:
   NUMBER | ID | STRING | 'null' | '\\null'
 ;
 
-Value2 returns string:
-   NUMBER | ID | STRING | 'null' 
-;
-
-Layer returns string:
-   NUMBER | ID | STRING | 'null'
-;
-
 SizeDefinition:
   '(' width=NUMBER ',' height=NUMBER ')'
 ;
@@ -327,8 +355,8 @@ PositionRange:
   single=NUMBER | (start=NUMBER '..' end=NUMBER)
 ;
 
-
-
+terminal CNN_SHAPE_3D: /[0-9]+x[0-9]+x[0-9]+/;
+terminal CNN_SHAPE_2D: /[0-9]+x[0-9]+/;
 terminal NUMBER returns number: /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?/;
 terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
 terminal STRING: /"([^"\\]|\\.)*"/;
@@ -372,15 +400,41 @@ EdgeAnchor returns string:
   'start' | 'mid' | 'end' 
 ;
 
-
 EdgeStyle returns string:
   'straight' | 'bow'
 ;
 
-Side returns string :
+Side returns string:
   'left' | 'top' | 'right' | 'bottom'
 ;
 
+CNNGroupPosition returns string: 
+  'top' | 'bottom'
+;
+
+CNNGroupType returns string: 
+  'bracket' | 'brace'
+;
+
+KernelSizeFormat returns string: 
+  'null' | CNN_SHAPE_2D
+;
+
+CNNStageTypeSpecial returns string: 
+  'stacked'
+;
+
+CNNStageType returns string: 
+  'flatten' | 'fullyConnected'
+;
+
+Shape3D returns string:
+  CNN_SHAPE_3D
+;
+
+Shape2D returns string:
+  CNN_SHAPE_2D
+;
 
 fragment TitleAndAccessibilities:
   ((accDescr=ACC_DESCR | accTitle=ACC_TITLE | title=TITLE) EOL)+
@@ -394,7 +448,6 @@ terminal NEWLINE: /\r?\n/;
 terminal ACC_DESCR: /[\t ]*accDescr(?:[\t ]*:([^\n\r]*?(?=%%)|[^\n\r]*)|\s*{([^}]*)})/;
 terminal ACC_TITLE: /[\t ]*accTitle[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)/;
 terminal TITLE: /[\t ]*title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|)/;
-
 hidden terminal WHITESPACE: /[\t ]+/;
 hidden terminal YAML: /---[\t ]*\r?\n(?:[\S\s]*?\r?\n)?---(?:\r?\n|(?!\S))/;
 hidden terminal DIRECTIVE: /[\t ]*%%{[\S\s]*?}%%(?:\r?\n|(?!\S))/;

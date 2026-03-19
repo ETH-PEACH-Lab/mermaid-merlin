@@ -2,6 +2,7 @@ import type * as d3 from 'd3';
 import type { Annotation, Block, BlockDiagram, Connection, Edge, Node } from './types.js';
 import type { ArchitectureDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
+import { getLightenedColor, safeColorName } from './getColor.js';
 
 interface Point {
   x: number;
@@ -67,6 +68,27 @@ interface RenderedBlock {
   toGlobal: (point: Point) => Point;
 }
 
+type LayoutKind = 'horizontal' | 'vertical' | 'grid';
+interface LayoutItem {
+  kind: 'node' | 'group';
+  name: string;
+  width: number;
+  height: number;
+  alignX: number;
+  alignY: number;
+  apply: (x: number, y: number) => void;
+}
+
+interface ResolvedGroup {
+  name: string;
+  width: number;
+  height: number;
+  alignY: number;
+  alignX: number;
+  nodeMembers: Set<string>;
+  apply: (x: number, y: number) => void;
+}
+
 const OUTER_MARGIN = 20;
 const TITLE_HEIGHT = 28;
 const BLOCK_PADDING_X = 38;
@@ -100,16 +122,14 @@ const GROUP_PAD_X = 33;
 const GROUP_PAD_Y = 30;
 const NODE_EDGE_GAP = 0.6;
 
+const FIXED_PORT_SLOTS = 5;
+const FIXED_PORT_EDGE_PADDING = 3;
+
 const defaultPortCounts = (): Record<Side, number> => ({
   left: 1,
   right: 1,
   top: 1,
   bottom: 1,
-});
-
-const parsePosition = (position: any): Point => ({
-  x: Number(position?.x ?? 0) || 0,
-  y: Number(position?.y ?? 0) || 0,
 });
 
 const parseSize = (
@@ -241,11 +261,6 @@ const getAnnotationMap = (annotations?: Annotation[]) => {
   return map;
 };
 
-const computeGrid = (count: number) => {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
-  return { cols, rows: Math.max(1, Math.ceil(count / cols)) };
-};
-
 const arrangeBoxes = (
   widths: number[],
   heights: number[],
@@ -274,7 +289,8 @@ const arrangeBoxes = (
     return { boxes, width: maxWidth, height: heights.length ? y - gap : 0 };
   }
 
-  const { cols, rows } = computeGrid(widths.length);
+  const cols = Math.max(1, Math.ceil(Math.sqrt(widths.length)));
+  const rows = Math.max(1, Math.ceil(widths.length / cols));
   const cellWidth = widths.reduce((m, w) => Math.max(m, w), 0);
   const cellHeight = heights.reduce((m, h) => Math.max(m, h), 0);
 
@@ -363,13 +379,6 @@ const getPaddedVisualBox = (box: Box, clip: Box): Box => {
   };
 };
 
-const getRectFixedSlotX = (box: Box, portIndex: number) =>
-  getFixedSlotCoordinate(
-    box.x + FIXED_PORT_EDGE_PADDING,
-    box.x + box.width - FIXED_PORT_EDGE_PADDING,
-    portIndex
-  );
-
 const computeBlockMetrics = (
   block: Block,
   externalPortCounts?: Map<string, Record<Side, number>>
@@ -422,7 +431,11 @@ const computeBlockMetrics = (
         continue;
       }
 
-      const targetX = getRectFixedSlotX(toBox, Number(to.portIndex));
+      const targetX = getFixedSlotCoordinate(
+        toBox.x + FIXED_PORT_EDGE_PADDING,
+        toBox.x + toBox.width - FIXED_PORT_EDGE_PADDING,
+        Number(to.portIndex)
+      );
       nodeBoxes.set(from.nodeName, {
         ...fromBox,
         x: targetX - fromSize.width / 2,
@@ -468,27 +481,6 @@ const computeBlockMetrics = (
   const annotations = getAnnotationMap(block.annotations);
   const outerLayout = block.layout ?? 'vertical';
   const defaultGap = block.gap ?? ROW_GAP;
-
-  type LayoutKind = 'horizontal' | 'vertical' | 'grid';
-  interface LayoutItem {
-    kind: 'node' | 'group';
-    name: string;
-    width: number;
-    height: number;
-    alignX: number;
-    alignY: number;
-    apply: (x: number, y: number) => void;
-  }
-
-  interface ResolvedGroup {
-    name: string;
-    width: number;
-    height: number;
-    alignY: number;
-    alignX: number;
-    nodeMembers: Set<string>;
-    apply: (x: number, y: number) => void;
-  }
 
   const groupMap = new Map(groups.map((g) => [g.name, g]));
   const resolvedGroups = new Map<string, ResolvedGroup>();
@@ -838,6 +830,7 @@ const buildDiagramPortCounts = (connections: Connection[]) => {
 const ensureDefs = (svg: SVG, componentId: number | string, color: string) => {
   const idSuffix = String(componentId).replace(/[^\w-]/g, '_');
   const colorSuffix = String(color).replace(/[^\w-]/g, '_');
+
   const defsId = `arch-defs-${idSuffix}`;
   const arrowId = `nn-arrowhead-${idSuffix}-${colorSuffix}`;
 
@@ -851,17 +844,17 @@ const ensureDefs = (svg: SVG, componentId: number | string, color: string) => {
       .append('marker')
       .attr('id', arrowId)
       .attr('viewBox', '0 0 10 10')
-      .attr('refX', 6.05)
+      .attr('refX', 6.5)
       .attr('refY', 5)
       .attr('markerWidth', 4)
       .attr('markerHeight', 4)
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-      .attr('fill', color);
+      .attr('fill', 'context-stroke');
   }
 
-  return arrowId;
+  return { arrowId };
 };
 const shouldPreferVerticalPortAlignment = (edge: Edge) => {
   const from = edge.from as any;
@@ -873,9 +866,6 @@ const shouldPreferVerticalPortAlignment = (edge: Edge) => {
       (from.anchor === 'bottom' && to.anchor === 'top'))
   );
 };
-
-const FIXED_PORT_SLOTS = 5;
-const FIXED_PORT_EDGE_PADDING = 3;
 
 const getFixedSlotCoordinate = (start: number, end: number, portIndex: number) => {
   const index = Math.max(0, Math.min(FIXED_PORT_SLOTS - 1, portIndex));
@@ -1134,6 +1124,26 @@ const getBestLabelSegment = (
   return { a: best.a, b: best.b, vertical: best.vertical };
 };
 
+const getVerticalLabelSide = (startSide?: Side, endSide?: Side): 'left' | 'right' => {
+  if (startSide === 'left' || endSide === 'left') {
+    return 'left';
+  }
+  if (startSide === 'right' || endSide === 'right') {
+    return 'right';
+  }
+  return 'right';
+};
+
+const getHorizontalLabelSide = (startSide?: Side, endSide?: Side): 'top' | 'bottom' => {
+  if (startSide === 'top' || endSide === 'top') {
+    return 'top';
+  }
+  if (startSide === 'bottom' || endSide === 'bottom') {
+    return 'bottom';
+  }
+  return 'top';
+};
+
 const getLabelPosition = (points: Point[], label: string, startSide?: Side, endSide?: Side) => {
   const best = getBestLabelSegment(points, startSide, endSide);
   const fallback = polylineMidpoint(points);
@@ -1147,18 +1157,43 @@ const getLabelPosition = (points: Point[], label: string, startSide?: Side, endS
     };
   }
 
-  const mid = { x: (best.a.x + best.b.x) / 2, y: (best.a.y + best.b.y) / 2 };
+  const mid = {
+    x: (best.a.x + best.b.x) / 2,
+    y: (best.a.y + best.b.y) / 2,
+  };
 
-  return best.vertical
+  if (best.vertical) {
+    const side = getVerticalLabelSide(startSide, endSide);
+    const offset = 8;
+
+    return side === 'left'
+      ? {
+          x: mid.x - offset,
+          y: mid.y,
+          textAnchor: 'end' as const,
+          dominantBaseline: 'middle' as const,
+        }
+      : {
+          x: mid.x + offset,
+          y: mid.y,
+          textAnchor: 'start' as const,
+          dominantBaseline: 'middle' as const,
+        };
+  }
+
+  const side = getHorizontalLabelSide(startSide, endSide);
+  const offset = 8;
+
+  return side === 'bottom'
     ? {
-        x: mid.x + 6,
-        y: mid.y + 1,
-        textAnchor: 'start' as const,
-        dominantBaseline: 'middle' as const,
+        x: mid.x,
+        y: mid.y + offset,
+        textAnchor: 'middle' as const,
+        dominantBaseline: 'hanging' as const,
       }
     : {
         x: mid.x,
-        y: mid.y - 8,
+        y: mid.y - offset,
         textAnchor: 'middle' as const,
         dominantBaseline: 'auto' as const,
       };
@@ -1425,8 +1460,6 @@ const connectorPoints = (
 
         const gapX = Math.abs((endBox?.x ?? end.x) - (startBox?.x ?? start.x));
 
-        // small local loop => keep tight
-        // large cross-block loop => allow a bit more space, but capped
         const bendOffset = gapX < 120 ? 14 : gapX < 220 ? 45 : 14;
 
         let bendX: number;
@@ -1703,26 +1736,11 @@ const drawNode = (
 
   const rawLabel = node.label ?? '';
   const subText = node.subText ?? '';
-  const defaultStroke = node.stroke ?? 'black';
-  const defaultFill = node.color ?? 'white';
+  const defaultStroke = safeColorName(node.stroke, 'black');
+  const defaultFill = getLightenedColor(node.color) ?? 'white';
   const defaultStyle = node.style ?? 'box';
 
   const innerBox = { x: 0, y: 0, width: box.width, height: box.height };
-
-  const annotationMap = getAnnotationMap(node.annotations);
-  for (const side of SIDES) {
-    const annotation = annotationMap[side];
-    if (annotation) {
-      drawSideAnnotation(
-        g.append('text'),
-        side,
-        innerBox,
-        annotation.value,
-        side === 'bottom' ? 12 : 4,
-        NODE_ANNOTATION_FONT_SIZE
-      );
-    }
-  }
 
   if (node.type === 'rect') {
     g.append('rect')
@@ -1758,15 +1776,38 @@ const drawNode = (
       .attr('fill', 'transparent')
       .style('pointer-events', 'all');
 
-    g.append('text')
-      .attr('x', innerBox.x + innerBox.width / 2)
-      .attr('y', innerBox.y + innerBox.height / 2)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('font-style', 'italic')
-      .attr('font-size', TEXT_NODE_FONT_SIZE)
-      .style('pointer-events', 'none')
-      .text(node.label ?? '');
+    const textGroup = g.append('g');
+
+    if (node.labelOrientation === 'vertical') {
+      textGroup.attr(
+        'transform',
+        `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(-90)`
+      );
+
+      textGroup
+        .append('text')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-style', 'italic')
+        .attr('fill', safeColorName(node.color, 'black'))
+        .attr('font-size', TEXT_NODE_FONT_SIZE)
+        .style('pointer-events', 'none')
+        .text(node.label ?? '');
+    } else {
+      textGroup
+        .append('text')
+        .attr('x', innerBox.x + innerBox.width / 2)
+        .attr('y', innerBox.y + innerBox.height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-style', 'italic')
+        .attr('fill', safeColorName(node.color, 'black'))
+        .attr('font-size', TEXT_NODE_FONT_SIZE)
+        .style('pointer-events', 'none')
+        .text(node.label ?? '');
+    }
 
     return;
   }
@@ -1830,7 +1871,29 @@ const drawNode = (
   const subLines = subText ? wrapTextLines(subText, availableWidth, BASE_SUB_FONT_SIZE) : [];
   renderCenteredTextLines(textGroup, labelLines, subLines, innerBox);
 };
+const drawNodeAnnotations = (
+  layer: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box
+) => {
+  const annotationMap = getAnnotationMap(node.annotations);
 
+  for (const side of SIDES) {
+    const annotation = annotationMap[side];
+    if (!annotation) {
+      continue;
+    }
+
+    drawSideAnnotation(
+      layer.append('text'),
+      side,
+      box,
+      annotation.value,
+      side === 'bottom' ? 12 : 4,
+      NODE_ANNOTATION_FONT_SIZE
+    );
+  }
+};
 const drawGroupAnnotation = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   side: Side,
@@ -1884,6 +1947,7 @@ const getEndpointPortInfo = (rendered: RenderedBlock, endpoint: any) => {
 
   return { anchor, portIndex, box, portCount, nodeType, nodeStyle };
 };
+
 const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedEndpoint => {
   if (isEdgeEndpoint(endpoint)) {
     const edge = rendered.edges.get(endpoint.edgeName);
@@ -1895,6 +1959,9 @@ const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedE
     }
     if (endpoint.edgeAnchor === 'end') {
       return { point: edge.end, box: edge.bounds };
+    }
+    if (endpoint.edgeAnchor === 'mid') {
+      return { point: edge.mid, box: edge.bounds };
     }
     return { point: edge.mid, box: edge.bounds };
   }
@@ -1922,7 +1989,7 @@ const getStartInset = (side?: Side, arrowheads = 1) => {
   if (arrowheads > 1) {
     switch (side) {
       case 'top':
-        return -1.0;
+        return 0;
       case 'right':
         return -0.9;
       case 'bottom':
@@ -1936,7 +2003,7 @@ const getStartInset = (side?: Side, arrowheads = 1) => {
 
   switch (side) {
     case 'top':
-      return -0.6;
+      return 0;
     case 'right':
       return -0.1;
     case 'bottom':
@@ -1985,7 +2052,7 @@ const drawConnector = (
   start: Point,
   end: Point,
   componentId: number | string,
-  unitIndex: number,
+  unitId: string,
   startSide?: Side,
   endSide?: Side,
   startBox?: Box,
@@ -1994,12 +2061,11 @@ const drawConnector = (
   isToEdge = false,
   routeBoundary?: Box
 ): RenderedConnector => {
-  const color = connector.color ?? 'black';
+  const color = safeColorName(connector.color, 'black');
   const arrowheads = Math.max(0, Math.min(3, connector.arrowheads ?? 1));
-  const arrowId = ensureDefs(svg, componentId, color);
-  const connectorId = `unit_${unitIndex}`;
+  const { arrowId } = ensureDefs(svg, componentId, color);
 
-  const connectorG = group.append('g').attr('class', 'connector').attr('id', connectorId);
+  const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
   const isSameAnchorSelfLoop =
     !!startSide &&
     !!endSide &&
@@ -2042,15 +2108,27 @@ const drawConnector = (
   if (arrowheads <= 1 || !endSide) {
     points = trimPolylineEnd(rawPoints, arrowheads === 0 ? 0 : 3);
 
-    const path = connectorG
+    connectorG
       .append('path')
       .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 0))
       .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 1.7)
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 8)
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'butt')
-      .attr('color', color);
+      .attr('pointer-events', 'stroke');
+
+    const path = connectorG
+      .append('path')
+      .attr('data-arrow-id', arrowId)
+      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 0))
+      .attr('fill', 'none')
+      .attr('stroke', safeColorName(color, 'black'))
+      .attr('stroke-width', 2.0)
+      .attr('stroke-linejoin', 'round')
+      .attr('stroke-linecap', 'butt')
+      .attr('color', safeColorName(color, 'black'))
+      .attr('pointer-events', 'none');
 
     if (arrowheads === 1) {
       path.attr('marker-end', `url(#${arrowId})`);
@@ -2064,11 +2142,23 @@ const drawConnector = (
       .append('path')
       .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 18))
       .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 1.7)
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 8)
       .attr('stroke-linejoin', 'round')
       .attr('stroke-linecap', 'round')
-      .attr('color', color);
+      .attr('pointer-events', 'stroke');
+
+    connectorG
+      .append('path')
+      .attr('data-arrow-id', arrowId)
+      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 18))
+      .attr('fill', 'none')
+      .attr('stroke', safeColorName(color, 'black'))
+      .attr('stroke-width', 2.0)
+      .attr('stroke-linejoin', 'round')
+      .attr('stroke-linecap', 'butt')
+      .attr('color', safeColorName(color, 'black'))
+      .attr('pointer-events', 'none');
 
     for (const branch of fan.branches) {
       const forkPoints =
@@ -2080,12 +2170,24 @@ const drawConnector = (
         .append('path')
         .attr('d', roundedPolylinePath(forkPoints, 22))
         .attr('fill', 'none')
-        .attr('stroke', color)
-        .attr('stroke-width', 1.7)
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', 8)
         .attr('stroke-linejoin', 'round')
         .attr('stroke-linecap', 'round')
-        .attr('color', color)
-        .attr('marker-end', `url(#${arrowId})`);
+        .attr('pointer-events', 'stroke');
+
+      connectorG
+        .append('path')
+        .attr('data-arrow-id', arrowId)
+        .attr('d', roundedPolylinePath(forkPoints, 22))
+        .attr('fill', 'none')
+        .attr('stroke', safeColorName(color, 'black'))
+        .attr('stroke-width', 2.0)
+        .attr('stroke-linejoin', 'stroke')
+        .attr('stroke-linecap', 'round')
+        .attr('color', safeColorName(color, 'black'))
+        .attr('marker-end', `url(#${arrowId})`)
+        .attr('pointer-events', 'none');
     }
 
     mid = polylineMidpoint(points);
@@ -2145,45 +2247,40 @@ const renderBlockGroupVisuals = (
   metrics: BlockMetrics,
   groupDefs: Block['groups'],
   groupBackgroundLayer: d3.Selection<SVGGElement, unknown, any, any>,
-  groupAnnotationLayer: d3.Selection<SVGGElement, unknown, any, any>
+  blockIndex: number,
+  nodeCount: number,
+  edgeCount: number
 ) => {
-  for (const groupDef of groupDefs ?? []) {
+  for (const [groupIdx, groupDef] of (groupDefs ?? []).entries()) {
     const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
     if (!visualBox || visualBox.width <= 0 || visualBox.height <= 0) {
       continue;
     }
 
-    if (groupDef.color) {
-      groupBackgroundLayer
-        .append('rect')
-        .attr('x', visualBox.x)
-        .attr('y', visualBox.y)
-        .attr('width', visualBox.width)
-        .attr('height', visualBox.height)
-        .attr('rx', 14)
-        .attr('ry', 14)
-        .attr('fill', groupDef.color)
-        .attr('stroke', 'none');
-    }
+    const localIndex = nodeCount + edgeCount + groupIdx;
+    const unitId = `unit_(${blockIndex},${localIndex})`;
 
-    const annotationMap = metrics.groupAnnotations.get(groupDef.name);
-    if (!annotationMap) {
-      continue;
-    }
+    const groupUnit = groupBackgroundLayer
+      .append('g')
+      .attr('class', 'unit')
+      .attr('id', unitId)
+      .style('pointer-events', 'auto');
 
-    for (const side of SIDES) {
-      const annotation = annotationMap[side];
-      if (annotation) {
-        drawGroupAnnotation(groupAnnotationLayer, side, annotation, visualBox);
-      }
-    }
+    groupUnit
+      .append('rect')
+      .attr('x', visualBox.x)
+      .attr('y', visualBox.y)
+      .attr('width', visualBox.width)
+      .attr('height', visualBox.height)
+      .attr('rx', 14)
+      .attr('ry', 14)
+      .attr('fill', safeColorName(groupDef.color, 'transparent'))
+      .attr('stroke-width', 1)
+      .style('pointer-events', 'auto');
   }
 };
-
 const getEndpointNodeName = (endpoint: any): string | undefined =>
   endpoint?.nodeName ? String(endpoint.nodeName) : undefined;
-
-const getBoxArea = (box: Box) => box.width * box.height;
 
 const getSmallestCommonGroupBoundary = (
   metrics: BlockMetrics,
@@ -2210,7 +2307,7 @@ const getSmallestCommonGroupBoundary = (
       continue;
     }
 
-    const area = getBoxArea(visualBox);
+    const area = visualBox.width * visualBox.height;
     if (area < bestArea) {
       best = visualBox;
       bestArea = area;
@@ -2248,10 +2345,12 @@ const renderBlock = (
 ): RenderedBlock => {
   const metrics = computeBlockMetrics(block, externalPortCounts);
 
+  const blockUnitId = `unit_${unitIndexAllocator.next++}`;
+
   const g = root
     .append('g')
-    .attr('class', `block ${block.name}`)
-    .style('pointer-events', 'none')
+    .attr('class', 'unit')
+    .attr('id', blockUnitId)
     .attr('transform', `translate(${x}, ${y})`);
 
   g.append('rect')
@@ -2262,18 +2361,33 @@ const renderBlock = (
     .attr('height', metrics.bodyHeight)
     .attr('rx', block.style === 'rounded' ? 14 : 0)
     .attr('ry', block.style === 'rounded' ? 14 : 0)
-    .attr('fill', block.color ?? 'white')
-    .style('stroke', block.color ?? 'white')
+    .attr('fill', safeColorName(block.color, 'transparent'))
+    .style('stroke', safeColorName(block.color, 'transparent'))
     .style('stroke-width', '1.5px')
     .style('outline', 'none')
     .style('filter', 'none')
-    .style('pointer-events', 'none');
+    .style('pointer-events', 'all');
 
   const groupLayer = g.append('g').attr('class', 'block-groups');
   const groupBackgroundLayer = groupLayer.append('g').attr('class', 'group-backgrounds');
-  const groupAnnotationLayer = groupLayer.append('g').attr('class', 'group-annotations');
+  const nodeLayer = g.append('g').attr('class', 'block-nodes');
+  const edgeLayer = g.append('g').attr('class', 'block-edges');
+  const annotationLayer = g.append('g').attr('class', 'block-annotations');
+
   const renderedNodes = new Map<string, RenderedNode>();
   const renderedEdges = new Map<string, RenderedConnector>();
+
+  const nodeCount = block.nodes?.length ?? 0;
+  const edgeCount = block.edges?.length ?? 0;
+
+  renderBlockGroupVisuals(
+    metrics,
+    block.groups,
+    groupBackgroundLayer,
+    blockIndex,
+    nodeCount,
+    edgeCount
+  );
 
   for (const [nodeIndex, node] of (block.nodes ?? []).entries()) {
     const box = metrics.nodes.get(node.name);
@@ -2281,11 +2395,9 @@ const renderBlock = (
       continue;
     }
 
-    drawNode(g, node, box, blockIndex, nodeIndex);
+    drawNode(nodeLayer, node, box, blockIndex, nodeIndex);
     renderedNodes.set(node.name, { def: node, box });
   }
-  renderBlockGroupVisuals(metrics, block.groups, groupBackgroundLayer, groupAnnotationLayer);
-
   const rendered: RenderedBlock = {
     def: block,
     x,
@@ -2298,10 +2410,34 @@ const renderBlock = (
     toGlobal: (point: Point) => ({ x: x + point.x, y: y + point.y }),
   };
 
-  const edgeLayer = g.append('g').attr('class', 'block-edges');
-  for (const edge of block.edges ?? []) {
+  for (const [edgeIndex, edge] of (block.edges ?? []).entries()) {
     let from = resolveLocalEndpoint(rendered, edge.from);
     let to = resolveLocalEndpoint(rendered, edge.to);
+
+    const fromIsEdgeMid = (edge.from as any)?.edgeAnchor === 'mid';
+    const toIsEdgeMid = (edge.to as any)?.edgeAnchor === 'mid';
+
+    if (fromIsEdgeMid) {
+      const offsetX = to.point.x < from.point.x ? -1 : 1;
+      from = {
+        ...from,
+        point: {
+          x: from.point.x + offsetX,
+          y: from.point.y,
+        },
+      };
+    }
+
+    if (toIsEdgeMid) {
+      const offsetX = from.point.x < to.point.x ? -28 : 28;
+      to = {
+        ...to,
+        point: {
+          x: to.point.x + offsetX,
+          y: to.point.y,
+        },
+      };
+    }
 
     if (shouldPreferVerticalPortAlignment(edge)) {
       const fromAny = edge.from as any;
@@ -2316,7 +2452,7 @@ const renderBlock = (
       }
     }
 
-    const unitIndex = unitIndexAllocator.next++;
+    const unitId = `unit_(${blockIndex},${nodeCount + edgeIndex})`;
     const routeBoundary = getEdgeRouteBoundary(metrics, edge.from, edge.to);
 
     renderedEdges.set(
@@ -2328,7 +2464,7 @@ const renderBlock = (
         from.point,
         to.point,
         componentId,
-        unitIndex,
+        unitId,
         from.side,
         to.side,
         from.box,
@@ -2340,10 +2476,35 @@ const renderBlock = (
     );
   }
 
+  for (const node of block.nodes ?? []) {
+    const box = metrics.nodes.get(node.name);
+    if (!box) {
+      continue;
+    }
+
+    drawNodeAnnotations(annotationLayer, node, box);
+  }
+
+  for (const groupDef of block.groups ?? []) {
+    const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
+    const annotationMap = metrics.groupAnnotations.get(groupDef.name);
+
+    if (!visualBox || !annotationMap) {
+      continue;
+    }
+
+    for (const side of SIDES) {
+      const annotation = annotationMap[side];
+      if (annotation) {
+        drawGroupAnnotation(annotationLayer, side, annotation, visualBox);
+      }
+    }
+  }
+
   for (const side of SIDES) {
     const annotation = metrics.annotations[side];
     if (annotation) {
-      drawAnnotation(g, side, annotation, metrics);
+      drawAnnotation(annotationLayer, side, annotation, metrics);
     }
   }
 
@@ -2465,6 +2626,10 @@ export const drawBlockDiagram = (
   component_id: number | string
 ) => {
   svg.selectAll('*').remove();
+  const parsePosition = (position: any): Point => ({
+    x: Number(position?.x ?? 0) || 0,
+    y: Number(position?.y ?? 0) || 0,
+  });
 
   const position = parsePosition(blockDiagram.position);
   const elements = blockDiagram.elements ?? [];
@@ -2540,7 +2705,6 @@ export const drawBlockDiagram = (
   const componentGroup = root
     .append('g')
     .attr('class', 'component')
-    .style('pointer-events', 'none')
     .attr('id', `component_${component_id}`);
 
   const instances = new Map<string, RenderedBlock[]>();
@@ -2572,9 +2736,34 @@ export const drawBlockDiagram = (
       const fromEndpoints = resolveDiagramEndpoints(instances, connection.from);
       const toEndpoints = resolveDiagramEndpoints(instances, connection.to);
 
-      for (const from of fromEndpoints) {
-        for (const to of toEndpoints) {
-          const unitIndex = unitIndexAllocator.next++;
+      for (let from of fromEndpoints) {
+        for (let to of toEndpoints) {
+          const fromIsEdgeMid = (connection.from as any)?.edgeAnchor === 'mid';
+          const toIsEdgeMid = (connection.to as any)?.edgeAnchor === 'mid';
+
+          if (fromIsEdgeMid) {
+            const offsetX = to.point.x < from.point.x ? -28 : 28;
+            from = {
+              ...from,
+              point: {
+                x: from.point.x + offsetX,
+                y: from.point.y,
+              },
+            };
+          }
+
+          if (toIsEdgeMid) {
+            const offsetX = from.point.x < to.point.x ? -28 : 28;
+            to = {
+              ...to,
+              point: {
+                x: to.point.x + offsetX,
+                y: to.point.y,
+              },
+            };
+          }
+
+          const unitId = `unit_${unitIndexAllocator.next++}`;
 
           drawConnector(
             svg,
@@ -2583,7 +2772,7 @@ export const drawBlockDiagram = (
             from.point,
             to.point,
             component_id,
-            unitIndex,
+            unitId,
             from.side,
             to.side,
             from.box,

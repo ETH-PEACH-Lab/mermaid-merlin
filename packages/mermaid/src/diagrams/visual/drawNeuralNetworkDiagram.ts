@@ -1,7 +1,7 @@
 import type { NeuralNetworkDiagram, NeuralNetworkLayer, NeuralNetworkElement } from './types.js';
 import type { NeuralNetworkDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getLightenedColor } from './getColor.js';
+import { getLightenedColor, safeColorName } from './getColor.js';
 import * as d3 from 'd3';
 
 interface NodePos {
@@ -12,7 +12,7 @@ interface NodePos {
   x: number;
   y: number;
   value: string | number;
-  color?: string;
+  color: string;
   context?: string;
   arrow?: boolean;
   isBias?: boolean;
@@ -118,7 +118,7 @@ export const drawNeuralNetworkDiagram = (
         nodeIndex,
         x,
         y: ys[nodeIndex],
-        value: item.value == 'null' ? '' : item.value,
+        value: item.value === '\\null' ? 'null' : item.value === 'null' ? '' : item.value,
         color: item.color,
         isBias: false,
       })
@@ -242,20 +242,23 @@ export const drawNeuralNetworkDiagram = (
         .attr('class', node.isBias ? 'bias' : 'unit')
         .attr('id', `unit_(${node.layerIndex},${node.nodeIndex})`)
         .attr('transform', `translate(${node.x},${node.y})`);
-
+      const color = (nodeColor: string, layerColor: string) => {
+        if (nodeColor === 'none' && layerColor === 'none') {
+          return 'white';
+        } else if (nodeColor === 'none' && layerColor !== 'none') {
+          return getLightenedColor(safeColorName(layerColor, 'white'));
+        } else if (nodeColor !== 'none' && layerColor === 'none') {
+          return getLightenedColor(safeColorName(nodeColor, 'white'));
+        } else {
+          return getLightenedColor(safeColorName(nodeColor, safeColorName(layerColor, 'white')));
+        }
+      };
       const circle = g
         .append('circle')
         .attr('r', nodeRadius)
         .style('pointer-events', node.isBias ? 'none' : 'auto')
         .attr('class', 'nn-node')
-        .attr(
-          'fill',
-          node.color === 'none'
-            ? node.layerColor === 'none'
-              ? 'white'
-              : getLightenedColor(node.layerColor)
-            : getLightenedColor(node.color)
-        )
+        .attr('fill', color(node.color, node.layerColor))
         .attr('stroke', 'black')
         .attr('stroke-width', 2);
 
@@ -324,15 +327,23 @@ export const drawNeuralNetworkDiagram = (
 
   if (neuralNetworkDiagram.showLabels) {
     elements.forEach((layer, layerIndex) => {
-      if (layer.layer === 'undefined') {
-        return;
-      }
-
       const x = layerIndex * layerXGap;
-      const gg = componentGroup.append('g').attr('transform', `translate(${x}, ${labelY})`);
+      const gg = componentGroup
+        .append('g')
+        .attr('transform', `translate(${x}, ${labelY})`)
+        .attr('class', 'unit')
+        .attr('id', `unit_${layerIndex}`);
+
+      gg.append('rect')
+        .attr('x', -30)
+        .attr('y', -12)
+        .attr('width', 60)
+        .attr('height', 24)
+        .attr('fill', 'transparent')
+        .attr('pointer-events', 'all');
 
       gg.append('text')
-        .text(layer.layer === 'null' ? '' : String(layer.layer))
+        .text(layer.layer === '\\null' ? 'null' : layer.layer === 'null' ? '' : String(layer.layer))
         .attr('x', 0)
         .attr('y', 0)
         .attr('dominant-baseline', 'middle')

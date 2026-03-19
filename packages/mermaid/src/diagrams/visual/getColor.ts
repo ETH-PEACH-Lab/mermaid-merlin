@@ -68,11 +68,54 @@ export const getColor = (color?: string, transparency: number = 1): string => {
   }
 };
 
+function normalizeHexColor(color: string): string {
+  const hex = color.trim().replace(/^#/, '');
+
+  if (hex.length === 3) {
+    return `#${[...hex]
+      .map((c) => c + c)
+      .join('')
+      .toUpperCase()}`;
+  }
+
+  return `#${hex.toUpperCase()}`;
+}
+
+export const safeColorName = (color?: string | null, fallback: string = 'white'): string => {
+  const normalize = (value?: string | null): string | null => {
+    const v = value?.trim();
+    if (!v) {
+      return null;
+    }
+
+    const lower = v.toLowerCase();
+
+    if (lower === 'transparent') {
+      return 'transparent';
+    }
+
+    if (lower in colorMap) {
+      return lower;
+    }
+
+    if (isValidHexColor(v)) {
+      return normalizeHexColor(v);
+    }
+
+    return null;
+  };
+
+  return normalize(color) ?? normalize(fallback) ?? 'white';
+};
+
 export const getLightenedColor = (
   color?: string,
   transparency: number = 1,
   amount: number = 0.5
 ): string => {
+  if (color === 'transparent') {
+    return color;
+  }
   // amount: 0.0 (no lighten) to 1.0 (full white)
 
   // If user specifies a valid hex color, keep it as is

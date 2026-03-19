@@ -59,6 +59,40 @@ const populate = (ast: VisualDiagram) => {
   for (const page of ast.pages ?? []) {
     const subDiagrams = (page.subDiagrams ?? []).map((subDiagram: any) => {
       switch (subDiagram.diagramType) {
+        case 'cnn': {
+          return {
+            type: 'cnn',
+            position: processPosition(subDiagram.position),
+            title: subDiagram.diagramTitle,
+            showLabels: subDiagram.showLabels ?? false,
+            showOpLabels: subDiagram.showOpLabels ?? false,
+            label: subDiagram.label,
+            stages: (subDiagram.stages ?? []).map((e1: any) => ({
+              type: e1.type,
+              shape:
+                e1.shape?.shape3D ??
+                e1.shape?.shape2D ??
+                (e1.shape?.layers ?? []).map((e2: any) => ({
+                  neurons: e2.neurons,
+                  labels: e2.labels,
+                })),
+              kernelSize: e1.kernelSize ?? null,
+              label: e1.label ?? null,
+              subTextLabel: e1.subTextLabel ?? null,
+              opLabel: e1.opLabel ?? null,
+              subTextOpLabel: e1.subTextOpLabel ?? null,
+              color: e1.color?.color ?? null,
+            })),
+            groups: (subDiagram.groups ?? []).map((e1: any) => ({
+              type: e1.type,
+              from: e1.from,
+              to: e1.to,
+              label: e1.label ?? null,
+              position: e1.position ?? null,
+            })),
+          };
+        }
+
         case 'array': {
           const arrayElements = subDiagram.elements ?? [];
           return {

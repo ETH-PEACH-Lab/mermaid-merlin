@@ -157,6 +157,41 @@ export type EndpointDiagram =
       edgeAnchor: 'start' | 'mid' | 'end';
     };
 
+export interface CNNDiagram {
+  type: 'cnn';
+  position?: PositionType;
+  orientation?: 'TD' | 'LR';
+  title?: string;
+  showLabels?: boolean;
+  showOpLabels?: boolean;
+  stages: CNNStage[];
+  groups: CNNGroup[];
+}
+
+export interface CNNStage {
+  type: 'stacked' | 'flatten' | 'fullyConnected';
+  shape: string | CNNNeurons[];
+  kernelSize: string;
+  label?: string;
+  subTextLabel?: string;
+  opLabel?: string;
+  subTextOpLabel?: string;
+  color?: string | string[];
+}
+
+export interface CNNGroup {
+  type: 'bracket' | 'brace';
+  from: number;
+  to: number;
+  label?: string;
+  position?: 'bottom' | 'top';
+}
+
+export interface CNNNeurons {
+  neurons: number;
+  labels: string[];
+}
+
 export interface NeuralNetworkDiagram {
   type: 'neural-network';
   position?: PositionType;

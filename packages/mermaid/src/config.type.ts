@@ -165,6 +165,7 @@ export interface MermaidConfig {
   array?: ArrayDiagramConfig;
   neuralNetwork?: NeuralNetworkDiagramConfig;
   architecture?: ArchitectureDiagramConfig;
+  cnn?: CNNDiagramConfig;
   matrix?: MatrixDiagramConfig;
   testslides?: TestSlidesDiagramConfig;
   visslides?: VisSlidesDiagramConfig;
@@ -1526,6 +1527,34 @@ export interface NeuralNetworkDiagramConfig extends BaseDiagramConfig {
 export interface ArchitectureDiagramConfig extends BaseDiagramConfig {
   /**
    * Color of the architecture elements.
+   */
+  elementColor?: string;
+  /**
+   * Border color of the elements.
+   */
+  borderColor?: string;
+  /**
+   * Width of the border.
+   */
+  borderWidth?: number;
+  /**
+   * Color of the labels.
+   */
+  labelColor?: string;
+  /**
+   * Font size of the labels.
+   */
+  labelFontSize?: string;
+}
+/**
+ * The object containing configurations specific for CNN diagrams.
+ *
+ * This interface was referenced by `MermaidConfig`'s JSON-Schema
+ * via the `definition` "CNNDiagramConfig".
+ */
+export interface CNNDiagramConfig extends BaseDiagramConfig {
+  /**
+   * Color of the CNN elements.
    */
   elementColor?: string;
   /**

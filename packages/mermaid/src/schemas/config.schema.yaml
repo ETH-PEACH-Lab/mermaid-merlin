@@ -54,6 +54,7 @@ required:
   - block
   - array
   - architecture
+  - cnn
   - neuralNetwork
   - matrix
   - testslides
@@ -251,6 +252,8 @@ properties:
     $ref: '#/$defs/NeuralNetworkDiagramConfig'
   architecture:
     $ref: '#/$defs/ArchitectureDiagramConfig'
+  cnn:
+    $ref: '#/$defs/CNNDiagramConfig'
   matrix:
     $ref: '#/$defs/MatrixDiagramConfig'
   testslides:
@@ -307,6 +310,31 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
       elementColor:
         type: string
         description: Color of the array elements.
+      borderColor:
+        type: string
+        description: Border color of the elements.
+      borderWidth:
+        type: number
+        minimum: 0
+        default: 1
+        description: Width of the border.
+      labelColor:
+        type: string
+        description: Color of the labels.
+      labelFontSize:
+        type: string
+        description: Font size of the labels.
+
+  CNNDiagramConfig:
+    title: CNN Diagram Config
+    allOf: [{ $ref: '#/$defs/BaseDiagramConfig' }]
+    description: The object containing configurations specific for CNN diagrams.
+    type: object
+    unevaluatedProperties: false
+    properties:
+      elementColor:
+        type: string
+        description: Color of the CNN elements.
       borderColor:
         type: string
         description: Border color of the elements.
