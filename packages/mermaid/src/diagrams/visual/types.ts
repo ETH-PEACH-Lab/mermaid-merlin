@@ -173,9 +173,9 @@ export interface CNNStage {
   shape: string | CNNNeurons[];
   kernelSize: string;
   label?: string;
-  subTextLabel?: string;
+  labelSubtext?: string;
   opLabel?: string;
-  subTextOpLabel?: string;
+  opLabelSubtext?: string;
   color?: string | string[];
 }
 

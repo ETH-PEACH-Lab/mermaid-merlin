@@ -12,9 +12,9 @@ interface StageLayout {
   labelY: number;
   labelCenterX: number;
   labelText?: string | null;
-  labelSubText?: string | null;
+  labelSubtext?: string | null;
   opLabel?: string | null;
-  opLabelSubText?: string | null;
+  opLabelSubtext?: string | null;
   type: 'stacked' | 'flatten' | 'fullyConnected';
   kernelBox?: {
     x: number;
@@ -643,9 +643,9 @@ export const drawCNNDiagram = (
         labelY: bottom + bottomLabelGap,
         labelCenterX: centerX,
         labelText: stage.label ?? null,
-        labelSubText: stage.subTextLabel ?? null,
+        labelSubtext: stage.labelSubtext ?? null,
         opLabel: stage.opLabel ?? null,
-        opLabelSubText: stage.subTextOpLabel ?? null,
+        opLabelSubtext: stage.opLabelSubtext ?? null,
         type: 'stacked',
         kernelBox,
         stackedProjectionTarget: {
@@ -929,9 +929,9 @@ export const drawCNNDiagram = (
         labelY: bottom + bottomLabelGap,
         labelCenterX: centerX,
         labelText: stage.label ?? null,
-        labelSubText: stage.subTextLabel ?? null,
+        labelSubtext: stage.labelSubtext ?? null,
         opLabel: stage.opLabel ?? null,
-        opLabelSubText: stage.subTextOpLabel ?? null,
+        opLabelSubtext: stage.opLabelSubtext ?? null,
         type: 'fullyConnected',
       });
 
@@ -947,7 +947,7 @@ export const drawCNNDiagram = (
         drawTextBlock(
           content as unknown as SVG,
           stageLayout.labelText,
-          stageLayout.labelSubText,
+          stageLayout.labelSubtext,
           stageLayout.labelCenterX,
           stageLayout.labelY,
           Math.max(80, stageLayout.right - stageLayout.left + 20),
@@ -1052,7 +1052,7 @@ export const drawCNNDiagram = (
         getApproxMaxCharsFromWidth(availableWidth, opMainFontSize)
       );
 
-      const subText = current.opLabelSubText?.trim();
+      const subText = current.opLabelSubtext?.trim();
       const subLines = subText
         ? splitWordsToLines(subText, getApproxMaxCharsFromWidth(availableWidth, opSubFontSize))
         : [];

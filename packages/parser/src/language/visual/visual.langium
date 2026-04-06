@@ -125,8 +125,8 @@ CNNDiagram:
 ;
 
 CNNStage:
-   type=CNNStageTypeSpecial '{' 'shape:' shape=CNNShapeSpecial ',' 'kernelSize:' kernelSize=KernelSizeFormat (',' 'label:' label=STRING)? (',' 'subTextLabel:' subTextLabel=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'subTextOpLabel:' subTextOpLabel=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
-   | type=CNNStageType '{' 'shape:' shape=CNNShape (',' 'label:' label=STRING)? (',' 'subTextLabel:' subTextLabel=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'subTextOpLabel:' subTextOpLabel=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
+   type=CNNStageTypeSpecial '{' 'shape:' shape=CNNShapeSpecial ',' 'kernelSize:' kernelSize=KernelSizeFormat (',' 'label:' label=STRING)? (',' 'labelSubtext:' labelSubtext=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'opLabelSubtext:' opLabelSubtext=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
+   | type=CNNStageType '{' 'shape:' shape=CNNShape (',' 'label:' label=STRING)? (',' 'labelSubtext:' labelSubtext=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'opLabelSubtext:' opLabelSubtext=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
 ;
 
 CNNGroup:

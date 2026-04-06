@@ -78,9 +78,9 @@ const populate = (ast: VisualDiagram) => {
                 })),
               kernelSize: e1.kernelSize ?? null,
               label: e1.label ?? null,
-              subTextLabel: e1.subTextLabel ?? null,
+              labelSubtext: e1.labelSubtext ?? null,
               opLabel: e1.opLabel ?? null,
-              subTextOpLabel: e1.subTextOpLabel ?? null,
+              opLabelSubtext: e1.opLabelSubtext ?? null,
               color: e1.color?.color ?? null,
             })),
             groups: (subDiagram.groups ?? []).map((e1: any) => ({
