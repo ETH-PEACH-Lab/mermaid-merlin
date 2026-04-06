@@ -6,6 +6,7 @@ import { populateCommonDb } from '../common/populateCommonDb.js';
 import { db } from './db.js';
 
 const populate = (ast: VisSlidesDiagram) => {
+  /*
   populateCommonDb(ast, db);
   for (const page of ast.pages) {
     const subDiagrams = page.subDiagrams.map((subDiagram) => {
@@ -17,7 +18,7 @@ const populate = (ast: VisSlidesDiagram) => {
         };
       } else {
         return {
-          rows: subDiagram.rows.map((row) => ({
+         /* rows: subDiagram.rows.map((row) => ({
             elements: row.elements.map((e) => ({
               value: 1,
             })),
@@ -27,7 +28,8 @@ const populate = (ast: VisSlidesDiagram) => {
     });
 
     db.addPage({ subDiagrams });
-  }
+    )
+  }*/
 };
 
 export const parser: ParserDefinition = {

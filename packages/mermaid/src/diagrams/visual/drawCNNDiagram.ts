@@ -1,7 +1,7 @@
 import type { CNNDiagram } from './types.js';
 import type { CNNDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
-import { getLightenedColor } from './getColor.js';
+import { getLightenedColor, safeColorName } from './getColor.js';
 
 interface StageLayout {
   left: number;
@@ -246,9 +246,9 @@ function parse3DShape(shape: string): { depth: number; width: number; height: nu
 
 function getBaseColor(color: string | string[] | null | undefined, fallback: string): string {
   if (Array.isArray(color)) {
-    return color[0] ?? fallback;
+    return safeColorName(color[0], fallback);
   }
-  return color ?? fallback;
+  return safeColorName(color, fallback);
 }
 
 function toFontSize(value: string | undefined): number {
@@ -664,7 +664,7 @@ export const drawCNNDiagram = (
     }
     if (typeof stage.shape === 'string' && stage.type === 'flatten') {
       const parsed = parse2DShape(stage.shape);
-      const flattenColor = getBaseColor(stage.color, '#c9b79f');
+      const flattenColor = getLightenedColor(getBaseColor(stage.color, '#c9b79f'));
 
       const flattenedCount = parsed ? parsed.width * parsed.height : 1;
 
@@ -779,7 +779,9 @@ export const drawCNNDiagram = (
 
       layerSizes.forEach((layer, i) => {
         const shownCount = layer.neurons;
-        const layerColor = layerColors[i] ?? elementColor;
+        const layerColor =
+          getLightenedColor(safeColorName(layerColors[i])) ??
+          getLightenedColor(safeColorName(elementColor));
         const x = cursorX + i * denseLayerGap;
         const isLast = i === layerSizes.length - 1;
 
