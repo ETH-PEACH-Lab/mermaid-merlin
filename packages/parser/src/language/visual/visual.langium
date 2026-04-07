@@ -14,7 +14,7 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram | BlockDiagram | CNNDiagram 
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | NeuralNetworkDiagram | BlockDiagram 
 ;
 
 BlockDiagram:
@@ -50,7 +50,7 @@ ConnectSection:
 ;
 
 Connection:
-  from=ScopedEndpoint '->' to=ScopedEndpoint ('style:' style=EdgeStyle)? ('color:' color=STRING)? ('label:' label=STRING)? ('arrowheads:' arrowheads=NUMBER)?
+  from=ScopedEndpoint '->' to=ScopedEndpoint ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? ('label:' label=STRING)? ('arrowheads:' arrowheads=NUMBER)?
 ;
 
 ScopedEndpoint:
@@ -78,7 +78,7 @@ Groups:
 ;
 
 Group:
-   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? (annotations+=Annotation)*
+   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)*
 ;
 
 Annotation:
@@ -91,9 +91,10 @@ Nodes:
 ;
 
 Node:
-   type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('subtext:' subText=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
-   | type=NodeTypeSpecial name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? (annotations+=Annotation)* ('color:' color=STRING)?
-  
+   type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('subtext:' subText=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
+   | type='text' name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('color:' color=STRING)?
+   | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial 'kernelSize:' kernelSize=KernelSizeFormat ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? ('color:' color=CNNColor)? 
+   | type=CNNStageType name=ID 'shape:' shape=CNNShape ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? ('color:' color=CNNColor)?
 ;
 
 Edges:
@@ -102,36 +103,12 @@ Edges:
 ;
 
 Edge:
-   name=ID ':' from=Endpoint '->' to=Endpoint ('label:' label=STRING)? ('style:' style=EdgeStyle)? ('color:' color=STRING)? ('arrowheads:' arrowheads=NUMBER)?
-
+   name=ID ':' from=Endpoint '->' to=Endpoint ('label:' label=STRING)? ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? ('arrowheads:' arrowheads=NUMBER)?
 ;
 
 Endpoint:
     nodeName=ID '.' anchor=Anchor ('[' portIndex=NUMBER ']')?
   | edgeName=ID '.' edgeAnchor=EdgeAnchor
-;
-
-CNNDiagram:
-  diagramType="cnn" NEWLINE*
-  ('position:' position=PositionDefinition NEWLINE*)?
-  (orientation=Orientation NEWLINE*)?
-  ('title:' diagramTitle=STRING NEWLINE*)?
-  (showLabels?="showLabels" NEWLINE*)?
-  (showOpLabels?="showOpLabels" NEWLINE*)?
-  '@' NEWLINE*
-  stages+=CNNStage* NEWLINE*
-  groups+=CNNGroup* NEWLINE*
-  '@' NEWLINE*
-;
-
-CNNStage:
-   type=CNNStageTypeSpecial '{' 'shape:' shape=CNNShapeSpecial ',' 'kernelSize:' kernelSize=KernelSizeFormat (',' 'label:' label=STRING)? (',' 'labelSubtext:' labelSubtext=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'opLabelSubtext:' opLabelSubtext=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
-   | type=CNNStageType '{' 'shape:' shape=CNNShape (',' 'label:' label=STRING)? (',' 'labelSubtext:' labelSubtext=STRING)? (',' 'opLabel:' opLabel=STRING)? (',' 'opLabelSubtext:' opLabelSubtext=STRING)? (',' 'color:' color=CNNColor)? '}' NEWLINE* 
-;
-
-CNNGroup:
- type=CNNGroupType '{' 'from:' from=NUMBER ',' 'to:' to=NUMBER (',' 'label:' label=STRING)? (',' 'position:' position=CNNGroupPosition)? '}' NEWLINE* 
-
 ;
 
 CNNColor:
@@ -404,6 +381,10 @@ EdgeStyle returns string:
   'straight' | 'bow'
 ;
 
+EdgeTransition returns string:
+  'default' | 'featureMap' | 'flatten' | 'fullyConnected'
+;
+
 Side returns string:
   'left' | 'top' | 'right' | 'bottom'
 ;
@@ -418,10 +399,6 @@ CNNGroupType returns string:
 
 KernelSizeFormat returns string: 
   'null' | CNN_SHAPE_2D
-;
-
-CNNStageTypeSpecial returns string: 
-  'stacked'
 ;
 
 CNNStageType returns string: 

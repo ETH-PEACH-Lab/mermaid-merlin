@@ -14,7 +14,6 @@ import type {
   TextDiagram,
   NeuralNetworkDiagram,
   BlockDiagram,
-  CNNDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
@@ -25,7 +24,6 @@ import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 import { drawTextDiagram } from './drawTextDiagram.js';
 import { drawNeuralNetworkDiagram } from './drawNeuralNetworkDiagram.js';
 import { drawBlockDiagram } from './drawBlockDiagram.js';
-import { drawCNNDiagram } from './drawCNNDiagram.js';
 
 interface ProcessedGroup {
   type: string;
@@ -511,19 +509,6 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
         );
         break;
       }
-
-      case 'cnn': {
-        drawCNNDiagram(
-          group as unknown as SVG,
-          subDiagram as CNNDiagram,
-          config,
-          subDiagram.index,
-          customSize?.height || 800,
-          customSize?.width || 300
-        );
-        break;
-      }
-
       case 'graph': {
         drawGraphDiagram(group as unknown as SVG, subDiagram as GraphDiagram, subDiagram.index);
         break;

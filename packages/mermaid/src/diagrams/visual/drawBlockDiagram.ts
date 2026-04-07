@@ -1,5 +1,14 @@
 import type * as d3 from 'd3';
-import type { Annotation, Block, BlockDiagram, Connection, Edge, Node } from './types.js';
+import type {
+  Annotation,
+  Block,
+  BlockDiagram,
+  Connection,
+  Edge,
+  Node,
+  Side,
+  LayoutKind,
+} from './types.js';
 import type { ArchitectureDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
 import { getLightenedColor, safeColorName } from './getColor.js';
@@ -14,8 +23,6 @@ interface Box {
   width: number;
   height: number;
 }
-type Side = 'left' | 'right' | 'top' | 'bottom';
-
 interface UnitIndexAllocator {
   next: number;
 }
@@ -52,10 +59,12 @@ interface BlockMetrics {
   nodeShapes: Map<string, Box>;
   groups: Map<string, Box>;
   groupVisualBoxes: Map<string, Box>;
+  groupMarkerBoxes: Map<string, Box>;
   groupNodeMembers: Map<string, Set<string>>;
   groupAnnotations: Map<string, Record<Side, Annotation | undefined>>;
   portCounts: Map<string, Record<Side, number>>;
 }
+
 interface RenderedBlock {
   def: Block;
   x: number;
@@ -68,7 +77,6 @@ interface RenderedBlock {
   toGlobal: (point: Point) => Point;
 }
 
-type LayoutKind = 'horizontal' | 'vertical' | 'grid';
 interface LayoutItem {
   kind: 'node' | 'group';
   name: string;
@@ -125,24 +133,97 @@ const NODE_EDGE_GAP = 0.6;
 const FIXED_PORT_SLOTS = 5;
 const FIXED_PORT_EDGE_PADDING = 3;
 
-const defaultPortCounts = (): Record<Side, number> => ({
-  left: 1,
-  right: 1,
-  top: 1,
-  bottom: 1,
-});
+const STACKED_MAX_FEATURE_SIZE = 90;
+const STACKED_LABEL_GAP = 12;
 
-const parseSize = (
-  size: any,
-  fallback: { width: number; height: number }
-): { width: number; height: number } => ({
-  width: Number(size?.width ?? fallback.width) || fallback.width,
-  height: Number(size?.height ?? fallback.height) || fallback.height,
-});
+const STACKED_MIN_BODY_WIDTH = 72;
+const STACKED_MIN_BODY_HEIGHT = 52;
+
+const FLATTEN_CELL_WIDTH = 16;
+const FLATTEN_CELL_HEIGHT = 6;
+const FLATTEN_CELL_GAP = 2;
+const FLATTEN_MIN_BODY_WIDTH = 48;
+const FLATTEN_MIN_BODY_HEIGHT = 52;
+
+const FC_LAYER_GAP = 34;
+const FC_NEURON_RADIUS = 5;
+const FC_NEURON_GAP = 3;
+const FC_MIN_BODY_WIDTH = 90;
+const FC_MIN_BODY_HEIGHT = 60;
+
+const SPECIAL_LABEL_MIN_WIDTH = 36;
+const SPECIAL_LABEL_PADDING_X = 8;
+
+const getStackedMetrics = (
+  shape: { depth: number; width: number; height: number },
+  featureScale: number
+) => {
+  const rectWidth = shape.width * featureScale;
+  const rectHeight = shape.height * featureScale;
+  const rawDepth = Math.max(1, shape.depth);
+  const effectiveDepth = getEffectiveDepth(rawDepth);
+  const sliceOffset = getStackedSliceOffset(shape, featureScale);
+  const renderedExtension = Math.max(0, (effectiveDepth - 1) * sliceOffset);
+
+  return {
+    rectWidth,
+    rectHeight,
+    rawDepth,
+    effectiveDepth,
+    sliceOffset,
+    extension: renderedExtension,
+    visibleWidth: rectWidth + renderedExtension,
+    visibleHeight: rectHeight + renderedExtension,
+  };
+};
+
+const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }): number => {
+  if (node.type === 'stacked') {
+    const shape = parse3DDims((node as any).shape);
+    if (!shape) {
+      return size.height / 2;
+    }
+    const maxDim = Math.max(1, shape.width, shape.height);
+    const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
+    const metrics = getStackedMetrics(shape, featureScale);
+    return metrics.visibleHeight / 2;
+  }
+
+  if (node.type === 'flatten') {
+    const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+    const flattenedCount = shape ? shape.width * shape.height : 1;
+    const visualHeight =
+      Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
+      Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+    return visualHeight / 2;
+  }
+
+  if (node.type === 'fullyConnected') {
+    const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+    const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
+    const denseHeight =
+      maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+    return denseHeight / 2;
+  }
+
+  return size.height / 2;
+};
 
 const estimateTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
   const s = String(text ?? '');
   return s ? Math.max(10, s.length * fontSize * 0.58) : 0;
+};
+
+const getSpecialLabelWrapWidth = (label: string | null | undefined) => {
+  const main = String(label ?? '').trim();
+  if (!main) {
+    return 90;
+  }
+
+  return Math.max(
+    SPECIAL_LABEL_MIN_WIDTH,
+    estimateTextWidth(main, BASE_FONT_SIZE) + SPECIAL_LABEL_PADDING_X * 2
+  );
 };
 
 const wrapTextLines = (text: string, maxWidth: number, fontSize: number) => {
@@ -170,6 +251,421 @@ const wrapTextLines = (text: string, maxWidth: number, fontSize: number) => {
   return wrapped.length ? wrapped : [''];
 };
 
+const getWrappedSpecialSubtextLines = (
+  text: string | null | undefined,
+  label: string | null | undefined
+) => {
+  const value = String(text ?? '').trim();
+  if (!value) {
+    return [];
+  }
+
+  return wrapTextLines(value, getSpecialLabelWrapWidth(label), BASE_SUB_FONT_SIZE);
+};
+
+const getSpecialBottomTextReserved = (
+  label: string | null | undefined,
+  labelSubtext: string | null | undefined
+) => {
+  const hasLabel = !!String(label ?? '').trim();
+  const subLines = getWrappedSpecialSubtextLines(labelSubtext, label);
+
+  if (!hasLabel && subLines.length === 0) {
+    return 0;
+  }
+
+  return (
+    STACKED_LABEL_GAP +
+    (hasLabel ? BASE_FONT_SIZE + 8 : 0) +
+    (subLines.length > 0 ? 4 + subLines.length * RECT_SUB_LINE_HEIGHT : 0)
+  );
+};
+
+const parse2DDims = (
+  value: string | number[] | null | undefined
+): { width: number; height: number } | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length !== 2) {
+      return null;
+    }
+    const [width, height] = value.map(Number);
+    if (![width, height].every(Number.isFinite)) {
+      return null;
+    }
+    return { width, height };
+  }
+
+  const match = /^(\d+)x(\d+)$/.exec(String(value));
+  if (!match) {
+    return null;
+  }
+
+  return {
+    width: Number(match[1]),
+    height: Number(match[2]),
+  };
+};
+
+const parse3DDims = (
+  value: string | number[] | null | undefined
+): { depth: number; width: number; height: number } | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length !== 3) {
+      return null;
+    }
+    const [depth, width, height] = value.map(Number);
+    if (![depth, width, height].every(Number.isFinite)) {
+      return null;
+    }
+    return { depth, width, height };
+  }
+
+  const match = /^(\d+)x(\d+)x(\d+)$/.exec(String(value));
+  if (!match) {
+    return null;
+  }
+
+  return {
+    depth: Number(match[1]),
+    width: Number(match[2]),
+    height: Number(match[3]),
+  };
+};
+
+const getStackedTransitionGeometry = (node: Node, box: Box) => {
+  const shape = parse3DDims((node as any).shape);
+  if (!shape) {
+    return null;
+  }
+
+  const maxDim = Math.max(1, shape.width, shape.height);
+  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
+  const metrics = getStackedMetrics(shape, featureScale);
+
+  const rectWidth = metrics.rectWidth;
+  const rectHeight = metrics.rectHeight;
+  const dx = metrics.sliceOffset;
+  const dy = metrics.sliceOffset;
+  const renderedDepthSpan = Math.max(0, metrics.effectiveDepth - 1);
+
+  const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
+  const stackTop = box.y;
+
+  const frontX = stackLeft + renderedDepthSpan * dx;
+  const frontY = stackTop + renderedDepthSpan * dy;
+
+  let kernelBox:
+    | {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }
+    | undefined;
+
+  const kernel = parse2DDims((node as any).kernelSize);
+  if (kernel) {
+    const kernelW = Math.min(rectWidth, Math.max(10, kernel.width * featureScale));
+    const kernelH = Math.min(rectHeight, Math.max(10, kernel.height * featureScale));
+    const kernelX = frontX + (rectWidth - kernelW) / 2;
+    const kernelY = frontY + (rectHeight - kernelH) / 2;
+
+    kernelBox = {
+      x: kernelX,
+      y: kernelY,
+      width: kernelW,
+      height: kernelH,
+    };
+  }
+
+  return {
+    frontFace: {
+      x: frontX,
+      y: frontY,
+      width: rectWidth,
+      height: rectHeight,
+    },
+    stackContour: {
+      topRightX: frontX - renderedDepthSpan * dx + rectWidth,
+      topRightY: frontY - renderedDepthSpan * dy,
+      bottomRightX: frontX + rectWidth,
+      bottomRightY: frontY + rectHeight,
+    },
+    kernelBox,
+  };
+};
+
+const getFlattenTransitionGeometry = (node: Node, box: Box) => {
+  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+  const flattenedCount = shape ? shape.width * shape.height : 1;
+
+  const naturalHeight =
+    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+
+  const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
+  const right = left + FLATTEN_CELL_WIDTH;
+  const topY = box.y;
+  const bottomY = topY + naturalHeight;
+
+  const centersY = Array.from({ length: flattenedCount }, (_, i) => {
+    return topY + i * (FLATTEN_CELL_HEIGHT + FLATTEN_CELL_GAP) + FLATTEN_CELL_HEIGHT / 2;
+  });
+
+  return {
+    x: left,
+    right,
+    topY,
+    bottomY,
+    centersY,
+  };
+};
+
+const getFullyConnectedTransitionGeometry = (node: Node, box: Box) => {
+  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  if (!layers.length) {
+    return null;
+  }
+
+  const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
+  const denseHeight =
+    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+  const centerY = box.y + denseHeight / 2;
+
+  const totalDenseWidth = layers.length <= 1 ? 0 : (layers.length - 1) * FC_LAYER_GAP;
+  const startX = box.x + (box.width - totalDenseWidth) / 2;
+
+  const renderedLayers = layers.map((layer, i) => {
+    const count = Math.max(1, layer.neurons ?? 1);
+    const layerHeight = count * FC_NEURON_RADIUS * 2 + Math.max(0, count - 1) * FC_NEURON_GAP;
+
+    const topCenter = centerY - layerHeight / 2 + FC_NEURON_RADIUS;
+    const bottomCenter = centerY + layerHeight / 2 - FC_NEURON_RADIUS;
+
+    const ys =
+      count === 1
+        ? [(topCenter + bottomCenter) / 2]
+        : Array.from(
+            { length: count },
+            (_, idx) => topCenter + ((bottomCenter - topCenter) * idx) / (count - 1)
+          );
+
+    return {
+      x: startX + i * FC_LAYER_GAP,
+      ys,
+    };
+  });
+
+  return {
+    layers: renderedLayers,
+    firstLayer: renderedLayers[0],
+  };
+};
+
+const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
+  if (!node) {
+    return box;
+  }
+
+  if (node.type === 'stacked') {
+    const shape = parse3DDims((node as any).shape);
+    if (!shape) {
+      return box;
+    }
+
+    const maxDim = Math.max(1, shape.width, shape.height);
+    const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
+    const metrics = getStackedMetrics(shape, featureScale);
+
+    const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
+    const stackTop = box.y;
+
+    return {
+      x: stackLeft,
+      y: stackTop,
+      width: metrics.visibleWidth,
+      height: metrics.visibleHeight,
+    };
+  }
+
+  if (node.type === 'flatten') {
+    const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+    const flattenedCount = shape ? shape.width * shape.height : 1;
+
+    const visualHeight =
+      Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
+      Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+
+    const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
+
+    return {
+      x: left,
+      y: box.y,
+      width: FLATTEN_CELL_WIDTH,
+      height: visualHeight,
+    };
+  }
+
+  if (node.type === 'fullyConnected') {
+    const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+    if (!layers.length) {
+      return box;
+    }
+
+    const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
+    const denseHeight =
+      maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+
+    const estimatedOutputLabelsWidth =
+      layers.length > 0 && layers[layers.length - 1]?.labels?.length
+        ? Math.max(
+            ...layers[layers.length - 1].labels.map((s: string) =>
+              estimateTextWidth(s, BASE_FONT_SIZE)
+            )
+          ) + 20
+        : 0;
+
+    const denseWidth =
+      Math.max(1, layers.length - 1) * FC_LAYER_GAP +
+      FC_NEURON_RADIUS * 2 +
+      estimatedOutputLabelsWidth;
+
+    return {
+      x: box.x + (box.width - denseWidth) / 2,
+      y: box.y,
+      width: denseWidth,
+      height: denseHeight,
+    };
+  }
+
+  return box;
+};
+
+const getMarkerSpanBoxFromSiblings = (itemBox: Box, prevBox?: Box, nextBox?: Box): Box => {
+  const left = prevBox
+    ? prevBox.x + prevBox.width + (itemBox.x - (prevBox.x + prevBox.width)) / 2
+    : itemBox.x;
+
+  const right = nextBox
+    ? itemBox.x + itemBox.width + (nextBox.x - (itemBox.x + itemBox.width)) / 2
+    : itemBox.x + itemBox.width;
+
+  return {
+    x: left,
+    y: itemBox.y,
+    width: Math.max(0, right - left),
+    height: itemBox.height,
+  };
+};
+
+const getEffectiveDepth = (depth: number): number => {
+  if (depth <= 1) {
+    return 1;
+  }
+  return 1 + Math.sqrt(depth - 1);
+};
+
+const getStackedSliceOffset = (
+  shape: { depth: number; width: number; height: number },
+  featureScale: number
+) => {
+  const rectWidth = shape.width * featureScale;
+  const rectHeight = shape.height * featureScale;
+  const effectiveDepth = getEffectiveDepth(shape.depth);
+
+  return Math.max(
+    4,
+    Math.min(10, Math.min(rectWidth, rectHeight) / Math.max(effectiveDepth * 1.2, 8))
+  );
+};
+
+const getStackedNodeBodySize = (node: Node) => {
+  const shape = parse3DDims((node as any).shape);
+  if (!shape) {
+    return { width: STACKED_MIN_BODY_WIDTH, height: STACKED_MIN_BODY_HEIGHT };
+  }
+
+  const maxDim = Math.max(1, shape.width, shape.height);
+  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
+  const metrics = getStackedMetrics(shape, featureScale);
+
+  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
+  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+
+  return {
+    width: Math.max(metrics.visibleWidth, labelWidth + 20, STACKED_MIN_BODY_WIDTH),
+    height: Math.max(metrics.visibleHeight + bottomReserved, STACKED_MIN_BODY_HEIGHT),
+  };
+};
+const getFlattenNodeBodySize = (node: Node) => {
+  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+  const flattenedCount = shape ? shape.width * shape.height : 1;
+
+  const visualHeight =
+    Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
+    Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+
+  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
+  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+
+  return {
+    width: Math.max(FLATTEN_MIN_BODY_WIDTH, FLATTEN_CELL_WIDTH + 12, labelWidth + 20),
+    height: Math.max(FLATTEN_MIN_BODY_HEIGHT, visualHeight + bottomReserved),
+  };
+};
+
+const getFullyConnectedNodeBodySize = (node: Node) => {
+  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  const layerCount = Math.max(1, layers.length);
+  const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
+
+  const denseHeight =
+    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+
+  const estimatedOutputLabelsWidth =
+    layers.length > 0 && layers[layers.length - 1]?.labels?.length
+      ? Math.max(
+          ...layers[layers.length - 1].labels.map((s: string) =>
+            estimateTextWidth(s, BASE_FONT_SIZE)
+          )
+        ) + 20
+      : 0;
+
+  const denseWidth =
+    (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2 + estimatedOutputLabelsWidth;
+
+  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
+  const width = Math.max(FC_MIN_BODY_WIDTH, denseWidth + 24, labelWidth + 20);
+  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+
+  return {
+    width,
+    height: Math.max(FC_MIN_BODY_HEIGHT, denseHeight + bottomReserved),
+  };
+};
+
+const defaultPortCounts = (): Record<Side, number> => ({
+  left: 1,
+  right: 1,
+  top: 1,
+  bottom: 1,
+});
+
+const parseSize = (
+  size: any,
+  fallback: { width: number; height: number }
+): { width: number; height: number } => ({
+  width: Number(size?.width ?? fallback.width) || fallback.width,
+  height: Number(size?.height ?? fallback.height) || fallback.height,
+});
+
 const getRectHeightForWidth = (node: Node, width: number) => {
   const contentWidth = Math.max(8, width - RECT_HORIZONTAL_PADDING * 2);
   const labelLines = wrapTextLines(node.label ?? '', contentWidth, BASE_FONT_SIZE);
@@ -185,22 +681,36 @@ const getRectHeightForWidth = (node: Node, width: number) => {
 };
 
 const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
+  if (node.type === 'stacked') {
+    return getStackedNodeBodySize(node);
+  }
+
+  if (node.type === 'flatten') {
+    return getFlattenNodeBodySize(node);
+  }
+
+  if (node.type === 'fullyConnected') {
+    return getFullyConnectedNodeBodySize(node);
+  }
+
   if (node.type === 'text') {
     const requested = parseSize(node.size, DEFAULT_TEXT);
+
     return {
       width: Math.max(requested.width, estimateTextWidth(node.label ?? '', TEXT_NODE_FONT_SIZE)),
       height: Math.max(requested.height, 18),
     };
   }
-
   if (node.type === 'circle') {
     const requested = parseSize(node.size, DEFAULT_CIRCLE);
+
     const needed = Math.max(
       24,
       estimateTextWidth(node.label ?? '', BASE_FONT_SIZE) + 12,
       requested.width,
       requested.height
     );
+
     return { width: needed, height: needed };
   }
 
@@ -243,9 +753,9 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
     RECT_HORIZONTAL_PADDING * 2;
 
   const width = requested?.width || sharedRectWidth || naturalWidth;
-  const height = requested?.height || getRectHeightForWidth(node, width);
+  const baseHeight = requested?.height || getRectHeightForWidth(node, width);
 
-  return { width, height };
+  return { width, height: baseHeight };
 };
 
 const getAnnotationMap = (annotations?: Annotation[]) => {
@@ -389,6 +899,7 @@ const computeBlockMetrics = (
   const groupVisualBoxes = new Map<string, Box>();
   const groupNodeMembers = new Map<string, Set<string>>();
   const nodeMap = new Map(nodes.map((n) => [n.name, n]));
+  const groupMarkerBoxes = new Map<string, Box>();
   const rectNodes = nodes.filter((n) => n.type === 'rect' && n.labelOrientation !== 'vertical');
   const MAX_SHARED_RECT_WIDTH = 110;
 
@@ -508,7 +1019,7 @@ const computeBlockMetrics = (
       width: size.width,
       height: size.height,
       alignX: size.width / 2,
-      alignY: size.height / 2,
+      alignY: getNodeVisualAlignY(nodeMap.get(nodeName)!, size),
       apply: (x: number, y: number) => {
         const box = { x, y, width: size.width, height: size.height };
         nodeBoxes.set(nodeName, box);
@@ -532,6 +1043,49 @@ const computeBlockMetrics = (
       return { width: 0, height: 0, alignX: 0, alignY: 0, apply: () => {} };
     }
 
+    const registerMarkerBoxes = (placedBoxes: Box[], ox: number, oy: number) => {
+      if (layout !== 'horizontal') {
+        return;
+      }
+
+      for (const [i, item] of items.entries()) {
+        if (item.kind !== 'group') {
+          continue;
+        }
+
+        const current = placedBoxes[i];
+        const prev = i > 0 ? placedBoxes[i - 1] : undefined;
+        const next = i < placedBoxes.length - 1 ? placedBoxes[i + 1] : undefined;
+
+        const markerBox = getMarkerSpanBoxFromSiblings(
+          {
+            x: ox + current.x,
+            y: oy + current.y,
+            width: current.width,
+            height: current.height,
+          },
+          prev
+            ? {
+                x: ox + prev.x,
+                y: oy + prev.y,
+                width: prev.width,
+                height: prev.height,
+              }
+            : undefined,
+          next
+            ? {
+                x: ox + next.x,
+                y: oy + next.y,
+                width: next.width,
+                height: next.height,
+              }
+            : undefined
+        );
+
+        groupMarkerBoxes.set(item.name, markerBox);
+      }
+    };
+
     if (layout === 'horizontal') {
       const baseline = Math.max(...items.map((i) => i.alignY));
       const belowBaseline = Math.max(...items.map((i) => i.height - i.alignY));
@@ -549,7 +1103,10 @@ const computeBlockMetrics = (
         height: baseline + belowBaseline,
         alignX: width / 2,
         alignY: baseline,
-        apply: (ox, oy) => boxes.forEach((box, i) => items[i].apply(ox + box.x, oy + box.y)),
+        apply: (ox, oy) => {
+          boxes.forEach((box, i) => items[i].apply(ox + box.x, oy + box.y));
+          registerMarkerBoxes(boxes, ox, oy);
+        },
       };
     }
 
@@ -783,6 +1340,7 @@ const computeBlockMetrics = (
     nodeShapes: nodeShapeBoxes,
     groups: groupBoxes,
     groupVisualBoxes,
+    groupMarkerBoxes,
     groupNodeMembers,
     groupAnnotations: groupAnnotationMaps,
     portCounts,
@@ -922,6 +1480,7 @@ const getAnchorPoint = (
     }
     return { x: cx + r, y: cy };
   }
+
   if (side === 'top' || side === 'bottom') {
     const centerX = box.x + box.width / 2;
     const slotX = getFixedSlotCoordinate(
@@ -1719,6 +2278,840 @@ const renderCenteredTextLines = (
     }
   }
 };
+
+const drawText = (
+  parent: SVG,
+  text: string,
+  x: number,
+  y: number,
+  anchor: 'start' | 'middle' | 'end' = 'middle',
+  fontSize = NODE_ANNOTATION_FONT_SIZE
+) => {
+  return parent
+    .append('text')
+    .attr('x', x)
+    .attr('y', y)
+    .attr('font-size', fontSize)
+    .attr('font-family', 'Arial, sans-serif')
+    .attr('text-anchor', anchor)
+    .attr('dominant-baseline', 'middle')
+    .attr('pointer-events', 'none')
+    .text(text);
+};
+
+const drawProjectionLine = (
+  parent: d3.Selection<SVGGElement, unknown, any, any>,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color = '#333'
+) => {
+  parent
+    .append('line')
+    .attr('x1', x1)
+    .attr('y1', y1)
+    .attr('x2', x2)
+    .attr('y2', y2)
+    .attr('stroke', safeColorName(color, '#333'))
+    .attr('stroke-width', 1.1)
+    .attr('opacity', 0.95)
+    .attr('pointer-events', 'none');
+};
+
+const drawSpecialTransitionConnector = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  connector: Edge | Connection,
+  unitId: string,
+  fromNode: Node,
+  fromBox: Box,
+  toNode: Node,
+  toBox: Box,
+  layoutDirection: 'horizontal' | 'vertical' = 'horizontal'
+): RenderedConnector | null => {
+  const transition = (connector as any).transition ?? 'default';
+  const color = safeColorName(connector.color, '#333');
+
+  if (transition === 'featureMap') {
+    if (fromNode.type !== 'stacked' || toNode.type !== 'stacked') {
+      return null;
+    }
+
+    const fromGeom = getStackedTransitionGeometry(fromNode, fromBox);
+    const toGeom = getStackedTransitionGeometry(toNode, toBox);
+    if (!fromGeom?.kernelBox || !toGeom?.frontFace) {
+      return null;
+    }
+
+    const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+
+    const kernel = fromGeom.kernelBox;
+    const nextFace = toGeom.frontFace;
+    const nextKernel = toGeom.kernelBox;
+
+    const facePad = 8;
+    const kernelPad = 8;
+
+    if (layoutDirection === 'vertical') {
+      const startLeftX = kernel.x;
+      const startRightX = kernel.x + kernel.width;
+      const startY = kernel.y + kernel.height;
+
+      const minX = nextFace.x + facePad;
+      const maxX = nextFace.x + nextFace.width - facePad;
+      const minY = nextFace.y + facePad;
+      const maxY = nextFace.y + nextFace.height - facePad;
+
+      let hitX = nextFace.x + nextFace.width * 0.5;
+      let hitY = nextFace.y + nextFace.height * 0.12;
+
+      if (nextKernel) {
+        const maxBeforeKernelY = nextKernel.y - kernelPad;
+        hitY = Math.min(hitY, maxBeforeKernelY);
+
+        const forbiddenLeft = nextKernel.x - kernelPad;
+        const forbiddenRight = nextKernel.x + nextKernel.width + kernelPad;
+
+        if (hitX >= forbiddenLeft && hitX <= forbiddenRight) {
+          const leftX = forbiddenLeft - kernelPad;
+          const rightX = forbiddenRight + kernelPad;
+
+          const leftOk = leftX >= minX;
+          const rightOk = rightX <= maxX;
+
+          if (leftOk && rightOk) {
+            const centerX = nextFace.x + nextFace.width * 0.5;
+            hitX = Math.abs(leftX - centerX) <= Math.abs(rightX - centerX) ? leftX : rightX;
+          } else if (leftOk) {
+            hitX = leftX;
+          } else if (rightOk) {
+            hitX = rightX;
+          } else {
+            hitX = minX;
+          }
+        }
+      }
+
+      hitX = Math.max(minX, Math.min(hitX, maxX));
+      hitY = Math.max(minY, Math.min(hitY, maxY));
+
+      drawProjectionLine(connectorG, startLeftX, startY, hitX, hitY, color);
+      drawProjectionLine(connectorG, startRightX, startY, hitX, hitY, color);
+
+      const points = [
+        { x: startLeftX, y: startY },
+        { x: hitX, y: hitY },
+        { x: startRightX, y: startY },
+      ];
+
+      return {
+        name: 'name' in connector ? connector.name : '',
+        start: { x: (startLeftX + startRightX) / 2, y: startY },
+        end: { x: hitX, y: hitY },
+        mid: { x: ((startLeftX + startRightX) / 2 + hitX) / 2, y: (startY + hitY) / 2 },
+        points,
+        bounds: expandBox(getPolylineBounds(points), 12, 12),
+      };
+    }
+
+    const startX = kernel.x + kernel.width;
+    const startTopY = kernel.y;
+    const startBottomY = kernel.y + kernel.height;
+
+    const minX = nextFace.x + facePad;
+    const maxX = nextFace.x + nextFace.width - facePad;
+    const minY = nextFace.y + facePad;
+    const maxY = nextFace.y + nextFace.height - facePad;
+
+    let hitX = nextFace.x + nextFace.width * 0.12;
+    let hitY = nextFace.y + nextFace.height * 0.5;
+
+    if (nextKernel) {
+      const maxBeforeKernel = nextKernel.x - kernelPad;
+      hitX = Math.min(hitX, maxBeforeKernel);
+
+      const forbiddenTop = nextKernel.y - kernelPad;
+      const forbiddenBottom = nextKernel.y + nextKernel.height + kernelPad;
+
+      if (hitY >= forbiddenTop && hitY <= forbiddenBottom) {
+        const aboveY = forbiddenTop - kernelPad;
+        const belowY = forbiddenBottom + kernelPad;
+
+        const aboveOk = aboveY >= minY;
+        const belowOk = belowY <= maxY;
+
+        if (aboveOk && belowOk) {
+          const centerY = nextFace.y + nextFace.height * 0.5;
+          hitY = Math.abs(aboveY - centerY) <= Math.abs(belowY - centerY) ? aboveY : belowY;
+        } else if (aboveOk) {
+          hitY = aboveY;
+        } else if (belowOk) {
+          hitY = belowY;
+        } else {
+          hitY = minY;
+        }
+      }
+    }
+
+    hitX = Math.max(minX, Math.min(hitX, maxX));
+    hitY = Math.max(minY, Math.min(hitY, maxY));
+
+    drawProjectionLine(connectorG, startX, startTopY, hitX, hitY, color);
+    drawProjectionLine(connectorG, startX, startBottomY, hitX, hitY, color);
+
+    const points = [
+      { x: startX, y: startTopY },
+      { x: hitX, y: hitY },
+      { x: startX, y: startBottomY },
+    ];
+
+    return {
+      name: 'name' in connector ? connector.name : '',
+      start: { x: startX, y: (startTopY + startBottomY) / 2 },
+      end: { x: hitX, y: hitY },
+      mid: { x: (startX + hitX) / 2, y: ((startTopY + startBottomY) / 2 + hitY) / 2 },
+      points,
+      bounds: expandBox(getPolylineBounds(points), 12, 12),
+    };
+  }
+
+  if (transition === 'flatten') {
+    if (fromNode.type !== 'stacked' || toNode.type !== 'flatten') {
+      return null;
+    }
+
+    const fromGeom = getStackedTransitionGeometry(fromNode, fromBox);
+    const toGeom = getFlattenTransitionGeometry(toNode, toBox);
+    if (!fromGeom?.stackContour || !toGeom) {
+      return null;
+    }
+
+    const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+
+    drawProjectionLine(
+      connectorG,
+      fromGeom.stackContour.topRightX,
+      fromGeom.stackContour.topRightY,
+      toGeom.x,
+      toGeom.topY,
+      color
+    );
+
+    drawProjectionLine(
+      connectorG,
+      fromGeom.stackContour.bottomRightX,
+      fromGeom.stackContour.bottomRightY,
+      toGeom.x,
+      toGeom.bottomY,
+      color
+    );
+
+    const points = [
+      { x: fromGeom.stackContour.topRightX, y: fromGeom.stackContour.topRightY },
+      { x: toGeom.x, y: toGeom.topY },
+      { x: fromGeom.stackContour.bottomRightX, y: fromGeom.stackContour.bottomRightY },
+      { x: toGeom.x, y: toGeom.bottomY },
+    ];
+
+    return {
+      name: 'name' in connector ? connector.name : '',
+      start: {
+        x: (fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2,
+        y: (fromGeom.stackContour.topRightY + fromGeom.stackContour.bottomRightY) / 2,
+      },
+      end: {
+        x: toGeom.x,
+        y: (toGeom.topY + toGeom.bottomY) / 2,
+      },
+      mid: {
+        x:
+          ((fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2 + toGeom.x) /
+          2,
+        y:
+          (fromGeom.stackContour.topRightY +
+            fromGeom.stackContour.bottomRightY +
+            toGeom.topY +
+            toGeom.bottomY) /
+          4,
+      },
+      points,
+      bounds: expandBox(getPolylineBounds(points), 12, 12),
+    };
+  }
+
+  if (transition === 'fullyConnected') {
+    if (fromNode.type !== 'flatten' || toNode.type !== 'fullyConnected') {
+      return null;
+    }
+
+    const fromGeom = getFlattenTransitionGeometry(fromNode, fromBox);
+    const toGeom = getFullyConnectedTransitionGeometry(toNode, toBox);
+    if (!fromGeom || !toGeom?.firstLayer) {
+      return null;
+    }
+
+    const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+    const pairCount = Math.min(fromGeom.centersY.length, toGeom.firstLayer.ys.length);
+
+    const points: Point[] = [];
+
+    for (let i = 0; i < pairCount; i++) {
+      const x1 = fromGeom.right;
+      const y1 = fromGeom.centersY[i];
+      const x2 = toGeom.firstLayer.x - FC_NEURON_RADIUS;
+      const y2 = toGeom.firstLayer.ys[i];
+
+      drawProjectionLine(connectorG, x1, y1, x2, y2, color);
+      points.push({ x: x1, y: y1 }, { x: x2, y: y2 });
+    }
+
+    if (!points.length) {
+      return null;
+    }
+
+    return {
+      name: 'name' in connector ? connector.name : '',
+      start: {
+        x: fromGeom.right,
+        y: fromGeom.centersY[Math.floor(fromGeom.centersY.length / 2)] ?? fromBox.y,
+      },
+      end: {
+        x: toGeom.firstLayer.x - FC_NEURON_RADIUS,
+        y: toGeom.firstLayer.ys[Math.floor(toGeom.firstLayer.ys.length / 2)] ?? toBox.y,
+      },
+      mid: polylineMidpoint(points),
+      points,
+      bounds: expandBox(getPolylineBounds(points), 12, 12),
+    };
+  }
+
+  return null;
+};
+
+const drawGroupBracketMarker = (
+  parent: SVG,
+  startX: number,
+  endX: number,
+  y: number,
+  position: 'top' | 'bottom' = 'bottom',
+  label?: string | null
+) => {
+  const tickSize = 14;
+  const labelGap = 18;
+  const labelFontSizeLocal = Math.max(12, BASE_FONT_SIZE * 0.95);
+
+  parent
+    .append('line')
+    .attr('x1', startX)
+    .attr('y1', y)
+    .attr('x2', endX)
+    .attr('y2', y)
+    .attr('stroke', '#444')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  const tickDirection = position === 'bottom' ? -1 : 1;
+
+  parent
+    .append('line')
+    .attr('x1', startX)
+    .attr('y1', y)
+    .attr('x2', startX)
+    .attr('y2', y + tickDirection * tickSize)
+    .attr('stroke', '#444')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', endX)
+    .attr('y1', y)
+    .attr('x2', endX)
+    .attr('y2', y + tickDirection * tickSize)
+    .attr('stroke', '#444')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  if (label) {
+    const labelY = position === 'bottom' ? y + labelGap : y - labelGap;
+    drawText(parent, label, (startX + endX) / 2, labelY, 'middle', labelFontSizeLocal);
+  }
+};
+
+const drawGroupBraceMarker = (
+  parent: SVG,
+  startX: number,
+  endX: number,
+  y: number,
+  position: 'top' | 'bottom' = 'bottom',
+  label?: string | null
+) => {
+  const midX = (startX + endX) / 2;
+  const height = 18;
+  const labelGap = 18;
+  const dir = position === 'bottom' ? 1 : -1;
+  const w = endX - startX;
+  const labelFontSizeLocal = Math.max(12, BASE_FONT_SIZE * 0.95);
+
+  const path = [
+    `M ${startX} ${y}`,
+    `C ${startX} ${y + dir * height * 0.55}, ${startX + w * 0.08} ${y + dir * height}, ${startX + w * 0.18} ${y + dir * height}`,
+    `L ${midX - w * 0.08} ${y + dir * height}`,
+    `C ${midX - w * 0.03} ${y + dir * height}, ${midX - w * 0.02} ${y + dir * height * 1.7}, ${midX} ${y + dir * height * 1.7}`,
+    `C ${midX + w * 0.02} ${y + dir * height * 1.7}, ${midX + w * 0.03} ${y + dir * height}, ${midX + w * 0.08} ${y + dir * height}`,
+    `L ${endX - w * 0.18} ${y + dir * height}`,
+    `C ${endX - w * 0.08} ${y + dir * height}, ${endX} ${y + dir * height * 0.55}, ${endX} ${y}`,
+  ].join(' ');
+
+  parent
+    .append('path')
+    .attr('d', path)
+    .attr('fill', 'none')
+    .attr('stroke', '#444')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  if (label) {
+    const labelY =
+      position === 'bottom' ? y + height * 1.7 + labelGap : y - height * 1.7 - labelGap;
+
+    drawText(parent, label, midX, labelY, 'middle', labelFontSizeLocal);
+  }
+};
+
+const drawGroupMarker = (parent: SVG, groupDef: any, markerBox: Box, visualBox: Box) => {
+  const markerType = groupDef.markerType;
+  if (!markerType) {
+    return;
+  }
+
+  const position: 'top' | 'bottom' = groupDef.markerPosition === 'top' ? 'top' : 'bottom';
+  const label = groupDef.markerLabel ?? null;
+
+  const startX = markerBox.x;
+  const endX = markerBox.x + markerBox.width;
+
+  if (endX <= startX) {
+    return;
+  }
+
+  const y = position === 'bottom' ? visualBox.y + visualBox.height + 28 : visualBox.y - 28;
+
+  if (markerType === 'brace') {
+    drawGroupBraceMarker(parent, startX, endX, y, position, label);
+  } else {
+    drawGroupBracketMarker(parent, startX, endX, y, position, label);
+  }
+};
+
+function splitWordsToLines(text: string, maxCharsPerLine: number): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+
+    if (next.length <= maxCharsPerLine || !current) {
+      current = next;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
+}
+
+function getApproxMaxCharsFromWidth(width: number, fontSize: number): number {
+  const avgCharWidth = fontSize * 0.58;
+  return Math.max(6, Math.floor(width / avgCharWidth));
+}
+
+const drawBetweenNodeOpLabel = (parent: SVG, firstBox: Box, secondBox: Box, node: Node) => {
+  const opLabel = String((node as any).opLabel ?? '').trim();
+  const opLabelSubtext = String((node as any).opLabelSubtext ?? '').trim();
+
+  if (!opLabel && !opLabelSubtext) {
+    return;
+  }
+
+  const mainFontSize = BASE_FONT_SIZE;
+  const subFontSize = BASE_SUB_FONT_SIZE;
+  const lineGap = 4;
+
+  const firstCenterX = firstBox.x + firstBox.width / 2;
+  const firstCenterY = firstBox.y + firstBox.height / 2;
+  const secondCenterX = secondBox.x + secondBox.width / 2;
+  const secondCenterY = secondBox.y + secondBox.height / 2;
+
+  const dx = secondCenterX - firstCenterX;
+  const dy = secondCenterY - firstCenterY;
+
+  const isVerticalFlow = Math.abs(dy) > Math.abs(dx);
+
+  if (isVerticalFlow) {
+    const gapTop = firstBox.y + firstBox.height;
+    const gapBottom = secondBox.y;
+    const midY = (gapTop + gapBottom) / 2;
+
+    const rightEdge = Math.max(firstBox.x + firstBox.width, secondBox.x + secondBox.width);
+    const textX = rightEdge + 16;
+    const availableWidth = 120;
+
+    const mainLines = opLabel
+      ? splitWordsToLines(opLabel, getApproxMaxCharsFromWidth(availableWidth, mainFontSize))
+      : [];
+
+    const subLines = opLabelSubtext
+      ? splitWordsToLines(opLabelSubtext, getApproxMaxCharsFromWidth(availableWidth, subFontSize))
+      : [];
+
+    const totalHeight =
+      mainLines.length * mainFontSize +
+      Math.max(0, mainLines.length - 1) * lineGap +
+      (subLines.length > 0
+        ? lineGap + subLines.length * subFontSize + Math.max(0, subLines.length - 1) * lineGap
+        : 0);
+
+    let currentY = midY - totalHeight / 2 + mainFontSize / 2;
+
+    for (const line of mainLines) {
+      drawText(parent, line, textX, currentY, 'start', mainFontSize);
+      currentY += mainFontSize + lineGap;
+    }
+
+    for (const line of subLines) {
+      drawText(parent, line, textX, currentY, 'start', subFontSize);
+      currentY += subFontSize + lineGap;
+    }
+
+    return;
+  }
+
+  const gapLeft = firstBox.x + firstBox.width;
+  const gapRight = secondBox.x;
+  const midX = (gapLeft + gapRight) / 2;
+  const availableWidth = Math.max(60, gapRight - gapLeft - 12);
+
+  const mainLines = opLabel
+    ? splitWordsToLines(opLabel, getApproxMaxCharsFromWidth(availableWidth, mainFontSize))
+    : [];
+
+  const subLines = opLabelSubtext
+    ? splitWordsToLines(opLabelSubtext, getApproxMaxCharsFromWidth(availableWidth, subFontSize))
+    : [];
+
+  const totalHeight =
+    mainLines.length * mainFontSize +
+    Math.max(0, mainLines.length - 1) * lineGap +
+    (subLines.length > 0
+      ? lineGap + subLines.length * subFontSize + Math.max(0, subLines.length - 1) * lineGap
+      : 0);
+
+  const textTopY = Math.min(firstBox.y, secondBox.y) - 18 - totalHeight / 2 + mainFontSize / 2;
+
+  let currentY = textTopY;
+
+  for (const line of mainLines) {
+    drawText(parent, line, midX, currentY, 'middle', mainFontSize);
+    currentY += mainFontSize + lineGap;
+  }
+
+  for (const line of subLines) {
+    drawText(parent, line, midX, currentY, 'middle', subFontSize);
+    currentY += subFontSize + lineGap;
+  }
+};
+
+const drawGrowingDownLabelBlock = (
+  parent: SVG,
+  label: string | null | undefined,
+  labelSubtext: string | null | undefined,
+  x: number,
+  startY: number
+) => {
+  const main = String(label ?? '').trim();
+  const subLines = getWrappedSpecialSubtextLines(labelSubtext, label);
+
+  let currentY = startY;
+
+  if (main) {
+    parent
+      .append('text')
+      .attr('x', x)
+      .attr('y', currentY)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', BASE_FONT_SIZE)
+      .attr('pointer-events', 'none')
+      .text(main);
+
+    currentY += BASE_FONT_SIZE / 2 + 6;
+  }
+
+  for (const line of subLines) {
+    parent
+      .append('text')
+      .attr('x', x)
+      .attr('y', currentY)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'hanging')
+      .attr('font-size', BASE_SUB_FONT_SIZE)
+      .attr('pointer-events', 'none')
+      .text(line);
+
+    currentY += RECT_SUB_LINE_HEIGHT;
+  }
+};
+
+const drawStackedNode = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box
+) => {
+  const shape = parse3DDims((node as any).shape);
+  if (!shape) {
+    group
+      .append('rect')
+      .attr('x', box.x)
+      .attr('y', box.y)
+      .attr('width', box.width)
+      .attr('height', box.height)
+      .attr('fill', getLightenedColor(!Array.isArray(node.color) ? node.color : 'white') ?? 'white')
+      .attr('stroke', safeColorName(node.stroke, 'black'))
+      .attr('stroke-width', 1.3);
+
+    return;
+  }
+
+  const maxDim = Math.max(1, shape.width, shape.height);
+  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
+  const metrics = getStackedMetrics(shape, featureScale);
+
+  const rectWidth = metrics.rectWidth;
+  const rectHeight = metrics.rectHeight;
+  const dx = metrics.sliceOffset;
+  const dy = metrics.sliceOffset;
+  const renderedDepthSpan = Math.max(0, metrics.effectiveDepth - 1);
+
+  const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
+  const stackTop = box.y;
+
+  const frontX = stackLeft + renderedDepthSpan * dx;
+  const frontY = stackTop + renderedDepthSpan * dy;
+
+  const baseColor = safeColorName(!Array.isArray(node.color) ? node.color : 'white', 'white');
+  const shadeA = getLightenedColor(baseColor, 0.8);
+  const shadeB = getLightenedColor(baseColor, 1);
+
+  for (let fromFront = metrics.rawDepth - 1; fromFront >= 0; fromFront--) {
+    const t = metrics.rawDepth <= 1 ? 0 : fromFront / (metrics.rawDepth - 1);
+    const compressedOffset = t * renderedDepthSpan;
+    const x = frontX - compressedOffset * dx;
+    const y = frontY - compressedOffset * dy;
+
+    group
+      .append('rect')
+      .attr('x', x)
+      .attr('y', y)
+      .attr('width', rectWidth)
+      .attr('height', rectHeight)
+      .attr('fill', fromFront % 2 === 0 ? shadeA : shadeB)
+      .attr('fill-opacity', 0.55)
+      .attr('stroke', safeColorName(node.stroke, 'black'))
+      .attr('stroke-width', 1.1)
+      .style('pointer-events', 'auto');
+  }
+
+  const kernel = parse2DDims((node as any).kernelSize);
+  if (kernel) {
+    const kernelW = Math.min(rectWidth, Math.max(10, kernel.width * featureScale));
+    const kernelH = Math.min(rectHeight, Math.max(10, kernel.height * featureScale));
+    const kernelX = frontX + (rectWidth - kernelW) / 2;
+    const kernelY = frontY + (rectHeight - kernelH) / 2;
+
+    group
+      .append('rect')
+      .attr('x', kernelX)
+      .attr('y', kernelY)
+      .attr('width', kernelW)
+      .attr('height', kernelH)
+      .attr('fill', 'none')
+      .attr('stroke', '#444')
+      .attr('stroke-width', 1.4)
+      .style('pointer-events', 'none');
+  }
+
+  const label = node.label ?? '';
+  const subText = (node as any).labelSubtext ?? '';
+
+  const opCenterX = frontX + rectWidth / 2;
+
+  const labelY = stackTop + metrics.visibleHeight + STACKED_LABEL_GAP;
+  if (label || subText) {
+    drawGrowingDownLabelBlock(group as any, label, subText, opCenterX, labelY);
+  }
+};
+
+const drawFlattenNode = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box
+) => {
+  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+  const flattenedCount = shape ? shape.width * shape.height : 1;
+
+  const fillColor =
+    getLightenedColor(
+      safeColorName(Array.isArray(node.color) ? node.color[0] : node.color, '#c9b79f')
+    ) ?? '#c9b79f';
+
+  const label = node.label ?? '';
+  const labelSubtext = (node as any).labelSubtext ?? '';
+
+  const bodyTop = box.y;
+
+  const naturalHeight =
+    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+
+  const renderTop = bodyTop;
+  const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
+
+  let currentY = renderTop;
+  for (let i = 0; i < flattenedCount; i++) {
+    group
+      .append('rect')
+      .attr('x', left)
+      .attr('y', currentY)
+      .attr('width', FLATTEN_CELL_WIDTH)
+      .attr('height', FLATTEN_CELL_HEIGHT)
+      .attr('fill', fillColor)
+      .attr('stroke', '#444')
+      .attr('stroke-width', 0.8);
+
+    currentY += FLATTEN_CELL_HEIGHT + FLATTEN_CELL_GAP;
+  }
+
+  const centerX = box.x + box.width / 2;
+
+  const labelStartY = bodyTop + naturalHeight + STACKED_LABEL_GAP;
+  if (label || labelSubtext) {
+    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelStartY);
+  }
+};
+
+const drawFullyConnectedNode = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box
+) => {
+  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  const layerColors = Array.isArray(node.color) ? node.color : [];
+
+  const label = node.label ?? '';
+  const labelSubtext = (node as any).labelSubtext ?? '';
+
+  const bodyTop = box.y;
+  const maxNeurons = Math.max(1, ...layers.map((l) => l.neurons ?? 1));
+  const denseHeight =
+    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+  const centerY = bodyTop + denseHeight / 2;
+
+  const totalDenseWidth = layers.length <= 1 ? 0 : (layers.length - 1) * FC_LAYER_GAP;
+  const startX = box.x + (box.width - totalDenseWidth) / 2;
+
+  const renderedLayers = layers.map((layer, i) => {
+    const count = Math.max(1, layer.neurons ?? 1);
+    const layerHeight = count * FC_NEURON_RADIUS * 2 + Math.max(0, count - 1) * FC_NEURON_GAP;
+
+    const topCenter = centerY - layerHeight / 2 + FC_NEURON_RADIUS;
+    const bottomCenter = centerY + layerHeight / 2 - FC_NEURON_RADIUS;
+
+    const ys =
+      count === 1
+        ? [(topCenter + bottomCenter) / 2]
+        : Array.from(
+            { length: count },
+            (_, idx) => topCenter + ((bottomCenter - topCenter) * idx) / (count - 1)
+          );
+
+    return {
+      x: startX + i * FC_LAYER_GAP,
+      ys,
+      labels: layer.labels ?? [],
+      color:
+        getLightenedColor(safeColorName(layerColors[i], 'white')) ??
+        getLightenedColor('white') ??
+        'white',
+    };
+  });
+
+  for (let i = 0; i < renderedLayers.length - 1; i++) {
+    const from = renderedLayers[i];
+    const to = renderedLayers[i + 1];
+
+    for (const y1 of from.ys) {
+      for (const y2 of to.ys) {
+        group
+          .append('line')
+          .attr('x1', from.x + FC_NEURON_RADIUS)
+          .attr('y1', y1)
+          .attr('x2', to.x - FC_NEURON_RADIUS)
+          .attr('y2', y2)
+          .attr('stroke', '#444')
+          .attr('stroke-width', 0.8)
+          .attr('opacity', 0.5)
+          .attr('pointer-events', 'none');
+      }
+    }
+  }
+
+  for (const layer of renderedLayers) {
+    for (const y of layer.ys) {
+      group
+        .append('circle')
+        .attr('cx', layer.x)
+        .attr('cy', y)
+        .attr('r', FC_NEURON_RADIUS)
+        .attr('fill', layer.color)
+        .attr('stroke', '#444')
+        .attr('stroke-width', 1.1);
+    }
+  }
+
+  const lastLayer = renderedLayers[renderedLayers.length - 1];
+  if (lastLayer?.labels?.length) {
+    const labelCount = Math.min(lastLayer.labels.length, lastLayer.ys.length);
+
+    for (let i = 0; i < labelCount; i++) {
+      drawText(
+        group as any,
+        lastLayer.labels[i],
+        lastLayer.x + FC_NEURON_RADIUS + 5,
+        lastLayer.ys[i],
+        'start',
+        BASE_SUB_FONT_SIZE
+      );
+    }
+  }
+
+  const centerX = box.x + box.width / 2;
+
+  const labelStartY = bodyTop + denseHeight + STACKED_LABEL_GAP;
+
+  if (label || labelSubtext) {
+    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelStartY);
+  }
+};
 const drawNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
@@ -1737,10 +3130,27 @@ const drawNode = (
   const rawLabel = node.label ?? '';
   const subText = node.subText ?? '';
   const defaultStroke = safeColorName(node.stroke, 'black');
-  const defaultFill = getLightenedColor(node.color) ?? 'white';
+  const defaultFill = getLightenedColor(
+    safeColorName(!Array.isArray(node.color) ? node.color : 'white', 'white')
+  );
   const defaultStyle = node.style ?? 'box';
 
   const innerBox = { x: 0, y: 0, width: box.width, height: box.height };
+
+  if (node.type === 'stacked') {
+    drawStackedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    return;
+  }
+
+  if (node.type === 'flatten') {
+    drawFlattenNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    return;
+  }
+
+  if (node.type === 'fullyConnected') {
+    drawFullyConnectedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    return;
+  }
 
   if (node.type === 'rect') {
     g.append('rect')
@@ -1791,7 +3201,7 @@ const drawNode = (
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .attr('font-style', 'italic')
-        .attr('fill', safeColorName(node.color, 'black'))
+        .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
         .attr('font-size', TEXT_NODE_FONT_SIZE)
         .style('pointer-events', 'none')
         .text(node.label ?? '');
@@ -1803,7 +3213,7 @@ const drawNode = (
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .attr('font-style', 'italic')
-        .attr('fill', safeColorName(node.color, 'black'))
+        .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
         .attr('font-size', TEXT_NODE_FONT_SIZE)
         .style('pointer-events', 'none')
         .text(node.label ?? '');
@@ -1944,10 +3354,10 @@ const getEndpointPortInfo = (rendered: RenderedBlock, endpoint: any) => {
   const nodeDef = rendered.nodes.get(endpoint.nodeName)?.def;
   const nodeType = nodeDef?.type;
   const nodeStyle = nodeDef?.style;
+  const anchorBox = getNodeVisualAnchorBox(nodeDef, box);
 
-  return { anchor, portIndex, box, portCount, nodeType, nodeStyle };
+  return { anchor, portIndex, box, anchorBox, portCount, nodeDef, nodeType, nodeStyle };
 };
-
 const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedEndpoint => {
   if (isEdgeEndpoint(endpoint)) {
     const edge = rendered.edges.get(endpoint.edgeName);
@@ -1966,12 +3376,15 @@ const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedE
     return { point: edge.mid, box: edge.bounds };
   }
 
-  const { anchor, portIndex, box, nodeType, nodeStyle } = getEndpointPortInfo(rendered, endpoint);
+  const { anchor, portIndex, box, anchorBox, nodeType, nodeStyle } = getEndpointPortInfo(
+    rendered,
+    endpoint
+  );
   const useFixedSlot = endpoint?.portIndex !== undefined && endpoint?.portIndex !== null;
 
   return {
     point: getAnchorPoint(
-      box,
+      anchorBox,
       anchor,
       portIndex,
       undefined,
@@ -1981,7 +3394,7 @@ const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedE
       useFixedSlot
     ),
     side: anchor,
-    box,
+    box: anchorBox,
   };
 };
 
@@ -2219,18 +3632,22 @@ const drawConnector = (
 
 const hasPortIndex = (endpoint: any) =>
   endpoint?.nodeName && endpoint?.portIndex !== undefined && endpoint?.portIndex !== null;
+
 const resolveNodeEndpointWithPreferredAxis = (
   rendered: RenderedBlock,
   endpoint: any,
   preferredX?: number,
   preferredY?: number
 ): { point: Point; side?: Side } => {
-  const { anchor, portIndex, box, nodeType, nodeStyle } = getEndpointPortInfo(rendered, endpoint);
+  const { anchor, portIndex, anchorBox, nodeType, nodeStyle } = getEndpointPortInfo(
+    rendered,
+    endpoint
+  );
   const useFixedSlot = endpoint?.portIndex !== undefined && endpoint?.portIndex !== null;
 
   return {
     point: getAnchorPoint(
-      box,
+      anchorBox,
       anchor,
       portIndex,
       preferredX,
@@ -2242,7 +3659,6 @@ const resolveNodeEndpointWithPreferredAxis = (
     side: anchor,
   };
 };
-
 const renderBlockGroupVisuals = (
   metrics: BlockMetrics,
   groupDefs: Block['groups'],
@@ -2398,6 +3814,35 @@ const renderBlock = (
     drawNode(nodeLayer, node, box, blockIndex, nodeIndex);
     renderedNodes.set(node.name, { def: node, box });
   }
+
+  const layoutNodes = block.nodes ?? [];
+
+  for (let i = 0; i < layoutNodes.length - 1; i++) {
+    const current = layoutNodes[i];
+    const next = layoutNodes[i + 1];
+
+    const supportedTypes: Node['type'][] = [
+      'rect',
+      'circle',
+      'text',
+      'stacked',
+      'flatten',
+      'fullyConnected',
+    ];
+
+    if (!supportedTypes.includes(current.type)) {
+      continue;
+    }
+
+    const currentBox = metrics.nodes.get(current.name);
+    const nextBox = metrics.nodes.get(next.name);
+
+    if (!currentBox || !nextBox) {
+      continue;
+    }
+
+    drawBetweenNodeOpLabel(nodeLayer as any, currentBox, nextBox, current);
+  }
   const rendered: RenderedBlock = {
     def: block,
     x,
@@ -2411,6 +3856,41 @@ const renderBlock = (
   };
 
   for (const [edgeIndex, edge] of (block.edges ?? []).entries()) {
+    const unitId = `unit_(${blockIndex},${nodeCount + edgeIndex})`;
+
+    const fromNodeName = (edge.from as any)?.nodeName;
+    const toNodeName = (edge.to as any)?.nodeName;
+
+    const fromRenderedNode = fromNodeName ? renderedNodes.get(fromNodeName) : undefined;
+    const toRenderedNode = toNodeName ? renderedNodes.get(toNodeName) : undefined;
+
+    const layoutDirection = (block.layout ?? 'vertical') === 'vertical' ? 'vertical' : 'horizontal';
+
+    const special = (() => {
+      const transition = (edge as any).transition ?? 'default';
+      if (transition === 'default') {
+        return null;
+      }
+      if (!fromRenderedNode || !toRenderedNode) {
+        return null;
+      }
+
+      return drawSpecialTransitionConnector(
+        edgeLayer,
+        edge,
+        unitId,
+        fromRenderedNode.def,
+        fromRenderedNode.box,
+        toRenderedNode.def,
+        toRenderedNode.box,
+        layoutDirection
+      );
+    })();
+
+    if (special) {
+      renderedEdges.set(edge.name, special);
+      continue;
+    }
     let from = resolveLocalEndpoint(rendered, edge.from);
     let to = resolveLocalEndpoint(rendered, edge.to);
 
@@ -2452,7 +3932,6 @@ const renderBlock = (
       }
     }
 
-    const unitId = `unit_(${blockIndex},${nodeCount + edgeIndex})`;
     const routeBoundary = getEdgeRouteBoundary(metrics, edge.from, edge.to);
 
     renderedEdges.set(
@@ -2499,6 +3978,17 @@ const renderBlock = (
         drawGroupAnnotation(annotationLayer, side, annotation, visualBox);
       }
     }
+  }
+
+  for (const groupDef of block.groups ?? []) {
+    const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
+    const markerBox = metrics.groupMarkerBoxes.get(groupDef.name) ?? visualBox;
+
+    if (!visualBox || !markerBox) {
+      continue;
+    }
+
+    drawGroupMarker(annotationLayer as any, groupDef, markerBox, visualBox);
   }
 
   for (const side of SIDES) {

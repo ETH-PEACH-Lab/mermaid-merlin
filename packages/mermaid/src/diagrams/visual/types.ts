@@ -81,20 +81,28 @@ export interface Group {
   anchor?: string;
   gap?: number;
   color?: string;
+  markerType: 'bracket' | 'brace';
+  markerLabel: string;
+  markerPosition: 'bottom' | 'top';
   annotations?: Annotation[];
 }
 
 export interface Node {
-  type: 'text' | 'rect' | 'circle';
+  type: 'text' | 'rect' | 'circle' | 'stacked' | 'flatten' | 'fullyConnected';
   name: string;
   label?: string;
   labelOrientation?: 'horizontal' | 'vertical';
   subText?: string;
   annotations?: Annotation[];
   size?: SizeDefinition;
-  color?: string;
+  color?: string | string[];
   style?: 'box' | 'rounded';
   stroke?: string;
+  shape: string | CNNNeurons[];
+  kernelSize: string;
+  labelSubtext?: string;
+  opLabel?: string;
+  opLabelSubtext?: string;
 }
 
 export interface Edge {
@@ -102,6 +110,7 @@ export interface Edge {
   from: EndpointEdge;
   to: EndpointEdge;
   style?: 'straight' | 'bow';
+  transition?: 'default' | 'featureMap' | 'flatten' | 'fullyConnected';
   color?: string;
   label?: string;
   arrowheads?: number;
@@ -119,16 +128,20 @@ export type EndpointEdge =
     };
 
 export interface Annotation {
-  side: 'left' | 'right' | 'top' | 'bottom';
+  side: Side;
   value: string;
 }
 
+export type Side = 'left' | 'right' | 'top' | 'bottom';
+
 export interface Diagram {
-  layout?: 'horizontal' | 'vertical' | 'grid';
+  layout?: LayoutKind;
   gap?: number;
   uses?: Use[];
   connections?: Connection[];
 }
+
+export type LayoutKind = 'horizontal' | 'vertical' | 'grid';
 
 export interface Use {
   name: string;
@@ -139,6 +152,7 @@ export interface Connection {
   from: EndpointDiagram;
   to: EndpointDiagram;
   style?: 'straight' | 'bow';
+  transition?: 'default' | 'featureMap' | 'flatten' | 'fullyConnected';
   color?: string;
   label?: string;
   arrowheads?: number;
@@ -156,36 +170,6 @@ export type EndpointDiagram =
       edgeName: string;
       edgeAnchor: 'start' | 'mid' | 'end';
     };
-
-export interface CNNDiagram {
-  type: 'cnn';
-  position?: PositionType;
-  orientation?: 'TD' | 'LR';
-  title?: string;
-  showLabels?: boolean;
-  showOpLabels?: boolean;
-  stages: CNNStage[];
-  groups: CNNGroup[];
-}
-
-export interface CNNStage {
-  type: 'stacked' | 'flatten' | 'fullyConnected';
-  shape: string | CNNNeurons[];
-  kernelSize: string;
-  label?: string;
-  labelSubtext?: string;
-  opLabel?: string;
-  opLabelSubtext?: string;
-  color?: string | string[];
-}
-
-export interface CNNGroup {
-  type: 'bracket' | 'brace';
-  from: number;
-  to: number;
-  label?: string;
-  position?: 'bottom' | 'top';
-}
 
 export interface CNNNeurons {
   neurons: number;

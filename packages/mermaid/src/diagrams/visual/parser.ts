@@ -59,40 +59,6 @@ const populate = (ast: VisualDiagram) => {
   for (const page of ast.pages ?? []) {
     const subDiagrams = (page.subDiagrams ?? []).map((subDiagram: any) => {
       switch (subDiagram.diagramType) {
-        case 'cnn': {
-          return {
-            type: 'cnn',
-            position: processPosition(subDiagram.position),
-            title: subDiagram.diagramTitle,
-            showLabels: subDiagram.showLabels ?? false,
-            showOpLabels: subDiagram.showOpLabels ?? false,
-            label: subDiagram.label,
-            stages: (subDiagram.stages ?? []).map((e1: any) => ({
-              type: e1.type,
-              shape:
-                e1.shape?.shape3D ??
-                e1.shape?.shape2D ??
-                (e1.shape?.layers ?? []).map((e2: any) => ({
-                  neurons: e2.neurons,
-                  labels: e2.labels,
-                })),
-              kernelSize: e1.kernelSize ?? null,
-              label: e1.label ?? null,
-              labelSubtext: e1.labelSubtext ?? null,
-              opLabel: e1.opLabel ?? null,
-              opLabelSubtext: e1.opLabelSubtext ?? null,
-              color: e1.color?.color ?? null,
-            })),
-            groups: (subDiagram.groups ?? []).map((e1: any) => ({
-              type: e1.type,
-              from: e1.from,
-              to: e1.to,
-              label: e1.label ?? null,
-              position: e1.position ?? null,
-            })),
-          };
-        }
-
         case 'array': {
           const arrayElements = subDiagram.elements ?? [];
           return {
@@ -135,26 +101,50 @@ const populate = (ast: VisualDiagram) => {
                 side: e2.side,
                 value: e2.value,
               })),
-              nodes: (e1.nodes?.nodes ?? []).map((e2: Node) => ({
-                type: e2.type,
-                name: e2.name,
-                label: e2.label,
-                labelOrientation: e2.labelOrientation,
-                subText: e2.subText,
-                annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
-                  side: e3.side,
-                  value: e3.value,
-                })),
-                size: e2.size
-                  ? {
-                      width: e2.size.width,
-                      height: e2.size.height,
-                    }
-                  : undefined,
-                color: e2.color,
-                style: e2.style,
-                stroke: e2.stroke,
-              })),
+              nodes: (e1.nodes?.nodes ?? []).map((e2: any) => {
+                if (e2.type === 'text' || e2.type === 'rect' || e2.type === 'circle') {
+                  return {
+                    type: e2.type,
+                    name: e2.name,
+                    label: e2.label,
+                    labelOrientation: e2.labelOrientation,
+                    subText: e2.subText,
+                    opLabel: e2.opLabel,
+                    opLabelSubtext: e2.opLabelSubtext,
+                    annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
+                      side: e3.side,
+                      value: e3.value,
+                    })),
+                    size: e2.size
+                      ? {
+                          width: e2.size.width,
+                          height: e2.size.height,
+                        }
+                      : undefined,
+                    color: e2.color,
+                    style: e2.style,
+                    stroke: e2.stroke,
+                  };
+                } else {
+                  return {
+                    type: e2.type,
+                    name: e2.name,
+                    shape:
+                      e2.shape?.shape3D ??
+                      e2.shape?.shape2D ??
+                      (e2.shape?.layers ?? []).map((e3: any) => ({
+                        neurons: e3.neurons,
+                        labels: e3.labels,
+                      })),
+                    kernelSize: e2.kernelSize,
+                    label: e2.label,
+                    labelSubtext: e2.labelSubtext,
+                    opLabel: e2.opLabel,
+                    opLabelSubtext: e2.opLabelSubtext,
+                    color: e2.color?.color,
+                  };
+                }
+              }),
 
               groups: (e1.groups?.items ?? []).map((e2: any) => ({
                 name: e2.name,
@@ -163,6 +153,9 @@ const populate = (ast: VisualDiagram) => {
                 anchor: e2.anchor,
                 gap: e2.gap,
                 color: e2.color,
+                markerType: e2.markerType,
+                markerLabel: e2.markerLabel,
+                markerPosition: e2.markerPosition,
                 annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
                   side: e3.side,
                   value: e3.value,
@@ -192,6 +185,7 @@ const populate = (ast: VisualDiagram) => {
                       edgeAnchor: e2.to.edgeAnchor,
                     },
                 style: e2.style,
+                transition: e2.transition,
                 color: e2.color,
                 label: e2.label,
                 arrowheads: e2.arrowheads,
@@ -233,6 +227,7 @@ const populate = (ast: VisualDiagram) => {
                         },
 
                     style: e.style,
+                    transition: e.transition,
                     color: e.color,
                     label: e.label,
                     arrowheads: e.arrowheads,
