@@ -669,8 +669,8 @@ const parseSize = (
 const getRectHeightForWidth = (node: Node, width: number) => {
   const contentWidth = Math.max(8, width - RECT_HORIZONTAL_PADDING * 2);
   const labelLines = wrapTextLines(node.label ?? '', contentWidth, BASE_FONT_SIZE);
-  const subLines = node.subText
-    ? wrapTextLines(node.subText, contentWidth, BASE_SUB_FONT_SIZE)
+  const subLines = node.labelSubtext
+    ? wrapTextLines(node.labelSubtext, contentWidth, BASE_SUB_FONT_SIZE)
     : [];
 
   const textHeight =
@@ -725,8 +725,8 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
         : 120;
 
     const labelLines = wrapTextLines(node.label ?? '', verticalTextExtent, BASE_FONT_SIZE);
-    const subLines = node.subText
-      ? wrapTextLines(node.subText, verticalTextExtent, BASE_SUB_FONT_SIZE)
+    const subLines = node.labelSubtext
+      ? wrapTextLines(node.labelSubtext, verticalTextExtent, BASE_SUB_FONT_SIZE)
       : [];
 
     const totalTextHeight =
@@ -748,7 +748,7 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
   const naturalWidth =
     Math.max(
       estimateTextWidth(node.label ?? '', BASE_FONT_SIZE),
-      estimateTextWidth(node.subText ?? '', BASE_SUB_FONT_SIZE)
+      estimateTextWidth(node.labelSubtext ?? '', BASE_SUB_FONT_SIZE)
     ) +
     RECT_HORIZONTAL_PADDING * 2;
 
@@ -976,7 +976,7 @@ const computeBlockMetrics = (
               const naturalWidth =
                 Math.max(
                   estimateTextWidth(n.label ?? '', BASE_FONT_SIZE),
-                  estimateTextWidth(n.subText ?? '', BASE_SUB_FONT_SIZE)
+                  estimateTextWidth(n.labelSubtext ?? '', BASE_SUB_FONT_SIZE)
                 ) +
                 RECT_HORIZONTAL_PADDING * 2;
               return Math.max(requestedWidth, naturalWidth);
@@ -3128,7 +3128,7 @@ const drawNode = (
     .attr('transform', `translate(${box.x}, ${box.y})`);
 
   const rawLabel = node.label ?? '';
-  const subText = node.subText ?? '';
+  const subText = node.labelSubtext ?? '';
   const defaultStroke = safeColorName(node.stroke, 'black');
   const defaultFill = getLightenedColor(
     safeColorName(!Array.isArray(node.color) ? node.color : 'white', 'white')

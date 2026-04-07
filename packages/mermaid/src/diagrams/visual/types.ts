@@ -92,7 +92,6 @@ export interface Node {
   name: string;
   label?: string;
   labelOrientation?: 'horizontal' | 'vertical';
-  subText?: string;
   annotations?: Annotation[];
   size?: SizeDefinition;
   color?: string | string[];

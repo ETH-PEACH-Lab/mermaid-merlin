@@ -108,7 +108,7 @@ const populate = (ast: VisualDiagram) => {
                     name: e2.name,
                     label: e2.label,
                     labelOrientation: e2.labelOrientation,
-                    subText: e2.subText,
+                    labelSubtext: e2.labelSubtext,
                     opLabel: e2.opLabel,
                     opLabelSubtext: e2.opLabelSubtext,
                     annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
