@@ -1007,21 +1007,56 @@ const computeBlockMetrics = (
     }
   }
 
+  const getNodeGapPadding = (nodeName: string) => {
+    const padding = { left: 0, right: 0, top: 0, bottom: 0 };
+
+    for (const edge of block.edges ?? []) {
+      const gap = getConnectorGap(edge);
+      if (gap <= 0) {
+        continue;
+      }
+
+      const from = edge.from as any;
+      const to = edge.to as any;
+
+      if (from?.nodeName === nodeName && from?.anchor && SIDES.includes(from.anchor)) {
+        padding[from.anchor as Side] = Math.max(padding[from.anchor as Side], gap);
+      }
+
+      if (to?.nodeName === nodeName && to?.anchor && SIDES.includes(to.anchor)) {
+        padding[to.anchor as Side] = Math.max(padding[to.anchor as Side], gap);
+      }
+    }
+
+    return padding;
+  };
+
   const makeNodeItem = (nodeName: string): LayoutItem | null => {
     const size = nodeSizes.get(nodeName);
     if (!size) {
       return null;
     }
 
+    const nodeDef = nodeMap.get(nodeName)!;
+    const gapPad = getNodeGapPadding(nodeName);
+
+    const layoutWidth = size.width + gapPad.left + gapPad.right;
+    const layoutHeight = size.height + gapPad.top + gapPad.bottom;
+
     return {
       kind: 'node',
       name: nodeName,
-      width: size.width,
-      height: size.height,
-      alignX: size.width / 2,
-      alignY: getNodeVisualAlignY(nodeMap.get(nodeName)!, size),
+      width: layoutWidth,
+      height: layoutHeight,
+      alignX: gapPad.left + size.width / 2,
+      alignY: gapPad.top + getNodeVisualAlignY(nodeDef, size),
       apply: (x: number, y: number) => {
-        const box = { x, y, width: size.width, height: size.height };
+        const box = {
+          x: x + gapPad.left,
+          y: y + gapPad.top,
+          width: size.width,
+          height: size.height,
+        };
         nodeBoxes.set(nodeName, box);
         nodeShapeBoxes.set(nodeName, box);
       },
@@ -3458,6 +3493,37 @@ const getEndInset = (side?: Side, arrowheads = 1) => {
   }
 };
 
+const getConnectorGap = (connector: Edge | Connection) => {
+  const raw = Number((connector as any).gap ?? 0);
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+};
+
+const advancePoint = (from: Point, to: Point, amount: number): Point => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return { ...from };
+  }
+
+  const step = Math.min(amount, Math.max(0, len - 0.01));
+  return {
+    x: from.x + (dx / len) * step,
+    y: from.y + (dy / len) * step,
+  };
+};
+
+const trimPolylineStart = (points: Point[], amount: number): Point[] => {
+  if (points.length < 2 || amount <= 0) {
+    return points;
+  }
+
+  const out = [...points];
+  out[0] = advancePoint(out[0], out[1], amount);
+  return out;
+};
+
 const drawConnector = (
   svg: SVG,
   group: d3.Selection<SVGGElement, unknown, any, any>,
@@ -3492,6 +3558,8 @@ const drawConnector = (
     Math.abs(startBox.width - endBox.width) < 0.75 &&
     Math.abs(startBox.height - endBox.height) < 0.75;
 
+  const gap = getConnectorGap(connector);
+
   const pathStart =
     isSameAnchorSelfLoop || !startSide
       ? start
@@ -3515,11 +3583,10 @@ const drawConnector = (
     routeBoundary
   );
 
-  let points = rawPoints;
+  let points = trimPolylineStart(rawPoints, gap);
   let mid = polylineMidpoint(points);
-
   if (arrowheads <= 1 || !endSide) {
-    points = trimPolylineEnd(rawPoints, arrowheads === 0 ? 0 : 3);
+    points = trimPolylineEnd(points, arrowheads === 0 ? gap : gap + 3);
 
     connectorG
       .append('path')
@@ -3548,8 +3615,8 @@ const drawConnector = (
     }
     mid = polylineMidpoint(points);
   } else {
-    const fan = getMultiArrowBus(pathEnd, endSide, arrowheads, 8, 17);
-    points = replacePolylineEnd(rawPoints, fan.shaftTarget);
+    const fan = getMultiArrowBus(pathEnd, endSide, arrowheads, 8 + gap, 17);
+    points = replacePolylineEnd(points, fan.shaftTarget);
 
     connectorG
       .append('path')
@@ -3622,7 +3689,7 @@ const drawConnector = (
 
   return {
     name: 'name' in connector ? connector.name : '',
-    start: pathStart,
+    start: points[0] ?? pathStart,
     end: pathEnd,
     mid,
     points,

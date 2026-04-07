@@ -189,6 +189,7 @@ const populate = (ast: VisualDiagram) => {
                 color: e2.color,
                 label: e2.label,
                 arrowheads: e2.arrowheads,
+                gap: e2.gap,
               })),
             })),
 
@@ -231,6 +232,7 @@ const populate = (ast: VisualDiagram) => {
                     color: e.color,
                     label: e.label,
                     arrowheads: e.arrowheads,
+                    gap: e.gap,
                   })),
                 }
               : undefined,

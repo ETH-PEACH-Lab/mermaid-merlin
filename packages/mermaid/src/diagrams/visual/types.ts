@@ -98,7 +98,7 @@ export interface Node {
   style?: 'box' | 'rounded';
   stroke?: string;
   shape: string | CNNNeurons[];
-  kernelSize: string;
+  kernelSize?: string;
   labelSubtext?: string;
   opLabel?: string;
   opLabelSubtext?: string;
@@ -113,6 +113,7 @@ export interface Edge {
   color?: string;
   label?: string;
   arrowheads?: number;
+  gap?: number;
 }
 
 export type EndpointEdge =
@@ -155,6 +156,7 @@ export interface Connection {
   color?: string;
   label?: string;
   arrowheads?: number;
+  gap?: number;
 }
 
 export type EndpointDiagram =
