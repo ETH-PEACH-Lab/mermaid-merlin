@@ -142,13 +142,13 @@ const STACKED_MIN_BODY_HEIGHT = 52;
 const FLATTEN_CELL_WIDTH = 16;
 const FLATTEN_CELL_HEIGHT = 6;
 const FLATTEN_CELL_GAP = 2;
-const FLATTEN_MIN_BODY_WIDTH = 48;
+const FLATTEN_MIN_BODY_WIDTH = FLATTEN_CELL_WIDTH;
 const FLATTEN_MIN_BODY_HEIGHT = 52;
 
 const FC_LAYER_GAP = 34;
 const FC_NEURON_RADIUS = 5;
 const FC_NEURON_GAP = 3;
-const FC_MIN_BODY_WIDTH = 90;
+const FC_MIN_BODY_WIDTH = FC_NEURON_RADIUS * 2;
 const FC_MIN_BODY_HEIGHT = 60;
 
 const SPECIAL_LABEL_MIN_WIDTH = 36;
@@ -523,19 +523,7 @@ const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
     const denseHeight =
       maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
-    const estimatedOutputLabelsWidth =
-      layers.length > 0 && layers[layers.length - 1]?.labels?.length
-        ? Math.max(
-            ...layers[layers.length - 1].labels.map((s: string) =>
-              estimateTextWidth(s, BASE_FONT_SIZE)
-            )
-          ) + 20
-        : 0;
-
-    const denseWidth =
-      Math.max(1, layers.length - 1) * FC_LAYER_GAP +
-      FC_NEURON_RADIUS * 2 +
-      estimatedOutputLabelsWidth;
+    const denseWidth = Math.max(1, layers.length - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
 
     return {
       x: box.x + (box.width - denseWidth) / 2,
@@ -612,11 +600,10 @@ const getFlattenNodeBodySize = (node: Node) => {
     Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
     Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
 
-  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
   const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
 
   return {
-    width: Math.max(FLATTEN_MIN_BODY_WIDTH, FLATTEN_CELL_WIDTH + 12, labelWidth + 20),
+    width: FLATTEN_MIN_BODY_WIDTH,
     height: Math.max(FLATTEN_MIN_BODY_HEIGHT, visualHeight + bottomReserved),
   };
 };
@@ -629,24 +616,12 @@ const getFullyConnectedNodeBodySize = (node: Node) => {
   const denseHeight =
     maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
-  const estimatedOutputLabelsWidth =
-    layers.length > 0 && layers[layers.length - 1]?.labels?.length
-      ? Math.max(
-          ...layers[layers.length - 1].labels.map((s: string) =>
-            estimateTextWidth(s, BASE_FONT_SIZE)
-          )
-        ) + 20
-      : 0;
+  const denseWidth = (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
 
-  const denseWidth =
-    (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2 + estimatedOutputLabelsWidth;
-
-  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
-  const width = Math.max(FC_MIN_BODY_WIDTH, denseWidth + 24, labelWidth + 20);
   const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
 
   return {
-    width,
+    width: Math.max(FC_MIN_BODY_WIDTH, denseWidth),
     height: Math.max(FC_MIN_BODY_HEIGHT, denseHeight + bottomReserved),
   };
 };
