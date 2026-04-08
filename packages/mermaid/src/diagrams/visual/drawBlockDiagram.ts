@@ -154,6 +154,8 @@ const FC_MIN_BODY_HEIGHT = 60;
 const SPECIAL_LABEL_MIN_WIDTH = 36;
 const SPECIAL_LABEL_PADDING_X = 8;
 
+const ABSOLUTE_MIN_NODE_SIZE = 2;
+
 const getStackedMetrics = (
   shape: { depth: number; width: number; height: number },
   featureScale: number
@@ -488,7 +490,10 @@ const getStackedNodeBodySize = (node: Node) => {
 
   const shape = parse3DDims((node as any).shape);
   if (!shape) {
-    return requested;
+    return {
+      width: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width),
+      height: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height),
+    };
   }
 
   const maxDim = Math.max(1, shape.width, shape.height);
@@ -497,13 +502,18 @@ const getStackedNodeBodySize = (node: Node) => {
   const bottomReserved = getSpecialBottomReserved(node);
   const labelWidth = estimateTextWidth(node.label ?? '', BASE_FONT_SIZE) + 20;
 
+  const naturalWidth = Math.max(metrics.visibleWidth, labelWidth + 20, STACKED_MIN_BODY_WIDTH);
+  const naturalHeight = Math.max(metrics.visibleHeight + bottomReserved, STACKED_MIN_BODY_HEIGHT);
+
+  const hasExplicitSize = !!node.size;
+
   return {
-    width: Math.max(requested.width, metrics.visibleWidth, labelWidth, STACKED_MIN_BODY_WIDTH),
-    height: Math.max(
-      requested.height,
-      metrics.visibleHeight + bottomReserved,
-      STACKED_MIN_BODY_HEIGHT
-    ),
+    width: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalWidth),
+    height: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalHeight),
   };
 };
 
@@ -519,13 +529,21 @@ const getFlattenNodeBodySize = (node: Node) => {
   const naturalHeight =
     flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
 
+  const naturalWidth = FLATTEN_MIN_BODY_WIDTH;
+  const naturalFullHeight = Math.max(
+    naturalHeight + getSpecialBottomReserved(node),
+    FLATTEN_MIN_BODY_HEIGHT
+  );
+
+  const hasExplicitSize = !!node.size;
+
   return {
-    width: Math.max(requested.width, FLATTEN_MIN_BODY_WIDTH),
-    height: Math.max(
-      requested.height,
-      naturalHeight + getSpecialBottomReserved(node),
-      FLATTEN_MIN_BODY_HEIGHT
-    ),
+    width: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalWidth),
+    height: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalFullHeight),
   };
 };
 
@@ -543,13 +561,20 @@ const getFullyConnectedNodeBodySize = (node: Node) => {
   const naturalHeight =
     maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
+  const naturalFullHeight = Math.max(
+    naturalHeight + getSpecialBottomReserved(node),
+    FC_MIN_BODY_HEIGHT
+  );
+
+  const hasExplicitSize = !!node.size;
+
   return {
-    width: Math.max(requested.width, naturalWidth, FC_MIN_BODY_WIDTH),
-    height: Math.max(
-      requested.height,
-      naturalHeight + getSpecialBottomReserved(node),
-      FC_MIN_BODY_HEIGHT
-    ),
+    width: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalWidth),
+    height: hasExplicitSize
+      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalFullHeight),
   };
 };
 const defaultPortCounts = (): Record<Side, number> => ({
@@ -2652,7 +2677,7 @@ const drawSpecialTransitionConnector = (
     for (let i = 0; i < pairCount; i++) {
       const x1 = fromGeom.right;
       const y1 = fromGeom.centersY[i];
-      const x2 = toGeom.firstLayer.x - FC_NEURON_RADIUS;
+      const x2 = toGeom.firstLayer.x - toGeom.radius;
       const y2 = toGeom.firstLayer.ys[i];
 
       drawProjectionLine(connectorG, x1, y1, x2, y2, color);
@@ -2670,7 +2695,7 @@ const drawSpecialTransitionConnector = (
         y: fromGeom.centersY[Math.floor(fromGeom.centersY.length / 2)] ?? fromBox.y,
       },
       end: {
-        x: toGeom.firstLayer.x - FC_NEURON_RADIUS,
+        x: toGeom.firstLayer.x - toGeom.radius,
         y: toGeom.firstLayer.ys[Math.floor(toGeom.firstLayer.ys.length / 2)] ?? toBox.y,
       },
       mid: polylineMidpoint(points),
@@ -3356,7 +3381,7 @@ const getFullyConnectedOutputLabelsRightExtent = (node: Node, box: Box) => {
     0
   );
 
-  const labelStartX = lastLayerGeom.x + FC_NEURON_RADIUS + 5;
+  const labelStartX = lastLayerGeom.x + geom.radius + 5;
   const labelEndX = labelStartX + maxLabelWidth;
 
   return Math.max(box.x + box.width, labelEndX);
