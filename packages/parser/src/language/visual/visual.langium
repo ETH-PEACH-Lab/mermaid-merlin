@@ -93,8 +93,8 @@ Nodes:
 Node:
    type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
    | type='text' name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('color:' color=STRING)?
-   | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial ('kernelSize:' kernelSize=KernelSizeFormat)? ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? ('color:' color=STRING)? 
-   | type=CNNStageType name=ID 'shape:' shape=CNNShape ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? ('color:' color=CNNColor)?
+   | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial ('kernelSize:' kernelSize=KernelSizeFormat)? ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=STRING)? 
+   | type=CNNStageType name=ID 'shape:' shape=CNNShape ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=CNNColor)?
 ;
 
 Edges:

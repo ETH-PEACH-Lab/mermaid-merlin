@@ -178,37 +178,12 @@ const getStackedMetrics = (
 };
 
 const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }): number => {
-  if (node.type === 'stacked') {
-    const shape = parse3DDims((node as any).shape);
-    if (!shape) {
-      return size.height / 2;
-    }
-    const maxDim = Math.max(1, shape.width, shape.height);
-    const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
-    const metrics = getStackedMetrics(shape, featureScale);
-    return metrics.visibleHeight / 2;
-  }
-
-  if (node.type === 'flatten') {
-    const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-    const flattenedCount = shape ? shape.width * shape.height : 1;
-    const visualHeight =
-      Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
-      Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
-    return visualHeight / 2;
-  }
-
-  if (node.type === 'fullyConnected') {
-    const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
-    const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
-    const denseHeight =
-      maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
-    return denseHeight / 2;
+  if (node.type === 'stacked' || node.type === 'flatten' || node.type === 'fullyConnected') {
+    return Math.max(1, size.height - getSpecialBottomReserved(node)) / 2;
   }
 
   return size.height / 2;
 };
-
 const estimateTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
   const s = String(text ?? '');
   return s ? Math.max(10, s.length * fontSize * 0.58) : 0;
@@ -341,23 +316,18 @@ const parse3DDims = (
 };
 
 const getStackedTransitionGeometry = (node: Node, box: Box) => {
-  const shape = parse3DDims((node as any).shape);
-  if (!shape) {
+  const fitted = getStackedFittedMetrics(node, box);
+  if (!fitted) {
     return null;
   }
 
-  const maxDim = Math.max(1, shape.width, shape.height);
-  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
-  const metrics = getStackedMetrics(shape, featureScale);
+  const { featureScale, metrics, stackLeft, stackTop } = fitted;
 
   const rectWidth = metrics.rectWidth;
   const rectHeight = metrics.rectHeight;
   const dx = metrics.sliceOffset;
   const dy = metrics.sliceOffset;
   const renderedDepthSpan = Math.max(0, metrics.effectiveDepth - 1);
-
-  const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
-  const stackTop = box.y;
 
   const frontX = stackLeft + renderedDepthSpan * dx;
   const frontY = stackTop + renderedDepthSpan * dy;
@@ -404,68 +374,26 @@ const getStackedTransitionGeometry = (node: Node, box: Box) => {
 };
 
 const getFlattenTransitionGeometry = (node: Node, box: Box) => {
-  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-  const flattenedCount = shape ? shape.width * shape.height : 1;
-
-  const naturalHeight =
-    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
-
-  const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
-  const right = left + FLATTEN_CELL_WIDTH;
-  const topY = box.y;
-  const bottomY = topY + naturalHeight;
-
-  const centersY = Array.from({ length: flattenedCount }, (_, i) => {
-    return topY + i * (FLATTEN_CELL_HEIGHT + FLATTEN_CELL_GAP) + FLATTEN_CELL_HEIGHT / 2;
-  });
+  const fitted = getFlattenFittedMetrics(node, box);
 
   return {
-    x: left,
-    right,
-    topY,
-    bottomY,
-    centersY,
+    x: fitted.left,
+    right: fitted.right,
+    topY: fitted.top,
+    bottomY: fitted.bottom,
+    centersY: fitted.centersY,
   };
 };
-
 const getFullyConnectedTransitionGeometry = (node: Node, box: Box) => {
-  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
-  if (!layers.length) {
+  const fitted = getFullyConnectedFittedMetrics(node, box);
+  if (!fitted) {
     return null;
   }
 
-  const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
-  const denseHeight =
-    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
-  const centerY = box.y + denseHeight / 2;
-
-  const totalDenseWidth = layers.length <= 1 ? 0 : (layers.length - 1) * FC_LAYER_GAP;
-  const startX = box.x + (box.width - totalDenseWidth) / 2;
-
-  const renderedLayers = layers.map((layer, i) => {
-    const count = Math.max(1, layer.neurons ?? 1);
-    const layerHeight = count * FC_NEURON_RADIUS * 2 + Math.max(0, count - 1) * FC_NEURON_GAP;
-
-    const topCenter = centerY - layerHeight / 2 + FC_NEURON_RADIUS;
-    const bottomCenter = centerY + layerHeight / 2 - FC_NEURON_RADIUS;
-
-    const ys =
-      count === 1
-        ? [(topCenter + bottomCenter) / 2]
-        : Array.from(
-            { length: count },
-            (_, idx) => topCenter + ((bottomCenter - topCenter) * idx) / (count - 1)
-          );
-
-    return {
-      x: startX + i * FC_LAYER_GAP,
-      ys,
-    };
-  });
-
   return {
-    layers: renderedLayers,
-    firstLayer: renderedLayers[0],
+    layers: fitted.renderedLayers,
+    firstLayer: fitted.firstLayer,
+    radius: fitted.radius,
   };
 };
 
@@ -475,67 +403,45 @@ const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
   }
 
   if (node.type === 'stacked') {
-    const shape = parse3DDims((node as any).shape);
-    if (!shape) {
+    const fitted = getStackedFittedMetrics(node, box);
+    if (!fitted) {
       return box;
     }
 
-    const maxDim = Math.max(1, shape.width, shape.height);
-    const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
-    const metrics = getStackedMetrics(shape, featureScale);
-
-    const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
-    const stackTop = box.y;
-
     return {
-      x: stackLeft,
-      y: stackTop,
-      width: metrics.visibleWidth,
-      height: metrics.visibleHeight,
+      x: fitted.stackLeft,
+      y: fitted.stackTop,
+      width: fitted.metrics.visibleWidth,
+      height: fitted.metrics.visibleHeight,
     };
   }
 
   if (node.type === 'flatten') {
-    const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-    const flattenedCount = shape ? shape.width * shape.height : 1;
-
-    const visualHeight =
-      Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
-      Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
-
-    const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
-
+    const fitted = getFlattenFittedMetrics(node, box);
     return {
-      x: left,
-      y: box.y,
-      width: FLATTEN_CELL_WIDTH,
-      height: visualHeight,
+      x: fitted.left,
+      y: fitted.top,
+      width: fitted.renderWidth,
+      height: fitted.renderHeight,
     };
   }
 
   if (node.type === 'fullyConnected') {
-    const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
-    if (!layers.length) {
+    const fitted = getFullyConnectedFittedMetrics(node, box);
+    if (!fitted) {
       return box;
     }
 
-    const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
-    const denseHeight =
-      maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
-
-    const denseWidth = Math.max(1, layers.length - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
-
     return {
-      x: box.x + (box.width - denseWidth) / 2,
-      y: box.y,
-      width: denseWidth,
-      height: denseHeight,
+      x: fitted.visual.x + (fitted.visual.width - fitted.denseWidth) / 2,
+      y: fitted.visual.y + (fitted.visual.height - fitted.denseHeight) / 2,
+      width: fitted.denseWidth,
+      height: fitted.denseHeight,
     };
   }
 
   return box;
 };
-
 const getMarkerSpanBoxFromSiblings = (itemBox: Box, prevBox?: Box, nextBox?: Box): Box => {
   const left = prevBox
     ? prevBox.x + prevBox.width + (itemBox.x - (prevBox.x + prevBox.width)) / 2
@@ -575,57 +481,77 @@ const getStackedSliceOffset = (
 };
 
 const getStackedNodeBodySize = (node: Node) => {
+  const requested = parseSize(node.size, {
+    width: STACKED_MIN_BODY_WIDTH,
+    height: STACKED_MIN_BODY_HEIGHT,
+  });
+
   const shape = parse3DDims((node as any).shape);
   if (!shape) {
-    return { width: STACKED_MIN_BODY_WIDTH, height: STACKED_MIN_BODY_HEIGHT };
+    return requested;
   }
 
   const maxDim = Math.max(1, shape.width, shape.height);
   const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
   const metrics = getStackedMetrics(shape, featureScale);
-
-  const labelWidth = Math.max(estimateTextWidth(node.label ?? '', BASE_FONT_SIZE));
-  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+  const bottomReserved = getSpecialBottomReserved(node);
+  const labelWidth = estimateTextWidth(node.label ?? '', BASE_FONT_SIZE) + 20;
 
   return {
-    width: Math.max(metrics.visibleWidth, labelWidth + 20, STACKED_MIN_BODY_WIDTH),
-    height: Math.max(metrics.visibleHeight + bottomReserved, STACKED_MIN_BODY_HEIGHT),
+    width: Math.max(requested.width, metrics.visibleWidth, labelWidth, STACKED_MIN_BODY_WIDTH),
+    height: Math.max(
+      requested.height,
+      metrics.visibleHeight + bottomReserved,
+      STACKED_MIN_BODY_HEIGHT
+    ),
   };
 };
+
 const getFlattenNodeBodySize = (node: Node) => {
+  const requested = parseSize(node.size, {
+    width: FLATTEN_MIN_BODY_WIDTH,
+    height: FLATTEN_MIN_BODY_HEIGHT,
+  });
+
   const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-  const flattenedCount = shape ? shape.width * shape.height : 1;
+  const flattenedCount = Math.max(1, shape ? shape.width * shape.height : 1);
 
-  const visualHeight =
-    Math.max(1, flattenedCount) * FLATTEN_CELL_HEIGHT +
-    Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
-
-  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+  const naturalHeight =
+    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
 
   return {
-    width: FLATTEN_MIN_BODY_WIDTH,
-    height: Math.max(FLATTEN_MIN_BODY_HEIGHT, visualHeight + bottomReserved),
+    width: Math.max(requested.width, FLATTEN_MIN_BODY_WIDTH),
+    height: Math.max(
+      requested.height,
+      naturalHeight + getSpecialBottomReserved(node),
+      FLATTEN_MIN_BODY_HEIGHT
+    ),
   };
 };
 
 const getFullyConnectedNodeBodySize = (node: Node) => {
+  const requested = parseSize(node.size, {
+    width: FC_MIN_BODY_WIDTH,
+    height: FC_MIN_BODY_HEIGHT,
+  });
+
   const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
   const layerCount = Math.max(1, layers.length);
   const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
 
-  const denseHeight =
+  const naturalWidth = (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
+  const naturalHeight =
     maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
-  const denseWidth = (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
-
-  const bottomReserved = getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
-
   return {
-    width: Math.max(FC_MIN_BODY_WIDTH, denseWidth),
-    height: Math.max(FC_MIN_BODY_HEIGHT, denseHeight + bottomReserved),
+    width: Math.max(requested.width, naturalWidth, FC_MIN_BODY_WIDTH),
+    height: Math.max(
+      requested.height,
+      naturalHeight + getSpecialBottomReserved(node),
+      FC_MIN_BODY_HEIGHT
+    ),
   };
 };
-
 const defaultPortCounts = (): Record<Side, number> => ({
   left: 1,
   right: 1,
@@ -640,6 +566,164 @@ const parseSize = (
   width: Number(size?.width ?? fallback.width) || fallback.width,
   height: Number(size?.height ?? fallback.height) || fallback.height,
 });
+
+const getSpecialBottomReserved = (node: Node) =>
+  getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+
+const getSpecialVisualBox = (node: Node, box: Box) => {
+  const reservedBottom = getSpecialBottomReserved(node);
+  const visualHeight = Math.max(1, box.height - reservedBottom);
+
+  return {
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: visualHeight,
+    reservedBottom,
+  };
+};
+
+const getStackedFittedMetrics = (node: Node, box: Box) => {
+  const shape = parse3DDims((node as any).shape);
+  if (!shape) {
+    return null;
+  }
+
+  const visual = getSpecialVisualBox(node, box);
+
+  let featureScale = Math.min(
+    visual.width / Math.max(1, shape.width),
+    visual.height / Math.max(1, shape.height)
+  );
+
+  featureScale = Math.max(featureScale, 0.0001);
+
+  let metrics = getStackedMetrics(shape, featureScale);
+
+  for (let i = 0; i < 5; i++) {
+    const fitScale = Math.min(
+      visual.width / Math.max(1, metrics.visibleWidth),
+      visual.height / Math.max(1, metrics.visibleHeight)
+    );
+    if (Math.abs(fitScale - 1) < 0.01) {
+      break;
+    }
+    featureScale *= fitScale;
+    metrics = getStackedMetrics(shape, featureScale);
+  }
+
+  const stackLeft = visual.x + (visual.width - metrics.visibleWidth) / 2;
+  const stackTop = visual.y + (visual.height - metrics.visibleHeight) / 2;
+
+  return { shape, visual, featureScale, metrics, stackLeft, stackTop };
+};
+
+const getFlattenFittedMetrics = (node: Node, box: Box) => {
+  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
+  const flattenedCount = Math.max(1, shape ? shape.width * shape.height : 1);
+
+  const visual = getSpecialVisualBox(node, box);
+
+  const naturalWidth = FLATTEN_CELL_WIDTH;
+  const naturalHeight =
+    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+
+  const scale = Math.max(
+    0.0001,
+    Math.min(visual.width / Math.max(1, naturalWidth), visual.height / Math.max(1, naturalHeight))
+  );
+
+  const cellWidth = FLATTEN_CELL_WIDTH * scale;
+  const cellHeight = FLATTEN_CELL_HEIGHT * scale;
+  const cellGap = FLATTEN_CELL_GAP * scale;
+
+  const renderWidth = cellWidth;
+  const renderHeight = flattenedCount * cellHeight + Math.max(0, flattenedCount - 1) * cellGap;
+
+  const left = visual.x + (visual.width - renderWidth) / 2;
+  const top = visual.y + (visual.height - renderHeight) / 2;
+
+  return {
+    visual,
+    flattenedCount,
+    cellWidth,
+    cellHeight,
+    cellGap,
+    renderWidth,
+    renderHeight,
+    left,
+    top,
+    right: left + renderWidth,
+    bottom: top + renderHeight,
+    centersY: Array.from({ length: flattenedCount }, (_, i) => {
+      return top + i * (cellHeight + cellGap) + cellHeight / 2;
+    }),
+  };
+};
+
+const getFullyConnectedFittedMetrics = (node: Node, box: Box) => {
+  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  if (!layers.length) {
+    return null;
+  }
+
+  const visual = getSpecialVisualBox(node, box);
+
+  const layerCount = Math.max(1, layers.length);
+  const maxNeurons = Math.max(1, ...layers.map((l) => l?.neurons ?? 1));
+
+  const naturalWidth = (layerCount - 1) * FC_LAYER_GAP + FC_NEURON_RADIUS * 2;
+  const naturalHeight =
+    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
+
+  const scale = Math.max(
+    0.0001,
+    Math.min(visual.width / Math.max(1, naturalWidth), visual.height / Math.max(1, naturalHeight))
+  );
+
+  const radius = FC_NEURON_RADIUS * scale;
+  const layerGap = FC_LAYER_GAP * scale;
+  const neuronGap = FC_NEURON_GAP * scale;
+
+  const denseWidth = (layerCount - 1) * layerGap + radius * 2;
+  const denseHeight = maxNeurons * radius * 2 + Math.max(0, maxNeurons - 1) * neuronGap;
+
+  const startX = visual.x + (visual.width - denseWidth) / 2 + radius;
+  const centerY = visual.y + visual.height / 2;
+
+  const renderedLayers = layers.map((layer, i) => {
+    const count = Math.max(1, layer.neurons ?? 1);
+    const layerHeight = count * radius * 2 + Math.max(0, count - 1) * neuronGap;
+
+    const topCenter = centerY - layerHeight / 2 + radius;
+    const bottomCenter = centerY + layerHeight / 2 - radius;
+
+    const ys =
+      count === 1
+        ? [(topCenter + bottomCenter) / 2]
+        : Array.from(
+            { length: count },
+            (_, idx) => topCenter + ((bottomCenter - topCenter) * idx) / (count - 1)
+          );
+
+    return {
+      x: startX + i * layerGap,
+      ys,
+      labels: layer.labels ?? [],
+    };
+  });
+
+  return {
+    visual,
+    radius,
+    layerGap,
+    neuronGap,
+    denseWidth,
+    denseHeight,
+    renderedLayers,
+    firstLayer: renderedLayers[0],
+  };
+};
 
 const getRectHeightForWidth = (node: Node, width: number) => {
   const contentWidth = Math.max(8, width - RECT_HORIZONTAL_PADDING * 2);
@@ -2888,8 +2972,8 @@ const drawStackedNode = (
   node: Node,
   box: Box
 ) => {
-  const shape = parse3DDims((node as any).shape);
-  if (!shape) {
+  const fitted = getStackedFittedMetrics(node, box);
+  if (!fitted) {
     group
       .append('rect')
       .attr('x', box.x)
@@ -2899,22 +2983,16 @@ const drawStackedNode = (
       .attr('fill', getLightenedColor(!Array.isArray(node.color) ? node.color : 'white') ?? 'white')
       .attr('stroke', safeColorName(node.stroke, 'black'))
       .attr('stroke-width', 1.3);
-
     return;
   }
 
-  const maxDim = Math.max(1, shape.width, shape.height);
-  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
-  const metrics = getStackedMetrics(shape, featureScale);
+  const { featureScale, metrics, stackLeft, stackTop, visual } = fitted;
 
   const rectWidth = metrics.rectWidth;
   const rectHeight = metrics.rectHeight;
   const dx = metrics.sliceOffset;
   const dy = metrics.sliceOffset;
   const renderedDepthSpan = Math.max(0, metrics.effectiveDepth - 1);
-
-  const stackLeft = box.x + (box.width - metrics.visibleWidth) / 2;
-  const stackTop = box.y;
 
   const frontX = stackLeft + renderedDepthSpan * dx;
   const frontY = stackTop + renderedDepthSpan * dy;
@@ -2963,12 +3041,11 @@ const drawStackedNode = (
 
   const label = node.label ?? '';
   const subText = (node as any).labelSubtext ?? '';
+  const centerX = box.x + box.width / 2;
+  const labelY = visual.y + visual.height + STACKED_LABEL_GAP;
 
-  const opCenterX = frontX + rectWidth / 2;
-
-  const labelY = stackTop + metrics.visibleHeight + STACKED_LABEL_GAP;
   if (label || subText) {
-    drawGrowingDownLabelBlock(group as any, label, subText, opCenterX, labelY);
+    drawGrowingDownLabelBlock(group as any, label, subText, centerX, labelY);
   }
 };
 
@@ -2977,45 +3054,34 @@ const drawFlattenNode = (
   node: Node,
   box: Box
 ) => {
-  const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-  const flattenedCount = shape ? shape.width * shape.height : 1;
+  const fitted = getFlattenFittedMetrics(node, box);
 
   const fillColor =
     getLightenedColor(
       safeColorName(Array.isArray(node.color) ? node.color[0] : node.color, '#c9b79f')
     ) ?? '#c9b79f';
 
-  const label = node.label ?? '';
-  const labelSubtext = (node as any).labelSubtext ?? '';
+  for (let i = 0; i < fitted.flattenedCount; i++) {
+    const y = fitted.top + i * (fitted.cellHeight + fitted.cellGap);
 
-  const bodyTop = box.y;
-
-  const naturalHeight =
-    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
-
-  const renderTop = bodyTop;
-  const left = box.x + (box.width - FLATTEN_CELL_WIDTH) / 2;
-
-  let currentY = renderTop;
-  for (let i = 0; i < flattenedCount; i++) {
     group
       .append('rect')
-      .attr('x', left)
-      .attr('y', currentY)
-      .attr('width', FLATTEN_CELL_WIDTH)
-      .attr('height', FLATTEN_CELL_HEIGHT)
+      .attr('x', fitted.left)
+      .attr('y', y)
+      .attr('width', fitted.cellWidth)
+      .attr('height', fitted.cellHeight)
       .attr('fill', fillColor)
       .attr('stroke', '#444')
       .attr('stroke-width', 0.8);
-
-    currentY += FLATTEN_CELL_HEIGHT + FLATTEN_CELL_GAP;
   }
 
+  const label = node.label ?? '';
+  const labelSubtext = (node as any).labelSubtext ?? '';
   const centerX = box.x + box.width / 2;
+  const labelY = fitted.visual.y + fitted.visual.height + STACKED_LABEL_GAP;
 
-  const labelStartY = bodyTop + naturalHeight + STACKED_LABEL_GAP;
   if (label || labelSubtext) {
-    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelStartY);
+    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelY);
   }
 };
 
@@ -3024,46 +3090,20 @@ const drawFullyConnectedNode = (
   node: Node,
   box: Box
 ) => {
-  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  const fitted = getFullyConnectedFittedMetrics(node, box);
+  if (!fitted) {
+    return;
+  }
+
   const layerColors = Array.isArray(node.color) ? node.color : [];
 
-  const label = node.label ?? '';
-  const labelSubtext = (node as any).labelSubtext ?? '';
-
-  const bodyTop = box.y;
-  const maxNeurons = Math.max(1, ...layers.map((l) => l.neurons ?? 1));
-  const denseHeight =
-    maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
-  const centerY = bodyTop + denseHeight / 2;
-
-  const totalDenseWidth = layers.length <= 1 ? 0 : (layers.length - 1) * FC_LAYER_GAP;
-  const startX = box.x + (box.width - totalDenseWidth) / 2;
-
-  const renderedLayers = layers.map((layer, i) => {
-    const count = Math.max(1, layer.neurons ?? 1);
-    const layerHeight = count * FC_NEURON_RADIUS * 2 + Math.max(0, count - 1) * FC_NEURON_GAP;
-
-    const topCenter = centerY - layerHeight / 2 + FC_NEURON_RADIUS;
-    const bottomCenter = centerY + layerHeight / 2 - FC_NEURON_RADIUS;
-
-    const ys =
-      count === 1
-        ? [(topCenter + bottomCenter) / 2]
-        : Array.from(
-            { length: count },
-            (_, idx) => topCenter + ((bottomCenter - topCenter) * idx) / (count - 1)
-          );
-
-    return {
-      x: startX + i * FC_LAYER_GAP,
-      ys,
-      labels: layer.labels ?? [],
-      color:
-        getLightenedColor(safeColorName(layerColors[i], 'white')) ??
-        getLightenedColor('white') ??
-        'white',
-    };
-  });
+  const renderedLayers = fitted.renderedLayers.map((layer, i) => ({
+    ...layer,
+    color:
+      getLightenedColor(safeColorName(layerColors[i], 'white')) ??
+      getLightenedColor('white') ??
+      'white',
+  }));
 
   for (let i = 0; i < renderedLayers.length - 1; i++) {
     const from = renderedLayers[i];
@@ -3073,9 +3113,9 @@ const drawFullyConnectedNode = (
       for (const y2 of to.ys) {
         group
           .append('line')
-          .attr('x1', from.x + FC_NEURON_RADIUS)
+          .attr('x1', from.x + fitted.radius)
           .attr('y1', y1)
-          .attr('x2', to.x - FC_NEURON_RADIUS)
+          .attr('x2', to.x - fitted.radius)
           .attr('y2', y2)
           .attr('stroke', '#444')
           .attr('stroke-width', 0.8)
@@ -3091,7 +3131,7 @@ const drawFullyConnectedNode = (
         .append('circle')
         .attr('cx', layer.x)
         .attr('cy', y)
-        .attr('r', FC_NEURON_RADIUS)
+        .attr('r', fitted.radius)
         .attr('fill', layer.color)
         .attr('stroke', '#444')
         .attr('stroke-width', 1.1);
@@ -3106,7 +3146,7 @@ const drawFullyConnectedNode = (
       drawText(
         group as any,
         lastLayer.labels[i],
-        lastLayer.x + FC_NEURON_RADIUS + 5,
+        lastLayer.x + fitted.radius + 5,
         lastLayer.ys[i],
         'start',
         BASE_SUB_FONT_SIZE
@@ -3114,12 +3154,13 @@ const drawFullyConnectedNode = (
     }
   }
 
+  const label = node.label ?? '';
+  const labelSubtext = (node as any).labelSubtext ?? '';
   const centerX = box.x + box.width / 2;
-
-  const labelStartY = bodyTop + denseHeight + STACKED_LABEL_GAP;
+  const labelY = fitted.visual.y + fitted.visual.height + STACKED_LABEL_GAP;
 
   if (label || labelSubtext) {
-    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelStartY);
+    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelY);
   }
 };
 const drawNode = (
@@ -3291,12 +3332,61 @@ const drawNode = (
   const subLines = subText ? wrapTextLines(subText, availableWidth, BASE_SUB_FONT_SIZE) : [];
   renderCenteredTextLines(textGroup, labelLines, subLines, innerBox);
 };
+const getFullyConnectedOutputLabelsRightExtent = (node: Node, box: Box) => {
+  if (node.type !== 'fullyConnected') {
+    return box.x + box.width;
+  }
+
+  const geom = getFullyConnectedTransitionGeometry(node, box);
+  if (!geom?.layers?.length) {
+    return box.x + box.width;
+  }
+
+  const layers = Array.isArray((node as any).shape) ? ((node as any).shape as any[]) : [];
+  const lastLayerGeom = geom.layers[geom.layers.length - 1];
+  const lastLayerDef = layers[layers.length - 1];
+  const labels = lastLayerDef?.labels ?? [];
+
+  if (!labels.length || !lastLayerGeom) {
+    return box.x + box.width;
+  }
+
+  const maxLabelWidth = Math.max(
+    ...labels.map((label: string) => estimateTextWidth(String(label ?? ''), BASE_SUB_FONT_SIZE)),
+    0
+  );
+
+  const labelStartX = lastLayerGeom.x + FC_NEURON_RADIUS + 5;
+  const labelEndX = labelStartX + maxLabelWidth;
+
+  return Math.max(box.x + box.width, labelEndX);
+};
+
+const getNodeAnnotationBox = (node: Node, box: Box): Box => {
+  const anchorBox = getNodeVisualAnchorBox(node, box);
+
+  if (node.type !== 'fullyConnected') {
+    return anchorBox;
+  }
+
+  const rightExtent = getFullyConnectedOutputLabelsRightExtent(node, box);
+
+  return {
+    x: anchorBox.x,
+    y: anchorBox.y,
+    width: Math.max(anchorBox.width, rightExtent - anchorBox.x),
+    height: anchorBox.height,
+  };
+};
+
 const drawNodeAnnotations = (
   layer: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
   box: Box
 ) => {
   const annotationMap = getAnnotationMap(node.annotations);
+  const baseBox = getNodeVisualAnchorBox(node, box);
+  const annotationBox = getNodeAnnotationBox(node, box);
 
   for (const side of SIDES) {
     const annotation = annotationMap[side];
@@ -3307,7 +3397,7 @@ const drawNodeAnnotations = (
     drawSideAnnotation(
       layer.append('text'),
       side,
-      box,
+      side === 'right' ? annotationBox : baseBox,
       annotation.value,
       side === 'bottom' ? 12 : 4,
       NODE_ANNOTATION_FONT_SIZE

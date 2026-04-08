@@ -141,6 +141,11 @@ const populate = (ast: VisualDiagram) => {
                     labelSubtext: e2.labelSubtext,
                     opLabel: e2.opLabel,
                     opLabelSubtext: e2.opLabelSubtext,
+                    annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
+                      side: e3.side,
+                      value: e3.value,
+                    })),
+                    size: e2.size,
                     color: e2.color?.color,
                   };
                 }
