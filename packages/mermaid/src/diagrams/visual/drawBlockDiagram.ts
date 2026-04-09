@@ -269,10 +269,12 @@ const parse2DDims = (
     if (value.length !== 2) {
       return null;
     }
-    const [width, height] = value.map(Number);
-    if (![width, height].every(Number.isFinite)) {
+
+    const [height, width] = value.map(Number);
+    if (![height, width].every(Number.isFinite)) {
       return null;
     }
+
     return { width, height };
   }
 
@@ -282,8 +284,8 @@ const parse2DDims = (
   }
 
   return {
-    width: Number(match[1]),
-    height: Number(match[2]),
+    height: Number(match[1]),
+    width: Number(match[2]),
   };
 };
 
@@ -298,10 +300,12 @@ const parse3DDims = (
     if (value.length !== 3) {
       return null;
     }
-    const [depth, width, height] = value.map(Number);
-    if (![depth, width, height].every(Number.isFinite)) {
+
+    const [depth, height, width] = value.map(Number);
+    if (![depth, height, width].every(Number.isFinite)) {
       return null;
     }
+
     return { depth, width, height };
   }
 
@@ -312,8 +316,8 @@ const parse3DDims = (
 
   return {
     depth: Number(match[1]),
-    width: Number(match[2]),
-    height: Number(match[3]),
+    height: Number(match[2]),
+    width: Number(match[3]),
   };
 };
 
@@ -384,6 +388,9 @@ const getFlattenTransitionGeometry = (node: Node, box: Box) => {
     topY: fitted.top,
     bottomY: fitted.bottom,
     centersY: fitted.centersY,
+    cellCenters: fitted.cellCenters,
+    rows: fitted.rows,
+    cols: fitted.cols,
   };
 };
 const getFullyConnectedTransitionGeometry = (node: Node, box: Box) => {
@@ -524,23 +531,27 @@ const getFlattenNodeBodySize = (node: Node) => {
   });
 
   const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-  const flattenedCount = Math.max(1, shape ? shape.width * shape.height : 1);
 
-  const naturalHeight =
-    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+  const rows = Math.max(1, shape?.height ?? 1);
+  const cols = Math.max(1, shape?.width ?? 1);
 
-  const naturalWidth = FLATTEN_MIN_BODY_WIDTH;
+  const naturalWidth = cols * FLATTEN_CELL_WIDTH + Math.max(0, cols - 1) * FLATTEN_CELL_GAP;
+
+  const naturalHeight = rows * FLATTEN_CELL_HEIGHT + Math.max(0, rows - 1) * FLATTEN_CELL_GAP;
+
   const naturalFullHeight = Math.max(
     naturalHeight + getSpecialBottomReserved(node),
     FLATTEN_MIN_BODY_HEIGHT
   );
+
+  const naturalFullWidth = Math.max(naturalWidth, FLATTEN_MIN_BODY_WIDTH);
 
   const hasExplicitSize = !!node.size;
 
   return {
     width: hasExplicitSize
       ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width)
-      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalWidth),
+      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalFullWidth),
     height: hasExplicitSize
       ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
       : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalFullHeight),
@@ -645,13 +656,15 @@ const getStackedFittedMetrics = (node: Node, box: Box) => {
 
 const getFlattenFittedMetrics = (node: Node, box: Box) => {
   const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
-  const flattenedCount = Math.max(1, shape ? shape.width * shape.height : 1);
+
+  const rows = Math.max(1, shape?.height ?? 1);
+  const cols = Math.max(1, shape?.width ?? 1);
 
   const visual = getSpecialVisualBox(node, box);
 
-  const naturalWidth = FLATTEN_CELL_WIDTH;
-  const naturalHeight =
-    flattenedCount * FLATTEN_CELL_HEIGHT + Math.max(0, flattenedCount - 1) * FLATTEN_CELL_GAP;
+  const naturalWidth = cols * FLATTEN_CELL_WIDTH + Math.max(0, cols - 1) * FLATTEN_CELL_GAP;
+
+  const naturalHeight = rows * FLATTEN_CELL_HEIGHT + Math.max(0, rows - 1) * FLATTEN_CELL_GAP;
 
   const scale = Math.max(
     0.0001,
@@ -662,15 +675,27 @@ const getFlattenFittedMetrics = (node: Node, box: Box) => {
   const cellHeight = FLATTEN_CELL_HEIGHT * scale;
   const cellGap = FLATTEN_CELL_GAP * scale;
 
-  const renderWidth = cellWidth;
-  const renderHeight = flattenedCount * cellHeight + Math.max(0, flattenedCount - 1) * cellGap;
+  const renderWidth = cols * cellWidth + Math.max(0, cols - 1) * cellGap;
+  const renderHeight = rows * cellHeight + Math.max(0, rows - 1) * cellGap;
 
   const left = visual.x + (visual.width - renderWidth) / 2;
   const top = visual.y + (visual.height - renderHeight) / 2;
 
+  const cellCenters = Array.from({ length: rows * cols }, (_, index) => {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+
+    return {
+      x: left + col * (cellWidth + cellGap) + cellWidth / 2,
+      y: top + row * (cellHeight + cellGap) + cellHeight / 2,
+    };
+  });
+
   return {
     visual,
-    flattenedCount,
+    rows,
+    cols,
+    flattenedCount: rows * cols,
     cellWidth,
     cellHeight,
     cellGap,
@@ -680,9 +705,8 @@ const getFlattenFittedMetrics = (node: Node, box: Box) => {
     top,
     right: left + renderWidth,
     bottom: top + renderHeight,
-    centersY: Array.from({ length: flattenedCount }, (_, i) => {
-      return top + i * (cellHeight + cellGap) + cellHeight / 2;
-    }),
+    centersY: cellCenters.map((p) => p.y),
+    cellCenters,
   };
 };
 
@@ -2670,13 +2694,16 @@ const drawSpecialTransitionConnector = (
     }
 
     const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
-    const pairCount = Math.min(fromGeom.centersY.length, toGeom.firstLayer.ys.length);
+    const fromPoints =
+      fromGeom.cellCenters?.map((p) => ({ x: fromGeom.right, y: p.y })) ??
+      fromGeom.centersY.map((y) => ({ x: fromGeom.right, y }));
 
+    const pairCount = Math.min(fromPoints.length, toGeom.firstLayer.ys.length);
     const points: Point[] = [];
 
     for (let i = 0; i < pairCount; i++) {
-      const x1 = fromGeom.right;
-      const y1 = fromGeom.centersY[i];
+      const x1 = fromPoints[i].x;
+      const y1 = fromPoints[i].y;
       const x2 = toGeom.firstLayer.x - toGeom.radius;
       const y2 = toGeom.firstLayer.ys[i];
 
@@ -2690,10 +2717,7 @@ const drawSpecialTransitionConnector = (
 
     return {
       name: 'name' in connector ? connector.name : '',
-      start: {
-        x: fromGeom.right,
-        y: fromGeom.centersY[Math.floor(fromGeom.centersY.length / 2)] ?? fromBox.y,
-      },
+      start: fromPoints[Math.floor(fromPoints.length / 2)] ?? { x: fromGeom.right, y: fromBox.y },
       end: {
         x: toGeom.firstLayer.x - toGeom.radius,
         y: toGeom.firstLayer.ys[Math.floor(toGeom.firstLayer.ys.length / 2)] ?? toBox.y,
@@ -3086,18 +3110,21 @@ const drawFlattenNode = (
       safeColorName(Array.isArray(node.color) ? node.color[0] : node.color, '#c9b79f')
     ) ?? '#c9b79f';
 
-  for (let i = 0; i < fitted.flattenedCount; i++) {
-    const y = fitted.top + i * (fitted.cellHeight + fitted.cellGap);
+  for (let row = 0; row < fitted.rows; row++) {
+    for (let col = 0; col < fitted.cols; col++) {
+      const x = fitted.left + col * (fitted.cellWidth + fitted.cellGap);
+      const y = fitted.top + row * (fitted.cellHeight + fitted.cellGap);
 
-    group
-      .append('rect')
-      .attr('x', fitted.left)
-      .attr('y', y)
-      .attr('width', fitted.cellWidth)
-      .attr('height', fitted.cellHeight)
-      .attr('fill', fillColor)
-      .attr('stroke', '#444')
-      .attr('stroke-width', 0.8);
+      group
+        .append('rect')
+        .attr('x', x)
+        .attr('y', y)
+        .attr('width', fitted.cellWidth)
+        .attr('height', fitted.cellHeight)
+        .attr('fill', fillColor)
+        .attr('stroke', '#444')
+        .attr('stroke-width', 0.8);
+    }
   }
 
   const label = node.label ?? '';
