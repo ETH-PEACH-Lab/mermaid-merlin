@@ -3233,16 +3233,35 @@ const drawNode = (
   const innerBox = { x: 0, y: 0, width: box.width, height: box.height };
 
   if (node.type === 'stacked') {
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerBox.width)
+      .attr('height', innerBox.height)
+      .style('pointer-events', 'all');
+
     drawStackedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
     return;
   }
 
   if (node.type === 'flatten') {
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerBox.width)
+      .attr('height', innerBox.height)
+      .style('pointer-events', 'all');
     drawFlattenNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
     return;
   }
 
   if (node.type === 'fullyConnected') {
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerBox.width)
+      .attr('height', innerBox.height)
+      .style('pointer-events', 'all');
     drawFullyConnectedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
     return;
   }
