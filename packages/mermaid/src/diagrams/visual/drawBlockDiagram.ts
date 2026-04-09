@@ -3022,16 +3022,8 @@ const drawStackedNode = (
   box: Box
 ) => {
   const fitted = getStackedFittedMetrics(node, box);
+
   if (!fitted) {
-    group
-      .append('rect')
-      .attr('x', box.x)
-      .attr('y', box.y)
-      .attr('width', box.width)
-      .attr('height', box.height)
-      .attr('fill', getLightenedColor(!Array.isArray(node.color) ? node.color : 'white') ?? 'white')
-      .attr('stroke', safeColorName(node.stroke, 'black'))
-      .attr('stroke-width', 1.3);
     return;
   }
 
@@ -3066,7 +3058,7 @@ const drawStackedNode = (
       .attr('fill-opacity', 0.55)
       .attr('stroke', safeColorName(node.stroke, 'black'))
       .attr('stroke-width', 1.1)
-      .style('pointer-events', 'auto');
+      .style('pointer-events', 'none');
   }
 
   const kernel = parse2DDims((node as any).kernelSize);

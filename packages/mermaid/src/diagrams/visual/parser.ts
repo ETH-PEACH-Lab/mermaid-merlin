@@ -146,7 +146,7 @@ const populate = (ast: VisualDiagram) => {
                       value: e3.value,
                     })),
                     size: e2.size,
-                    color: e2.color?.color,
+                    color: e2.color?.color ?? e2.color,
                   };
                 }
               }),
