@@ -3082,8 +3082,8 @@ const drawStackedNode = (
 
   const label = node.label ?? '';
   const subText = (node as any).labelSubtext ?? '';
-  const centerX = box.x + box.width / 2;
-  const labelY = visual.y + visual.height + STACKED_LABEL_GAP;
+  const centerX = frontX + rectWidth / 2;
+  const labelY = stackTop + metrics.visibleHeight + STACKED_LABEL_GAP;
 
   if (label || subText) {
     drawGrowingDownLabelBlock(group as any, label, subText, centerX, labelY);
