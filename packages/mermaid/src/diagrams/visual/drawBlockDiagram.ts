@@ -2351,7 +2351,7 @@ const drawSideAnnotation = (
       .attr('x', box.x + box.width / 2)
       .attr('y', box.y - gap)
       .attr('text-anchor', 'middle')
-      .text(value);
+      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
     return;
   }
   if (side === 'bottom') {
@@ -2360,7 +2360,7 @@ const drawSideAnnotation = (
       .attr('y', box.y + box.height + gap)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'hanging')
-      .text(value);
+      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
     return;
   }
   if (side === 'left') {
@@ -2369,7 +2369,7 @@ const drawSideAnnotation = (
       .attr('y', box.y + box.height / 2)
       .attr('text-anchor', 'end')
       .attr('dominant-baseline', 'middle')
-      .text(value);
+      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
     return;
   }
   text
@@ -2377,7 +2377,7 @@ const drawSideAnnotation = (
     .attr('y', box.y + box.height / 2)
     .attr('text-anchor', 'start')
     .attr('dominant-baseline', 'middle')
-    .text(value);
+    .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
 };
 
 const renderCenteredTextLines = (
@@ -2401,7 +2401,7 @@ const renderCenteredTextLines = (
       .attr('dominant-baseline', 'middle')
       .attr('font-size', BASE_FONT_SIZE)
       .attr('pointer-events', 'none')
-      .text(line);
+      .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
     y += RECT_LINE_HEIGHT;
   }
 
@@ -2416,7 +2416,7 @@ const renderCenteredTextLines = (
         .attr('dominant-baseline', 'middle')
         .attr('font-size', BASE_SUB_FONT_SIZE)
         .attr('pointer-events', 'none')
-        .text(line);
+        .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
       y += RECT_SUB_LINE_HEIGHT;
     }
   }
@@ -2439,7 +2439,7 @@ const drawText = (
     .attr('text-anchor', anchor)
     .attr('dominant-baseline', 'middle')
     .attr('pointer-events', 'none')
-    .text(text);
+    .text(text === '\\null' ? 'null' : text === 'null' ? '' : text);
 };
 
 const drawProjectionLine = (
@@ -2996,7 +2996,7 @@ const drawGrowingDownLabelBlock = (
       .attr('dominant-baseline', 'middle')
       .attr('font-size', BASE_FONT_SIZE)
       .attr('pointer-events', 'none')
-      .text(main);
+      .text(main === '\\null' ? 'null' : main === 'null' ? '' : main);
 
     currentY += BASE_FONT_SIZE / 2 + 6;
   }
@@ -3010,7 +3010,7 @@ const drawGrowingDownLabelBlock = (
       .attr('dominant-baseline', 'hanging')
       .attr('font-size', BASE_SUB_FONT_SIZE)
       .attr('pointer-events', 'none')
-      .text(line);
+      .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
 
     currentY += RECT_SUB_LINE_HEIGHT;
   }
@@ -3323,7 +3323,7 @@ const drawNode = (
         .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
         .attr('font-size', TEXT_NODE_FONT_SIZE)
         .style('pointer-events', 'none')
-        .text(node.label ?? '');
+        .text((node.label === '\\null' ? 'null' : node.label === 'null' ? '' : node.label) ?? '');
     } else {
       textGroup
         .append('text')
@@ -3335,7 +3335,7 @@ const drawNode = (
         .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
         .attr('font-size', TEXT_NODE_FONT_SIZE)
         .style('pointer-events', 'none')
-        .text(node.label ?? '');
+        .text((node.label === '\\null' ? 'null' : node.label === 'null' ? '' : node.label) ?? '');
     }
 
     return;
@@ -3372,7 +3372,7 @@ const drawNode = (
         .attr('dominant-baseline', 'middle')
         .attr('font-size', BASE_FONT_SIZE)
         .attr('pointer-events', 'none')
-        .text(line);
+        .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
       y += labelLineHeight;
     }
 
@@ -3387,7 +3387,7 @@ const drawNode = (
           .attr('dominant-baseline', 'middle')
           .attr('font-size', BASE_SUB_FONT_SIZE)
           .attr('pointer-events', 'none')
-          .text(line);
+          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
         y += subLineHeight;
       }
     }
@@ -3817,7 +3817,7 @@ const drawConnector = (
       .attr('dominant-baseline', pos.dominantBaseline)
       .attr('font-size', CONNECTOR_LABEL_FONT_SIZE)
       .attr('pointer-events', 'none')
-      .text(label);
+      .text(label === '\\null' ? 'null' : label === 'null' ? '' : label);
   }
 
   return {
