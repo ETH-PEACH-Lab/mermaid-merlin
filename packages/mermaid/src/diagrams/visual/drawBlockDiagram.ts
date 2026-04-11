@@ -3419,6 +3419,21 @@ const drawNode = (
       .attr('stroke', defaultStroke)
       .style('pointer-events', 'auto')
       .attr('stroke-width', 1.3);
+
+    const hasOnlyLabel = !!rawLabel.trim() && !subText.trim();
+
+    if (hasOnlyLabel) {
+      g.append('text')
+        .attr('x', innerBox.x + innerBox.width / 2)
+        .attr('y', innerBox.y + innerBox.height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', BASE_FONT_SIZE)
+        .attr('pointer-events', 'none')
+        .text(rawLabel === '\\null' ? 'null' : rawLabel === 'null' ? '' : rawLabel);
+
+      return;
+    }
   }
 
   if (node.type === 'text') {
