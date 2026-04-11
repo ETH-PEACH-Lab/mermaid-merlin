@@ -81,10 +81,12 @@ export interface Group {
   anchor?: string;
   gap?: number;
   color?: string;
+  stroke?: string;
   markerType: 'bracket' | 'brace';
   markerLabel: string;
   markerPosition: 'bottom' | 'top';
   annotations?: Annotation[];
+  colorBoxSize?: SizeDefinition;
 }
 
 export interface Node {
@@ -146,6 +148,7 @@ export type LayoutKind = 'horizontal' | 'vertical' | 'grid';
 export interface Use {
   name: string;
   block: string;
+  anchor: string;
 }
 
 export interface Connection {

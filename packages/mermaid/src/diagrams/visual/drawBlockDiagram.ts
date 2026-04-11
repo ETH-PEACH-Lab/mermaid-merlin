@@ -120,7 +120,7 @@ const NODE_ANNOTATION_FONT_SIZE = BASE_FONT_SIZE;
 const CONNECTOR_LABEL_FONT_SIZE = BASE_FONT_SIZE;
 const TEXT_NODE_FONT_SIZE = BASE_FONT_SIZE;
 
-const RECT_HORIZONTAL_PADDING = 16;
+const RECT_HORIZONTAL_PADDING = 5;
 const RECT_VERTICAL_PADDING = 10;
 const RECT_MIN_HEIGHT = 34;
 const RECT_LINE_HEIGHT = BASE_FONT_SIZE + 2;
@@ -803,21 +803,53 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
 
   if (node.type === 'text') {
     const requested = parseSize(node.size, DEFAULT_TEXT);
+    const rawLabel = node.label ?? '';
+    const rawSubText = node.labelSubtext ?? '';
+
+    if (node.labelOrientation === 'vertical') {
+      const availableVerticalExtent =
+        requested.height && requested.height > 0 ? Math.max(20, requested.height - 8) : 120;
+
+      const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, TEXT_NODE_FONT_SIZE);
+      const subLines = rawSubText
+        ? wrapTextLines(rawSubText, availableVerticalExtent, BASE_SUB_FONT_SIZE)
+        : [];
+
+      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
+      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+
+      const totalTextHeight =
+        labelLines.length * labelLineHeight +
+        (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
+      const maxLineWidth = Math.max(
+        ...labelLines.map((line) => estimateTextWidth(line, TEXT_NODE_FONT_SIZE)),
+        ...subLines.map((line) => estimateTextWidth(line, BASE_SUB_FONT_SIZE)),
+        10
+      );
+
+      return {
+        width: Math.max(requested.width, totalTextHeight),
+        height: Math.max(requested.height, maxLineWidth),
+      };
+    }
+
+    const naturalWidth = Math.max(
+      estimateTextWidth(rawLabel, TEXT_NODE_FONT_SIZE),
+      estimateTextWidth(rawSubText, BASE_SUB_FONT_SIZE)
+    );
+
+    const naturalHeight = TEXT_NODE_FONT_SIZE + (rawSubText ? 4 + BASE_SUB_FONT_SIZE : 0);
 
     return {
-      width: Math.max(requested.width, estimateTextWidth(node.label ?? '', TEXT_NODE_FONT_SIZE)),
-      height: Math.max(requested.height, 18),
+      width: Math.max(requested.width, naturalWidth),
+      height: Math.max(requested.height, naturalHeight),
     };
   }
   if (node.type === 'circle') {
     const requested = parseSize(node.size, DEFAULT_CIRCLE);
 
-    const needed = Math.max(
-      24,
-      estimateTextWidth(node.label ?? '', BASE_FONT_SIZE) + 12,
-      requested.width,
-      requested.height
-    );
+    const needed = Math.max(requested.width, requested.height);
 
     return { width: needed, height: needed };
   }
@@ -930,6 +962,74 @@ const arrangeBoxes = (
   };
 };
 
+const arrangeBoxesWithAnchors = (
+  items: Array<{
+    width: number;
+    height: number;
+    alignX: number;
+    alignY: number;
+  }>,
+  layout: 'horizontal' | 'vertical' | 'grid',
+  gap: number
+) => {
+  const boxes: Box[] = [];
+
+  if (!items.length) {
+    return { boxes, width: 0, height: 0 };
+  }
+
+  if (layout === 'horizontal') {
+    const baseline = Math.max(...items.map((i) => i.alignY));
+    const belowBaseline = Math.max(...items.map((i) => i.height - i.alignY));
+
+    let x = 0;
+    for (const item of items) {
+      boxes.push({
+        x,
+        y: baseline - item.alignY,
+        width: item.width,
+        height: item.height,
+      });
+      x += item.width + gap;
+    }
+
+    return {
+      boxes,
+      width: items.length ? x - gap : 0,
+      height: baseline + belowBaseline,
+    };
+  }
+
+  if (layout === 'vertical') {
+    const maxLeft = Math.max(...items.map((i) => i.alignX));
+    const maxRight = Math.max(...items.map((i) => i.width - i.alignX));
+
+    let y = 0;
+    for (const item of items) {
+      boxes.push({
+        x: maxLeft - item.alignX,
+        y,
+        width: item.width,
+        height: item.height,
+      });
+      y += item.height + gap;
+    }
+
+    return {
+      boxes,
+      width: maxLeft + maxRight,
+      height: items.length ? y - gap : 0,
+    };
+  }
+
+  return arrangeBoxes(
+    items.map((i) => i.width),
+    items.map((i) => i.height),
+    layout,
+    gap
+  );
+};
+
 const initPortCounts = (block: Block) => {
   const portCounts = new Map<string, Record<Side, number>>();
   for (const node of block.nodes ?? []) {
@@ -994,6 +1094,31 @@ const getPaddedVisualBox = (box: Box, clip: Box): Box => {
       0,
       Math.min(clip.y + clip.height, padded.y + padded.height) - Math.max(clip.y, padded.y)
     ),
+  };
+};
+
+const getGroupColorRenderBox = (groupDef: any, visualBox: Box): Box => {
+  const raw = groupDef?.colorBoxSize;
+  if (!raw) {
+    return visualBox;
+  }
+
+  let width = visualBox.width;
+  let height = visualBox.height;
+
+  if (Array.isArray(raw) && raw.length >= 2) {
+    width = Number(raw[0]) || visualBox.width;
+    height = Number(raw[1]) || visualBox.height;
+  } else if (typeof raw === 'object') {
+    width = Number(raw.width) || visualBox.width;
+    height = Number(raw.height) || visualBox.height;
+  }
+
+  return {
+    x: visualBox.x + (visualBox.width - width) / 2,
+    y: visualBox.y + (visualBox.height - height) / 2,
+    width,
+    height,
   };
 };
 
@@ -3306,36 +3431,109 @@ const drawNode = (
       .style('pointer-events', 'all');
 
     const textGroup = g.append('g');
+    const fill = safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black');
+    const rawLabel = node.label ?? '';
+    const rawSubText = node.labelSubtext ?? '';
 
     if (node.labelOrientation === 'vertical') {
+      const availableVerticalExtent = Math.max(20, innerBox.height - 8);
+      const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, TEXT_NODE_FONT_SIZE);
+      const subLines = rawSubText
+        ? wrapTextLines(rawSubText, availableVerticalExtent, BASE_SUB_FONT_SIZE)
+        : [];
+
+      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
+      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+      const totalTextHeight =
+        labelLines.length * labelLineHeight +
+        (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
       textGroup.attr(
         'transform',
         `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(-90)`
       );
 
-      textGroup
-        .append('text')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-style', 'italic')
-        .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
-        .attr('font-size', TEXT_NODE_FONT_SIZE)
-        .style('pointer-events', 'none')
-        .text((node.label === '\\null' ? 'null' : node.label === 'null' ? '' : node.label) ?? '');
+      let y = -totalTextHeight / 2 + TEXT_NODE_FONT_SIZE / 2;
+
+      for (const line of labelLines) {
+        textGroup
+          .append('text')
+          .attr('x', 0)
+          .attr('y', y)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('fill', fill)
+          .attr('font-size', TEXT_NODE_FONT_SIZE)
+          .style('pointer-events', 'none')
+          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+
+        y += labelLineHeight;
+      }
+
+      if (subLines.length > 0) {
+        y += 2;
+        for (const line of subLines) {
+          textGroup
+            .append('text')
+            .attr('x', 0)
+            .attr('y', y)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', fill)
+            .attr('font-size', BASE_SUB_FONT_SIZE)
+            .style('pointer-events', 'none')
+            .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+
+          y += subLineHeight;
+        }
+      }
     } else {
-      textGroup
-        .append('text')
-        .attr('x', innerBox.x + innerBox.width / 2)
-        .attr('y', innerBox.y + innerBox.height / 2)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-style', 'italic')
-        .attr('fill', safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black'))
-        .attr('font-size', TEXT_NODE_FONT_SIZE)
-        .style('pointer-events', 'none')
-        .text((node.label === '\\null' ? 'null' : node.label === 'null' ? '' : node.label) ?? '');
+      const availableWidth = Math.max(8, innerBox.width);
+      const labelLines = wrapTextLines(rawLabel, availableWidth, TEXT_NODE_FONT_SIZE);
+      const subLines = rawSubText
+        ? wrapTextLines(rawSubText, availableWidth, BASE_SUB_FONT_SIZE)
+        : [];
+
+      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
+      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+      const totalTextHeight =
+        labelLines.length * labelLineHeight +
+        (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
+      let y = innerBox.y + innerBox.height / 2 - totalTextHeight / 2 + TEXT_NODE_FONT_SIZE / 2;
+
+      for (const line of labelLines) {
+        textGroup
+          .append('text')
+          .attr('x', innerBox.x + innerBox.width / 2)
+          .attr('y', y)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('fill', fill)
+          .attr('font-size', TEXT_NODE_FONT_SIZE)
+          .style('pointer-events', 'none')
+          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+
+        y += labelLineHeight;
+      }
+
+      if (subLines.length > 0) {
+        y += 2;
+        for (const line of subLines) {
+          textGroup
+            .append('text')
+            .attr('x', innerBox.x + innerBox.width / 2)
+            .attr('y', y)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', fill)
+            .attr('font-size', BASE_SUB_FONT_SIZE)
+            .style('pointer-events', 'none')
+            .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+
+          y += subLineHeight;
+        }
+      }
     }
 
     return;
@@ -3873,6 +4071,8 @@ const renderBlockGroupVisuals = (
       continue;
     }
 
+    const colorBox = getGroupColorRenderBox(groupDef, visualBox);
+
     const localIndex = nodeCount + edgeCount + groupIdx;
     const unitId = `unit_(${blockIndex},${localIndex})`;
 
@@ -3884,14 +4084,15 @@ const renderBlockGroupVisuals = (
 
     groupUnit
       .append('rect')
-      .attr('x', visualBox.x)
-      .attr('y', visualBox.y)
-      .attr('width', visualBox.width)
-      .attr('height', visualBox.height)
+      .attr('x', colorBox.x)
+      .attr('y', colorBox.y)
+      .attr('width', colorBox.width)
+      .attr('height', colorBox.height)
       .attr('rx', 14)
       .attr('ry', 14)
       .attr('fill', safeColorName(groupDef.color, 'transparent'))
-      .attr('stroke-width', 1)
+      .attr('stroke', safeColorName(groupDef.stroke, 'transparent'))
+      .attr('stroke-width', 1.3)
       .style('pointer-events', 'auto');
   }
 };
@@ -4093,6 +4294,58 @@ const renderBlock = (
     }
     let from = resolveLocalEndpoint(rendered, edge.from);
     let to = resolveLocalEndpoint(rendered, edge.to);
+
+    const getTextTopAnchorBoxForMainLabelOnly = (node: Node, box: Box): Box => {
+      const rawLabel = node.label ?? ''.trim();
+      const rawSubText = node.labelSubtext ?? ''.trim();
+
+      if (!rawLabel || node.labelOrientation === 'vertical') {
+        return box;
+      }
+
+      const availableWidth = Math.max(8, box.width);
+      const labelLines = wrapTextLines(rawLabel, availableWidth, TEXT_NODE_FONT_SIZE);
+      const subLines = rawSubText
+        ? wrapTextLines(rawSubText, availableWidth, BASE_SUB_FONT_SIZE)
+        : [];
+
+      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
+      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+
+      const totalTextHeight =
+        labelLines.length * labelLineHeight +
+        (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
+      const labelBlockHeight = labelLines.length * labelLineHeight;
+      const topOfAllText = box.y + box.height / 2 - totalTextHeight / 2;
+
+      return {
+        x: box.x,
+        y: topOfAllText,
+        width: box.width,
+        height: labelBlockHeight,
+      };
+    };
+
+    const fromNodeDef = fromNodeName ? renderedNodes.get(fromNodeName)?.def : undefined;
+
+    if (
+      fromNodeDef?.type === 'text' &&
+      (edge.from as any)?.anchor === 'top' &&
+      (edge.to as any)?.anchor === 'bottom' &&
+      fromNodeName
+    ) {
+      const originalBox = metrics.nodeShapes.get(fromNodeName);
+      if (originalBox) {
+        const anchorBox = getTextTopAnchorBoxForMainLabelOnly(fromNodeDef, originalBox);
+        from = {
+          ...from,
+          point: getAnchorPoint(anchorBox, 'top'),
+          side: 'top',
+          box: anchorBox,
+        };
+      }
+    }
 
     const fromIsEdgeMid = (edge.from as any)?.edgeAnchor === 'mid';
     const toIsEdgeMid = (edge.to as any)?.edgeAnchor === 'mid';
@@ -4309,6 +4562,43 @@ const getBoundsForBow = (start: Point, end: Point, startBox?: Box, endBox?: Box)
   };
 };
 
+const getBlockAnchorAlignment = (
+  block: Block,
+  metrics: BlockMetrics,
+  anchorName?: string
+): { alignX: number; alignY: number } => {
+  if (!anchorName) {
+    return {
+      alignX: metrics.totalWidth / 2,
+      alignY: metrics.totalHeight / 2,
+    };
+  }
+
+  const groupBox = metrics.groups.get(anchorName);
+  if (groupBox) {
+    return {
+      alignX: groupBox.x + groupBox.width / 2,
+      alignY: groupBox.y + groupBox.height / 2,
+    };
+  }
+
+  const nodeBox = metrics.nodes.get(anchorName);
+  if (nodeBox) {
+    const nodeDef = (block.nodes ?? []).find((n) => n.name === anchorName);
+    const visualBox = getNodeVisualAnchorBox(nodeDef, nodeBox);
+
+    return {
+      alignX: visualBox.x + visualBox.width / 2,
+      alignY: visualBox.y + visualBox.height / 2,
+    };
+  }
+
+  return {
+    alignX: metrics.totalWidth / 2,
+    alignY: metrics.totalHeight / 2,
+  };
+};
+
 export const drawBlockDiagram = (
   svg: SVG,
   blockDiagram: BlockDiagram,
@@ -4334,21 +4624,43 @@ export const drawBlockDiagram = (
     uses.length
       ? uses
           .filter((u) => blockMap.has(u.block))
-          .map((u) => ({
-            key: u.name,
-            block: blockMap.get(u.block)!,
-            metrics: computeBlockMetrics(blockMap.get(u.block)!),
-          }))
-      : elements.map((b) => ({
-          key: b.name,
-          block: b,
-          metrics: computeBlockMetrics(b),
-        }))
-  ) as Array<{ key: string; block: Block; metrics: BlockMetrics }>;
+          .map((u) => {
+            const block = blockMap.get(u.block)!;
+            const metrics = computeBlockMetrics(block);
 
-  const arranged = arrangeBoxes(
-    metricSource.map((m) => m.metrics.totalWidth),
-    metricSource.map((m) => m.metrics.totalHeight),
+            return {
+              key: u.name,
+              block,
+              metrics,
+              anchor: getBlockAnchorAlignment(block, metrics, (u as any).anchor),
+            };
+          })
+      : elements.map((b) => {
+          const metrics = computeBlockMetrics(b);
+          return {
+            key: b.name,
+            block: b,
+            metrics,
+            anchor: {
+              alignX: metrics.totalWidth / 2,
+              alignY: metrics.totalHeight / 2,
+            },
+          };
+        })
+  ) as Array<{
+    key: string;
+    block: Block;
+    metrics: BlockMetrics;
+    anchor: { alignX: number; alignY: number };
+  }>;
+
+  const arranged = arrangeBoxesWithAnchors(
+    metricSource.map((m) => ({
+      width: m.metrics.totalWidth,
+      height: m.metrics.totalHeight,
+      alignX: m.anchor.alignX,
+      alignY: m.anchor.alignY,
+    })),
     uses.length ? blockDiagram.diagram?.layout ?? 'horizontal' : 'horizontal',
     uses.length ? blockDiagram.diagram?.gap ?? DIAGRAM_GAP : DIAGRAM_GAP
   );

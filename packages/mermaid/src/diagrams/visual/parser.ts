@@ -158,6 +158,7 @@ const populate = (ast: VisualDiagram) => {
                 anchor: e2.anchor,
                 gap: e2.gap,
                 color: e2.color,
+                stroke: e2.stroke,
                 markerType: e2.markerType,
                 markerLabel: e2.markerLabel,
                 markerPosition: e2.markerPosition,
@@ -165,6 +166,7 @@ const populate = (ast: VisualDiagram) => {
                   side: e3.side,
                   value: e3.value,
                 })),
+                colorBoxSize: e2.colorBoxSize,
               })),
 
               edges: (e1.edges?.edges ?? []).map((e2: any) => ({
@@ -205,6 +207,7 @@ const populate = (ast: VisualDiagram) => {
                   uses: (blockDiagramDiagram.uses?.items ?? []).map((e: Use) => ({
                     name: e.name,
                     block: e.block,
+                    anchor: e.anchor,
                   })),
                   connections: (blockDiagramDiagram.connects?.connections ?? []).map((e: any) => ({
                     from: e.from.nodeName

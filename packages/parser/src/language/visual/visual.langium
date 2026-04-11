@@ -41,7 +41,7 @@ UseBlock:
 ;
 
 Use:
-   name=ID ':' block=ID
+   name=ID ':' block=ID ('anchor:' anchor=ID)? 
 ;
 
 ConnectSection:
@@ -78,7 +78,7 @@ Groups:
 ;
 
 Group:
-   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)*
+   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)* ('colorBoxSize:' colorBoxSize=SizeDefinition)?
 ;
 
 Annotation:
@@ -92,7 +92,7 @@ Nodes:
 
 Node:
    type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
-   | type='text' name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('color:' color=STRING)?
+   | type='text' name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('color:' color=STRING)?
    | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial ('kernelSize:' kernelSize=KernelSizeFormat)? ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=STRING)? 
    | type=CNNStageType name=ID 'shape:' shape=CNNShape ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=CNNColor)?
 ;
