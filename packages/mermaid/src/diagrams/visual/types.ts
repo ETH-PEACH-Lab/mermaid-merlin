@@ -7,6 +7,13 @@ export interface SizeDefinition {
   height: number;
 }
 
+export interface SizeDefinitionColorBox {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface LayoutDefinition {
   columns: number;
   rows: number;
@@ -86,7 +93,7 @@ export interface Group {
   markerLabel: string;
   markerPosition: 'bottom' | 'top';
   annotations?: Annotation[];
-  colorBoxSize?: SizeDefinition;
+  ColorBoxAdjustments?: SizeDefinitionColorBox;
 }
 
 export interface Node {
@@ -141,6 +148,7 @@ export interface Diagram {
   gap?: number;
   uses?: Use[];
   connections?: Connection[];
+  annotations?: Annotation[];
 }
 
 export type LayoutKind = 'horizontal' | 'vertical' | 'grid';

@@ -166,7 +166,7 @@ const populate = (ast: VisualDiagram) => {
                   side: e3.side,
                   value: e3.value,
                 })),
-                colorBoxSize: e2.colorBoxSize,
+                colorBoxAdjustments: e2.colorBoxAdjustments,
               })),
 
               edges: (e1.edges?.edges ?? []).map((e2: any) => ({
@@ -241,6 +241,10 @@ const populate = (ast: VisualDiagram) => {
                     label: e.label,
                     arrowheads: e.arrowheads,
                     gap: e.gap,
+                  })),
+                  annotations: (blockDiagramDiagram.annotations ?? []).map((e3: Annotation) => ({
+                    side: e3.side,
+                    value: e3.value,
                   })),
                 }
               : undefined,

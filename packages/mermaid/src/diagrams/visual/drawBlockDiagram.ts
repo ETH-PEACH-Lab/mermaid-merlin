@@ -112,6 +112,7 @@ const DEFAULT_TEXT = { width: 20, height: 18 };
 const SIDES: Side[] = ['left', 'right', 'top', 'bottom'];
 
 const BASE_FONT_SIZE = 13;
+const DIAGRAM_ANNOTATION_FONT_SIZE = 20;
 const BASE_SUB_FONT_SIZE = 10.5;
 const TITLE_FONT_SIZE = 25;
 const BLOCK_ANNOTATION_FONT_SIZE = BASE_FONT_SIZE;
@@ -1098,27 +1099,33 @@ const getPaddedVisualBox = (box: Box, clip: Box): Box => {
 };
 
 const getGroupColorRenderBox = (groupDef: any, visualBox: Box): Box => {
-  const raw = groupDef?.colorBoxSize;
+  const raw = groupDef?.colorBoxAdjustments;
   if (!raw) {
     return visualBox;
   }
 
-  let width = visualBox.width;
-  let height = visualBox.height;
+  let top = 0;
+  let right = 0;
+  let bottom = 0;
+  let left = 0;
 
-  if (Array.isArray(raw) && raw.length >= 2) {
-    width = Number(raw[0]) || visualBox.width;
-    height = Number(raw[1]) || visualBox.height;
+  if (Array.isArray(raw)) {
+    top = Number(raw[0]) || 0;
+    right = Number(raw[1]) || 0;
+    bottom = Number(raw[2]) || 0;
+    left = Number(raw[3]) || 0;
   } else if (typeof raw === 'object') {
-    width = Number(raw.width) || visualBox.width;
-    height = Number(raw.height) || visualBox.height;
+    top = Number(raw.top) || 0;
+    right = Number(raw.right) || 0;
+    bottom = Number(raw.bottom) || 0;
+    left = Number(raw.left) || 0;
   }
 
   return {
-    x: visualBox.x + (visualBox.width - width) / 2,
-    y: visualBox.y + (visualBox.height - height) / 2,
-    width,
-    height,
+    x: visualBox.x - left,
+    y: visualBox.y - top,
+    width: visualBox.width + left + right,
+    height: visualBox.height + top + bottom,
   };
 };
 
@@ -3700,6 +3707,16 @@ const drawGroupAnnotation = (
     GROUP_ANNOTATION_FONT_SIZE
   );
 
+const drawDiagramAnnotation = (svg: SVG, side: Side, annotation: Annotation, box: Box) =>
+  drawSideAnnotation(
+    svg.append('text'),
+    side,
+    box,
+    annotation.value,
+    ANNOTATION_SPACE,
+    DIAGRAM_ANNOTATION_FONT_SIZE
+  );
+
 const drawAnnotation = (
   group: d3.Selection<SVGGElement, unknown, null, undefined>,
   side: Side,
@@ -4629,6 +4646,7 @@ export const drawBlockDiagram = (
   const position = parsePosition(blockDiagram.position);
   const elements = blockDiagram.elements ?? [];
   const title = String(blockDiagram.title ?? '');
+  const diagramAnnotations = getAnnotationMap((blockDiagram.diagram as any).annotations);
 
   const blockMap = new Map(elements.map((b) => [b.name, b]));
   const uses = blockDiagram.diagram?.uses ?? [];
@@ -4686,17 +4704,30 @@ export const drawBlockDiagram = (
     box: arranged.boxes[i],
   }));
 
-  const totalWidth = placedBlocks.length
-    ? Math.max(...placedBlocks.map((p) => p.box.x + p.box.width))
-    : 0;
-  const totalHeight = placedBlocks.length
-    ? Math.max(...placedBlocks.map((p) => p.box.y + p.box.height))
-    : 0;
+  const totalWidth = arranged.width;
+  const totalHeight = arranged.height;
 
-  const svgWidth = Math.max(1, totalWidth + OUTER_MARGIN * 2 + position.x);
+  const diagramLeftSpace = diagramAnnotations.left ? 44 : 0;
+  const diagramRightSpace = diagramAnnotations.right ? 44 : 0;
+  const diagramTopSpace = diagramAnnotations.top ? 28 : 0;
+  const diagramBottomSpace = diagramAnnotations.bottom ? 28 : 0;
+
+  const rootX = position.x + OUTER_MARGIN + diagramLeftSpace;
+  const rootY = position.y + OUTER_MARGIN + (title ? TITLE_HEIGHT : 0) + diagramTopSpace;
+
+  const svgWidth = Math.max(
+    1,
+    totalWidth + OUTER_MARGIN * 2 + position.x + diagramLeftSpace + diagramRightSpace
+  );
+
   const svgHeight = Math.max(
     1,
-    totalHeight + OUTER_MARGIN * 2 + position.y + (title ? TITLE_HEIGHT : 0)
+    totalHeight +
+      OUTER_MARGIN * 2 +
+      position.y +
+      (title ? TITLE_HEIGHT : 0) +
+      diagramTopSpace +
+      diagramBottomSpace
   );
 
   svg.attr('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
@@ -4704,7 +4735,7 @@ export const drawBlockDiagram = (
   if (title) {
     svg
       .append('text')
-      .attr('x', position.x + OUTER_MARGIN + totalWidth / 2)
+      .attr('x', rootX + totalWidth / 2)
       .attr('y', OUTER_MARGIN - 19)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'hanging')
@@ -4712,12 +4743,7 @@ export const drawBlockDiagram = (
       .attr('font-size', TITLE_FONT_SIZE)
       .text(title);
   }
-  const root = svg
-    .append('g')
-    .attr(
-      'transform',
-      `translate(${position.x + OUTER_MARGIN}, ${position.y + OUTER_MARGIN + (title ? TITLE_HEIGHT : 0)})`
-    );
+  const root = svg.append('g').attr('transform', `translate(${rootX}, ${rootY})`);
 
   const componentGroup = root
     .append('g')
@@ -4800,5 +4826,20 @@ export const drawBlockDiagram = (
         }
       }
     }
+  }
+  const diagramBox = {
+    x: rootX,
+    y: rootY,
+    width: totalWidth,
+    height: totalHeight,
+  };
+
+  for (const side of SIDES) {
+    const annotation = diagramAnnotations[side];
+    if (!annotation) {
+      continue;
+    }
+
+    drawDiagramAnnotation(svg, side, annotation, diagramBox);
   }
 };

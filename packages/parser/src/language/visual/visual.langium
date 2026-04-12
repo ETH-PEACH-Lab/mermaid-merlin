@@ -33,6 +33,7 @@ Diagram:
    ('gap:' gap=NUMBER NEWLINE*)?
    (uses=UseBlock NEWLINE*)?
    (connects=ConnectSection NEWLINE*)?
+   (annotations+=Annotation NEWLINE*)*
 ;
 
 UseBlock:
@@ -78,7 +79,7 @@ Groups:
 ;
 
 Group:
-   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)* ('colorBoxSize:' colorBoxSize=SizeDefinition)?
+   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('colorBoxAdjustments:' colorBoxAdjustments=ColorBoxAdjustments)? ('stroke:' stroke=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)* 
 ;
 
 Annotation:
@@ -318,6 +319,10 @@ Value returns string:
 
 SizeDefinition:
   '(' width=NUMBER ',' height=NUMBER ')'
+;
+
+ColorBoxAdjustments:
+  '(' top=NUMBER ',' right=NUMBER ',' bottom=NUMBER ',' left=NUMBER ')'
 ;
 
 LayoutDefinition:
