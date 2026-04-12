@@ -7,6 +7,7 @@ import * as d3 from 'd3';
 interface NodePos {
   layer: string | number;
   layerColor: string;
+  layerStroke: string;
   layerIndex: number;
   nodeIndex: number;
   x: number;
@@ -75,12 +76,16 @@ export const drawNeuralNetworkDiagram = (
 
   const innerW = svgWidth - margin.left - margin.right;
   const innerH = svgHeight - margin.top - margin.bottom;
-  const layerXGap = elements.length > 1 ? innerW / (elements.length - 1) : 0;
+  const layerXGap =
+    neuralNetworkDiagram.layerSpacing ?? (elements.length > 1 ? innerW / (elements.length - 1) : 0);
   const nodeRadius = 18;
 
   const padding = 8;
   const diameter = nodeRadius * 2;
-  const minGap = diameter + padding;
+  const minGap =
+    neuralNetworkDiagram.neuronSpacing !== undefined && neuralNetworkDiagram.neuronSpacing !== null
+      ? neuralNetworkDiagram.neuronSpacing
+      : diameter + padding;
 
   const maxNodes = Math.max(
     1,
@@ -114,6 +119,7 @@ export const drawNeuralNetworkDiagram = (
       (item: NeuralNetworkElement, nodeIndex: number) => ({
         layer: elem.layer,
         layerColor: elem.color,
+        layerStroke: elem.stroke,
         layerIndex,
         nodeIndex,
         x,
@@ -131,6 +137,7 @@ export const drawNeuralNetworkDiagram = (
     const biasNode: NodePos = {
       layer: elem.layer,
       layerColor: elem.color,
+      layerStroke: elem.stroke,
       layerIndex,
       nodeIndex: elem.nodes.length,
       x,
@@ -148,6 +155,13 @@ export const drawNeuralNetworkDiagram = (
     const left = layers[z];
     const right = layers[z + 1].filter((n) => !n.isBias);
 
+    const maxNeuronsInPair = Math.min(left.length, right.length);
+
+    const tooManyNeurons = maxNeuronsInPair > 1;
+
+    const firstNormalI = left.findIndex((n) => !n.isBias);
+    const lastNormalI = left.length - 1 - [...left].reverse().findIndex((n) => !n.isBias);
+
     for (const [i, a] of left.entries()) {
       for (const [j, b] of right.entries()) {
         const x1 = a.x + nodeRadius;
@@ -163,28 +177,59 @@ export const drawNeuralNetworkDiagram = (
           .attr('x2', x2)
           .attr('y2', y2)
           .attr('class', 'nn-line')
-          .attr('stroke', isBiasEdge ? 'red' : 'black')
+          .attr(
+            'stroke',
+            neuralNetworkDiagram.edgeColor !== 'none'
+              ? neuralNetworkDiagram.edgeColor
+              : isBiasEdge
+                ? 'red'
+                : 'black'
+          )
           .attr('stroke-dasharray', isBiasEdge ? '6 4' : null)
-          .attr('stroke-width', 1.5)
+          .attr(
+            'stroke-width',
+            neuralNetworkDiagram.edgeWidth !== undefined && neuralNetworkDiagram.edgeWidth !== null
+              ? neuralNetworkDiagram.edgeWidth * 4
+              : 1.5
+          )
           .attr('marker-end', neuralNetworkDiagram.showArrowheads ? `url(#${arrowId})` : null)
           .attr('pointer-events', 'none');
 
-        if (neuralNetworkDiagram.showWeights) {
-          const mx = (x1 + x2) / 2;
-          const my = (y1 + y2) / 2;
+        const isFirstEdge = firstNormalI !== -1 && i === firstNormalI && j === 0;
+        const isLastEdge = lastNormalI !== -1 && i === lastNormalI && j === right.length - 1;
+
+        const shouldDrawWeightLabel =
+          neuralNetworkDiagram.showWeights && (!tooManyNeurons || isFirstEdge || isLastEdge);
+
+        if (shouldDrawWeightLabel) {
           const dx = x2 - x1;
           const dy = y2 - y1;
           const len = Math.hypot(dx, dy) || 1;
 
+          // position along the edge: a bit left of center
+          const edgeT = 0.53;
+          const lx = x1 + dx * edgeT;
+          const ly = y1 + dy * edgeT;
+
+          // unit direction along edge
+          const ux = dx / len;
+          const uy = dy / len;
+
+          // unit perpendicular to edge
           let px = -dy / len;
           let py = dx / len;
+
+          // always place label on the visually upper side
           if (py > 0) {
             px = -px;
             py = -py;
           }
 
-          const tx = mx + px * 8;
-          const ty = my + py * 8;
+          const parallelShift = -10;
+          const normalShift = 11;
+
+          const tx = lx + ux * parallelShift + px * normalShift;
+          const ty = ly + uy * parallelShift + py * normalShift;
 
           let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
           if (angle > 90 || angle < -90) {
@@ -242,6 +287,7 @@ export const drawNeuralNetworkDiagram = (
         .attr('class', node.isBias ? 'bias' : 'unit')
         .attr('id', `unit_(${node.layerIndex},${node.nodeIndex})`)
         .attr('transform', `translate(${node.x},${node.y})`);
+
       const color = (nodeColor: string, layerColor: string) => {
         if (nodeColor === 'none' && layerColor === 'none') {
           return 'white';
@@ -259,8 +305,15 @@ export const drawNeuralNetworkDiagram = (
         .style('pointer-events', node.isBias ? 'none' : 'auto')
         .attr('class', 'nn-node')
         .attr('fill', color(node.color, node.layerColor))
-        .attr('stroke', 'black')
-        .attr('stroke-width', 2);
+        .attr('stroke', node.layerStroke === 'none' ? 'black' : node.layerStroke)
+        .attr(
+          'stroke-width',
+          node.layerColor !== 'none' &&
+            node.layerStroke !== 'none' &&
+            node.layerColor === node.layerStroke
+            ? 0
+            : 2
+        );
 
       const clipId = `nn-clip-${idSuffix}-${node.layerIndex}-${node.nodeIndex}`;
       defs.select(`#${clipId}`).remove();

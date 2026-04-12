@@ -31,9 +31,10 @@ Diagram:
    'diagram' NEWLINE*
    ('layout:' layout=LayoutDiagram NEWLINE*)?
    ('gap:' gap=NUMBER NEWLINE*)?
+   ('rotateRight:' rotateRight=NUMBER NEWLINE*)?
    (uses=UseBlock NEWLINE*)?
    (connects=ConnectSection NEWLINE*)?
-   (annotations+=Annotation NEWLINE*)*
+   (annotations=Annotation NEWLINE*)?
 ;
 
 UseBlock:
@@ -51,7 +52,7 @@ ConnectSection:
 ;
 
 Connection:
-  from=ScopedEndpoint '->' to=ScopedEndpoint ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? ('label:' label=STRING)? ('arrowheads:' arrowheads=NUMBER)? ('gap:' gap=NUMBER)? 
+  from=ScopedEndpoint '->' to=ScopedEndpoint ('shape:' shape=EdgeShape)? ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? (labelProperties=LabelPropertyEdgeConnect)? ('arrowheads:' arrowheads=NUMBER)? ('gap:' gap=NUMBER)? ('alignToIndexedPort:' alignToIndexedPort=Boolean)? ('fromEdgeAnchorOffset:' fromEdgeAnchorOffset=NUMBER)? ('toEdgeAnchorOffset:' toEdgeAnchorOffset=NUMBER)? ('curveHeight:' curveHeight=NUMBER)? ('width:' width=NUMBER)? ('bidirectional:' bidirectional=Boolean)? ('headOnly:' headOnly=Boolean)?
 ;
 
 ScopedEndpoint:
@@ -65,12 +66,20 @@ Block:
    ('gap:' gap=NUMBER NEWLINE*)?
    ('size:' size=SizeDefinition NEWLINE*)?
    ('color:' color=STRING NEWLINE*)?
-   ('style:' style=BlockStyle NEWLINE*)?
-   (annotations+=Annotation NEWLINE*)*
+   ('stroke.color:' strokeColor=STRING NEWLINE*)? 
+   ('stroke.style:' strokeStyle=StrokeStyle NEWLINE*)?
+   ('stroke.width:' strokeWidth=NUMBER NEWLINE*)? 
+   ('shape:' shape=BlockShape NEWLINE*)?
+   (labelProperties=BlockLabelProperty NEWLINE*)?
+   (annotations=Annotation NEWLINE*)?
    (nodes=Nodes NEWLINE*)?
    (edges=Edges NEWLINE*)?
    (groups=Groups NEWLINE*)?
 
+;
+
+BlockLabelProperty:
+  ('block.fontColor' ':' fontColor=STRING)? ('block.fontFamily' ':' fontFamily=STRING)? ('block.fontSize' ':' fontSize=NUMBER)? ('block.fontWeight' ':' fontWeight=NUMBER)? ('block.fontStyle' ':' fontStyle=FontStyle)?
 ;
 
 Groups:
@@ -79,11 +88,53 @@ Groups:
 ;
 
 Group:
-   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor:' anchor=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('colorBoxAdjustments:' colorBoxAdjustments=ColorBoxAdjustments)? ('stroke:' stroke=STRING)? ('markerType:' markerType=CNNGroupType)? ('markerLabel:' markerLabel=STRING)? ('markerPosition:' markerPosition=CNNGroupPosition)? (annotations+=Annotation)* 
+   name=ID ':' (members+=ID)* ('layout:' layout=LayoutBlock)? ('anchor.source:' anchorSource=ID)? ('anchor.target:' anchorTarget=ID)? ('gap:' gap=NUMBER)? ('color:' color=STRING)? ('colorBoxAdjustments:' colorBoxAdjustments=ColorBoxAdjustments)? ('stroke.color:' strokeColor=STRING)? ('stroke.style:' strokeStyle=StrokeStyle)? ('stroke.width:' strokeWidth=NUMBER)? (markerProperties=MarkerProperty)? (annotations=Annotation)? ('align:' align=Boolean)? ('shape:' shape=BlockShape NEWLINE*)? (shiftProperties=ShiftProperty)?
+;
+
+AnnotationValue:
+  'annotation' '.' side=Side ':' value=STRING ('.shift.left' ':' shiftLeft=NUMBER)? ('.shift.right' ':' shiftRight=NUMBER)? ('.shift.bottom' ':' shiftBottom=NUMBER)? ('.shift.top' ':' shiftTop=NUMBER)?
+
 ;
 
 Annotation:
-  'annotation' '.' side=Side ':' value=STRING
+  (annotationValues+=AnnotationValue)* 
+  (annotationProperties=AnnotationProperty)?
+;
+
+AnnotationProperty:
+   ('annotation.gap' ':' gap=NUMBER)? ('annotation.fontFamily' ':' fontFamily=STRING)? ('annotation.fontSize' ':' fontSize=NUMBER)? ('annotation.fontWeight' ':' fontWeight=NUMBER)? ('annotation.fontStyle' ':' fontStyle=FontStyle)? ('annotation.fontColor' ':' fontColor=STRING)?
+;
+
+LabelProperty:
+  ('label.text' ':' labelText=STRING)? ('label.orientation' ':' labelOrientation=LabelOrientation)? ('label.fontColor' ':' labelFontColor=STRING)? ('label.fontFamily' ':' labelFontFamily=STRING)? ('label.fontSize' ':' labelFontSize=NUMBER)? ('label.fontWeight' ':' labelFontWeight=NUMBER)? ('label.fontStyle' ':' labelFontStyle=FontStyle)?
+;
+
+SubLabelProperty:
+  ('subLabel.text' ':' subLabelText=STRING)? ('subLabel.fontColor' ':' subLabelFontColor=STRING)? ('subLabel.fontFamily' ':' subLabelFontFamily=STRING)? ('subLabel.fontSize' ':' subLabelFontSize=NUMBER)? ('subLabel.fontWeight' ':' subLabelFontWeight=NUMBER)? ('subLabel.fontStyle' ':' subLabelFontStyle=FontStyle)?
+;
+
+LabelPropertySpecial:
+  ('label.text' ':' labelText=STRING)? ('label.fontColor' ':' labelFontColor=STRING)? ('label.fontFamily' ':' labelFontFamily=STRING)? ('label.fontSize' ':' labelFontSize=NUMBER)? ('label.fontWeight' ':' labelFontWeight=NUMBER)? ('label.fontStyle' ':' labelFontStyle=FontStyle)? 
+;
+
+SubLabelPropertySpecial:
+  ('subLabel.text' ':' subLabelText=STRING)? ('subLabel.fontColor' ':' subLabelFontColor=STRING)? ('subLabel.fontFamily' ':' subLabelFontFamily=STRING)? ('subLabel.fontSize' ':' subLabelFontSize=NUMBER)? ('subLabel.fontWeight' ':' subLabelFontWeight=NUMBER)? ('subLabel.fontStyle' ':' subLabelFontStyle=FontStyle)?
+;
+
+OpLabelProperty:
+  ('opLabel.text' ':' opLabelText=STRING)? ('opLabel.fontColor' ':' opLabelFontColor=STRING)? ('opLabel.fontFamily' ':' opLabelFontFamily=STRING)? ('opLabel.fontSize' ':' opLabelFontSize=NUMBER)? ('opLabel.fontWeight' ':' opLabelFontWeight=NUMBER)? ('opLabel.fontStyle' ':' opLabelFontStyle=FontStyle)? ('opLabel.subtext' ':' opLabelSubtext=STRING)?
+;
+
+LabelPropertyEdgeConnect:
+  ('label.text' ':' labelText=STRING)? ('label.fontColor' ':' labelFontColor=STRING)? ('label.fontFamily' ':' labelFontFamily=STRING)? ('label.fontSize' ':' labelFontSize=NUMBER)? ('label.fontWeight' ':' labelFontWeight=NUMBER)? ('label.fontStyle' ':' labelFontStyle=FontStyle)? ('label.shift.left' ':' labelShiftLeft=NUMBER)? ('label.shift.right' ':' labelShiftRight=NUMBER)? ('label.shift.top' ':' labelShiftTop=NUMBER)? ('label.shift.bottom' ':' labelShiftBottom=NUMBER)?
+;
+
+MarkerProperty:
+  ('marker.type:' markerType=MarkerType)? ('marker.color:' markerColor=STRING)? ('marker.position:' markerPosition=MarkerPosition)? ('marker.text:' markerLabelText=STRING)? ('marker.fontColor' ':' markerLabelFontColor=STRING)? ('marker.fontFamily' ':' markerLabelFontFamily=STRING)? ('marker.fontSize' ':' markerLabelFontSize=NUMBER)? ('marker.fontWeight' ':' markerLabelFontWeight=NUMBER)? ('marker.fontStyle' ':' markerLabelFontStyle=FontStyle)? ('marker.left' ':' markerLeft=NUMBER)? ('marker.right' ':' markerRight=NUMBER)? ('marker.bottom' ':' markerBottom=NUMBER)? ('marker.top' ':' markerTop=NUMBER)? 
+;
+
+ShiftProperty: 
+  ('shift.left:' shiftLeft=NUMBER)? ('shift.right:' shiftRight=NUMBER)? ('shift.bottom:' shiftBottom=NUMBER)? ('shift.top:' shiftTop=NUMBER)?
 ;
 
 Nodes:
@@ -92,10 +143,12 @@ Nodes:
 ;
 
 Node:
-   type=NodeTypeDefault name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('style:' style=BlockStyle)? ('color:' color=STRING)? ('stroke:' stroke=STRING)? 
-   | type='text' name=ID ('label:' label=STRING)? ('label.orientation:' labelOrientation=LabelOrientation)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('color:' color=STRING)?
-   | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial ('kernelSize:' kernelSize=KernelSizeFormat)? ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=STRING)? 
-   | type=CNNStageType name=ID 'shape:' shape=CNNShape ('label:' label=STRING)? ('labelSubtext:' labelSubtext=STRING)? ('opLabel:' opLabel=STRING)? ('opLabelSubtext:' opLabelSubtext=STRING)? (annotations+=Annotation)* ('size:' size=SizeDefinition)? ('color:' color=CNNColor)?
+   type=NodeTypeDefault name=ID (labelProperties=LabelProperty)? (subLabelProperties=SubLabelProperty)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)? ('size:' size=SizeDefinition)? ('color:' color=STRING)? ('stroke.color:' strokeColor=STRING)? ('stroke.style:' strokeStyle=StrokeStyle)? ('stroke.width:' strokeWidth=NUMBER)? 
+   | type='rect' name=ID (labelProperties=LabelProperty)? (subLabelProperties=SubLabelProperty)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)? ('size:' size=SizeDefinition)? ('shape:' shape=BlockShape)? ('color:' color=STRING)? ('stroke.color:' strokeColor=STRING)? ('stroke.style:' strokeStyle=StrokeStyle)? ('stroke.width:' strokeWidth=NUMBER)?
+   | type='text' name=ID (labelProperties=LabelProperty)? (subLabelProperties=SubLabelProperty)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)?
+   | type='stacked' name=ID 'shape:' shape=CNNShapeSpecial ('kernelSize:' kernelSize=KernelSizeFormat)? ('filterSpacing:' filterSpacing=NUMBER)? (labelProperties=LabelPropertySpecial)? (subLabelProperties=SubLabelPropertySpecial)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)? ('size:' size=SizeDefinition)? ('color:' color=STRING)? ('stroke.color:' strokeColor=STRING)? ('stroke.style:' strokeStyle=StrokeStyle)? ('stroke.width:' strokeWidth=NUMBER)? ('outerStroke.color:' outerStrokeColor=STRING)? ('outerStroke.style:' outerStrokeStyle=StrokeStyle)? ('outerStroke.width:' outerStrokeWidth=NUMBER)?
+   | type=CNNStageType name=ID 'shape:' shape=CNNShape (labelProperties=LabelPropertySpecial)? (subLabelProperties=SubLabelPropertySpecial)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)? ('size:' size=SizeDefinition)? ('color:' color=CNNColor)?
+   | type='trapezoid' name=ID (labelProperties=LabelProperty)? (subLabelProperties=SubLabelProperty)? (opLabelProperties=OpLabelProperty)? (annotations=Annotation)? ('size:' size=SizeDefinition)? ('color:' color=STRING)? ('stroke.color:' strokeColor=STRING)? ('stroke.style:' strokeStyle=StrokeStyle)? ('stroke.width:' strokeWidth=NUMBER)? ('direction:' direction=TrapezoidDirection)? 
 ;
 
 Edges:
@@ -104,7 +157,7 @@ Edges:
 ;
 
 Edge:
-   name=ID ':' from=Endpoint '->' to=Endpoint ('label:' label=STRING)? ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? ('arrowheads:' arrowheads=NUMBER)? ('gap:' gap=NUMBER)?
+   name=ID ':' from=Endpoint '->' to=Endpoint (labelProperties=LabelPropertyEdgeConnect)? ('shape:' shape=EdgeShape)? ('style:' style=EdgeStyle)? ('transition:' transition=EdgeTransition)? ('color:' color=STRING)? ('arrowheads:' arrowheads=NUMBER)? ('gap:' gap=NUMBER)? ('alignToIndexedPort:' alignToIndexedPort=Boolean)? ('fromEdgeAnchorOffset:' fromEdgeAnchorOffset=NUMBER)? ('toEdgeAnchorOffset:' toEdgeAnchorOffset=NUMBER)? ('curveHeight:' curveHeight=NUMBER)? ('width:' width=NUMBER)? ('bidirectional:' bidirectional=Boolean)? ('headOnly:' headOnly=Boolean)?
 ;
 
 Endpoint:
@@ -138,13 +191,17 @@ NeuralNetworkDiagram:
   ('positionLabels:' positionLabels=PositionLabels NEWLINE*)?
   (showArrowheads?="showArrowheads" NEWLINE*)?
   (showBias?="showBias" NEWLINE*)?
+  ('edgeWidth:' edgeWidth=NUMBER NEWLINE*)?
+  ('edgeColor:' edgeColor=STRING NEWLINE*)?
+  ('layerSpacing:' layerSpacing=NUMBER NEWLINE*)?
+  ('neuronSpacing:' neuronSpacing=NUMBER NEWLINE*)?
   '@' NEWLINE*
   elements+=NeuralNetworkLayer* NEWLINE*
   '@' NEWLINE*
 ;
 
 NeuralNetworkLayer:
-   layer=Value ('{' 'color:' color=STRING '}')? nodes+=NeuralNetworkElement* NEWLINE* 
+   layer=Value ('{' 'color:' color=STRING (',' 'stroke:' stroke=STRING)? '}')? nodes+=NeuralNetworkElement* NEWLINE* 
 ;
 
 NeuralNetworkElement:
@@ -321,6 +378,19 @@ SizeDefinition:
   '(' width=NUMBER ',' height=NUMBER ')'
 ;
 
+LabelOrientationSide returns string:
+   'left' | 'right'
+;
+
+TrapezoidDirection returns string:
+   'left' | 'right' | 'bottom' | 'top'
+;
+
+
+LabelOrientation:
+  '(' orientation='vertical' ',' side=LabelOrientationSide ')'
+;
+
 ColorBoxAdjustments:
   '(' top=NUMBER ',' right=NUMBER ',' bottom=NUMBER ',' left=NUMBER ')'
 ;
@@ -345,17 +415,12 @@ terminal STRING: /"([^"\\]|\\.)*"/;
 Orientation returns string:
   'TD' | 'LR'
 ;
-
 PositionLabels returns string:
   'top' | 'bottom'
 ;
 
-LabelOrientation returns string:
-  'horizontal' | 'vertical'
-;
-
-BlockStyle returns string:
-  'box' | 'rounded'
+BlockShape returns string:
+  'rounded'
 ;
 
 LayoutBlock returns string:
@@ -367,11 +432,7 @@ LayoutDiagram returns string:
 ;
 
 NodeTypeDefault returns string:
-  'rect' | 'circle'
-;
-
-NodeTypeSpecial returns string:
-  'text'
+  'circle' | 'arrow'
 ;
 
 Anchor returns string:
@@ -382,24 +443,40 @@ EdgeAnchor returns string:
   'start' | 'mid' | 'end' 
 ;
 
+EdgeShape returns string:
+  'straight' | 'bow' | 'arc'
+;
+
 EdgeStyle returns string:
-  'straight' | 'bow'
+  'solid' | 'dashed' | 'dotted'
+;
+
+StrokeStyle returns string:
+  'solid' | 'dashed' | 'dotted'
 ;
 
 EdgeTransition returns string:
   'default' | 'featureMap' | 'flatten' | 'fullyConnected'
 ;
 
+Boolean returns string: 
+  'true' | 'false'
+;
+
 Side returns string:
   'left' | 'top' | 'right' | 'bottom'
 ;
 
-CNNGroupPosition returns string: 
-  'top' | 'bottom'
+FontStyle returns string:
+  'normal' | 'italic' | 'oblique'
 ;
 
-CNNGroupType returns string: 
-  'bracket' | 'brace'
+MarkerPosition returns string: 
+  'top' | 'bottom' | 'left' | 'right'
+;
+
+MarkerType returns string: 
+  'bracket' | 'brace' | 'arrow'
 ;
 
 KernelSizeFormat returns string: 

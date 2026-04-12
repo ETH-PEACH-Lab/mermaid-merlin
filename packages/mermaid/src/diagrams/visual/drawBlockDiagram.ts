@@ -8,6 +8,8 @@ import type {
   Node,
   Side,
   LayoutKind,
+  TextFontWeight,
+  TextFontStyle,
 } from './types.js';
 import type { ArchitectureDiagramConfig } from '../../config.type.js';
 import type { SVG } from '../../diagram-api/types.js';
@@ -40,13 +42,13 @@ interface RenderedConnector {
   points: Point[];
   bounds: Box;
 }
-
 interface ResolvedEndpoint {
   point: Point;
   side?: Side;
   box?: Box;
+  edgeAxis?: 'horizontal' | 'vertical';
+  isGroup?: boolean;
 }
-
 interface BlockMetrics {
   totalWidth: number;
   totalHeight: number;
@@ -54,11 +56,13 @@ interface BlockMetrics {
   bodyHeight: number;
   bodyX: number;
   bodyY: number;
+  scale: number;
   annotations: Record<Side, Annotation | undefined>;
   nodes: Map<string, Box>;
   nodeShapes: Map<string, Box>;
   groups: Map<string, Box>;
   groupVisualBoxes: Map<string, Box>;
+  groupColorBoxes: Map<string, Box>;
   groupMarkerBoxes: Map<string, Box>;
   groupNodeMembers: Map<string, Set<string>>;
   groupAnnotations: Map<string, Record<Side, Annotation | undefined>>;
@@ -85,6 +89,7 @@ interface LayoutItem {
   alignX: number;
   alignY: number;
   apply: (x: number, y: number) => void;
+  getAnchor: (name: string) => Point | null;
 }
 
 interface ResolvedGroup {
@@ -95,7 +100,38 @@ interface ResolvedGroup {
   alignX: number;
   nodeMembers: Set<string>;
   apply: (x: number, y: number) => void;
+  getAnchor: (name: string) => Point | null;
 }
+
+interface ArrangedItemsResult {
+  width: number;
+  height: number;
+  boxes: Box[];
+  apply: (x: number, y: number) => void;
+  alignX: number;
+  alignY: number;
+}
+
+interface FlattenTransitionResolvedEndpoint {
+  renderedBlock: RenderedBlock;
+  node: Node;
+  box: Box;
+}
+
+type RelativePosition =
+  | 'left'
+  | 'right'
+  | 'above'
+  | 'below'
+  | 'upperLeft'
+  | 'upperRight'
+  | 'lowerLeft'
+  | 'lowerRight'
+  | 'overlap';
+
+type StrokeStyle = 'solid' | 'dashed' | 'dotted';
+
+type TrapezoidDirection = 'left' | 'right' | 'bottom' | 'top';
 
 const OUTER_MARGIN = 20;
 const TITLE_HEIGHT = 28;
@@ -105,6 +141,10 @@ const ROW_GAP = 18;
 const NODE_GAP = 20;
 const DIAGRAM_GAP = 80;
 const ANNOTATION_SPACE = 24;
+const GROUP_ANNOTATION_GAP = 18;
+const BLOCK_ANNOTATION_GAP = 4;
+
+const RECT_MIN_WIDTH = 34;
 
 const DEFAULT_CIRCLE = { width: 28, height: 28 };
 const DEFAULT_TEXT = { width: 20, height: 18 };
@@ -124,18 +164,15 @@ const TEXT_NODE_FONT_SIZE = BASE_FONT_SIZE;
 const RECT_HORIZONTAL_PADDING = 5;
 const RECT_VERTICAL_PADDING = 10;
 const RECT_MIN_HEIGHT = 34;
-const RECT_LINE_HEIGHT = BASE_FONT_SIZE + 2;
-const RECT_SUB_LINE_HEIGHT = BASE_SUB_FONT_SIZE + 1;
 
 const GROUP_PAD_X = 33;
 const GROUP_PAD_Y = 30;
 const NODE_EDGE_GAP = 0.6;
 
-const FIXED_PORT_SLOTS = 5;
+const FIXED_PORT_SLOTS = 11;
 const FIXED_PORT_EDGE_PADDING = 3;
 
-const STACKED_MAX_FEATURE_SIZE = 90;
-const STACKED_LABEL_GAP = 12;
+const STACKED_LABEL_GAP = 17;
 
 const STACKED_MIN_BODY_WIDTH = 72;
 const STACKED_MIN_BODY_HEIGHT = 52;
@@ -157,15 +194,106 @@ const SPECIAL_LABEL_PADDING_X = 8;
 
 const ABSOLUTE_MIN_NODE_SIZE = 2;
 
+const STACKED_OUTER_STROKE_PAD = 8;
+
+const getStackedConnectorAnchorBox = (node: Node, box: Box): Box => {
+  const fitted = getStackedFittedMetrics(node, box);
+  if (!fitted) {
+    return box;
+  }
+
+  const stackedBox = {
+    x: fitted.stackLeft,
+    y: fitted.stackTop,
+    width: fitted.metrics.visibleWidth,
+    height: fitted.metrics.visibleHeight,
+  };
+
+  if (node.outerStrokeColor !== undefined && node.outerStrokeColor !== null) {
+    return {
+      x: stackedBox.x - STACKED_OUTER_STROKE_PAD,
+      y: stackedBox.y - STACKED_OUTER_STROKE_PAD,
+      width: stackedBox.width + STACKED_OUTER_STROKE_PAD * 2,
+      height: stackedBox.height + STACKED_OUTER_STROKE_PAD * 2,
+    };
+  }
+
+  return stackedBox;
+};
+
+const getStrokeDasharrayFromStyle = (style?: StrokeStyle | null): string | null => {
+  switch (style ?? 'solid') {
+    case 'dashed':
+      return '8 6';
+    case 'dotted':
+      return '2 6';
+    case 'solid':
+    default:
+      return null;
+  }
+};
+
+const applyStrokeStyleAttrs = <
+  T extends SVGRectElement | SVGCircleElement | SVGPathElement | SVGLineElement | SVGPolygonElement,
+>(
+  selection: d3.Selection<T, unknown, any, any>,
+  strokeStyle?: StrokeStyle | null
+) => {
+  const dasharray = getStrokeDasharrayFromStyle(strokeStyle);
+
+  selection
+    .attr('stroke-dasharray', dasharray)
+    .attr('stroke-linecap', strokeStyle === 'dotted' ? 'round' : 'butt');
+};
+
+const getEdgeAnchorOffset = (
+  connector: Edge | Connection | undefined,
+  endpoint: any,
+  endpointRole: 'from' | 'to'
+) => {
+  const raw = Number(
+    endpointRole === 'from'
+      ? (connector as any)?.fromEdgeAnchorOffset ?? endpoint?.edgeAnchorOffset ?? 0
+      : (connector as any)?.toEdgeAnchorOffset ?? endpoint?.edgeAnchorOffset ?? 0
+  );
+
+  return Number.isFinite(raw) ? raw : 0;
+};
+
+const getStackedBackFaceBox = (node: Node, box: Box): Box => {
+  const fitted = getStackedFittedMetrics(node, box);
+  if (!fitted) {
+    return box;
+  }
+
+  return {
+    x: fitted.stackLeft,
+    y: fitted.stackTop,
+    width: fitted.metrics.rectWidth,
+    height: fitted.metrics.rectHeight,
+  };
+};
+
+const getStackedFilterSpacing = (node: Node) => {
+  const raw = Number((node as any).filterSpacing);
+
+  if (!Number.isFinite(raw)) {
+    return undefined;
+  }
+
+  return Math.max(0, raw);
+};
+
 const getStackedMetrics = (
   shape: { depth: number; width: number; height: number },
-  featureScale: number
+  featureScale: number,
+  filterSpacing?: number
 ) => {
   const rectWidth = shape.width * featureScale;
   const rectHeight = shape.height * featureScale;
   const rawDepth = Math.max(1, shape.depth);
-  const effectiveDepth = getEffectiveDepth(rawDepth);
-  const sliceOffset = getStackedSliceOffset(shape, featureScale);
+  const effectiveDepth = filterSpacing !== undefined ? rawDepth : getEffectiveDepth(rawDepth);
+  const sliceOffset = getStackedSliceOffset(shape, featureScale, filterSpacing);
   const renderedExtension = Math.max(0, (effectiveDepth - 1) * sliceOffset);
 
   return {
@@ -188,12 +316,11 @@ const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }
   return size.height / 2;
 };
 const estimateTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
-  const s = String(text ?? '');
+  const s = getPlainRendText(text);
   return s ? Math.max(10, s.length * fontSize * 0.58) : 0;
 };
-
 const getSpecialLabelWrapWidth = (label: string | null | undefined) => {
-  const main = String(label ?? '').trim();
+  const main = String(label ?? '');
   if (!main) {
     return 90;
   }
@@ -204,13 +331,210 @@ const getSpecialLabelWrapWidth = (label: string | null | undefined) => {
   );
 };
 
+const getAnnotationLineCount = (value: string | null | undefined) =>
+  Math.max(1, getRendTextLines(value).length);
+
+const getAnnotationReservedSpace = (
+  annotation: Annotation | undefined,
+  fontSize: number,
+  baseGap: number
+) => {
+  if (!annotation) {
+    return 0;
+  }
+
+  const resolvedFontSize = getAnnotationFontSize(annotation, fontSize);
+  const resolvedGap = getAnnotationGap(annotation, baseGap);
+  const lineHeight = resolvedFontSize + 2;
+  const lineCount = getAnnotationLineCount(annotation.value);
+
+  return resolvedGap + lineCount * lineHeight;
+};
+
+const normalizeRendText = (value: string | null | undefined) =>
+  String(value ?? '').replace(/\\n/g, '\n');
+
+const getRendTextLines = (value: string | null | undefined) => normalizeRendText(value).split('\n');
+
+const sanitizeRenderedText = (value: string | null | undefined) => {
+  const text = String(value ?? '');
+  return text === '\\null' ? 'null' : text === 'null' ? '' : text;
+};
+type InlineMathRun =
+  | { kind: 'text'; value: string }
+  | { kind: 'sup'; value: string }
+  | { kind: 'sub'; value: string }
+  | { kind: 'symbol'; value: string };
+
+const getPlainRendText = (value: string | null | undefined) =>
+  String(value ?? '')
+    .replace(/\\mul/g, '×')
+    .replace(/\\cdot/g, '·')
+    .replace(/\\pm/g, '±')
+    .replace(/\\to/g, '→')
+    .replace(/\\Rightarrow/g, '⇒')
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\neq/g, '≠')
+    .replace(/\^{([^}]+)}/g, '$1')
+    .replace(/_{([^}]+)}/g, '$1')
+    .replace(/\^([\d()*+,./=A-Z[\]a-z-])/g, '$1')
+    .replace(/_([\d()*+,./=A-Z[\]a-z-])/g, '$1');
+
+const parseInlineMathRuns = (value: string | null | undefined): InlineMathRun[] => {
+  const input = sanitizeRenderedText(value);
+  const runs: InlineMathRun[] = [];
+  let i = 0;
+  let buffer = '';
+
+  const pushBuffer = () => {
+    if (buffer) {
+      runs.push({ kind: 'text', value: buffer });
+      buffer = '';
+    }
+  };
+
+  const isSimpleMathChar = (ch: string) => /[\d()*+,./=A-Z[\]a-z-]/.test(ch);
+
+  const symbolMap: Record<string, string> = {
+    '\\mul': '×',
+    '\\cdot': '·',
+    '\\pm': '±',
+    '\\to': '→',
+    '\\Rightarrow': '⇒',
+    '\\leq': '≤',
+    '\\geq': '≥',
+    '\\neq': '≠',
+  };
+
+  while (i < input.length) {
+    if (input[i] === '\\') {
+      const command = Object.keys(symbolMap).find((token) => input.startsWith(token, i));
+      if (command) {
+        pushBuffer();
+        runs.push({ kind: 'symbol', value: symbolMap[command] });
+        i += command.length;
+        continue;
+      }
+    }
+
+    const ch = input[i];
+
+    if ((ch === '^' || ch === '_') && i + 1 < input.length) {
+      const kind = ch === '^' ? 'sup' : 'sub';
+      const next = input[i + 1];
+
+      if (next === '{') {
+        const close = input.indexOf('}', i + 2);
+        if (close !== -1) {
+          pushBuffer();
+          runs.push({
+            kind,
+            value: input.slice(i + 2, close),
+          });
+          i = close + 1;
+          continue;
+        }
+      }
+
+      let j = i + 1;
+      while (j < input.length && isSimpleMathChar(input[j])) {
+        j += 1;
+      }
+
+      if (j > i + 1) {
+        pushBuffer();
+        runs.push({
+          kind,
+          value: input.slice(i + 1, j),
+        });
+        i = j;
+        continue;
+      }
+    }
+
+    buffer += ch;
+    i += 1;
+  }
+
+  pushBuffer();
+  return runs;
+};
+
+const appendInlineMathToText = (
+  text:
+    | d3.Selection<SVGTextElement, unknown, any, any>
+    | d3.Selection<SVGTSpanElement, unknown, any, any>,
+  value: string | null | undefined,
+  _x: number,
+  fontSize: number
+) => {
+  const runs = parseInlineMathRuns(value);
+  text.text(null);
+
+  for (const run of runs) {
+    const tspan = text.append('tspan');
+
+    if (run.kind === 'sup') {
+      tspan
+        .attr('baseline-shift', 'super')
+        .attr('font-size', fontSize * 0.72)
+        .text(run.value);
+      continue;
+    }
+
+    if (run.kind === 'sub') {
+      tspan
+        .attr('baseline-shift', 'sub')
+        .attr('font-size', fontSize * 0.72)
+        .text(run.value);
+      continue;
+    }
+
+    if (run.kind === 'symbol') {
+      const isMul = run.value === '×';
+
+      tspan.attr('font-weight', isMul ? 100 : null).text(run.value);
+
+      continue;
+    }
+    tspan.text(run.value);
+  }
+
+  return text;
+};
+
+const setInlineMathText = (
+  text:
+    | d3.Selection<SVGTextElement, unknown, any, any>
+    | d3.Selection<SVGTSpanElement, unknown, any, any>,
+  value: string | null | undefined,
+  x: number,
+  fontSize: number
+) => {
+  return appendInlineMathToText(text, sanitizeRenderedText(value), x, fontSize);
+};
+
+const estimateMultilineTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
+  const lines = getRendTextLines(text);
+  return Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)), 0);
+};
+
 const wrapTextLines = (text: string, maxWidth: number, fontSize: number) => {
-  if (!text) {
+  const normalized = normalizeRendText(text);
+
+  if (!normalized) {
     return [''];
   }
 
   const wrapped: string[] = [];
-  for (const explicitLine of text.split('\n')) {
+
+  for (const explicitLine of normalized.split('\n')) {
+    if (!explicitLine) {
+      wrapped.push('');
+      continue;
+    }
+
     let current = '';
     for (const word of explicitLine.split(' ')) {
       const next = current ? `${current} ${word}` : word;
@@ -221,41 +545,111 @@ const wrapTextLines = (text: string, maxWidth: number, fontSize: number) => {
         current = word;
       }
     }
-    if (current) {
-      wrapped.push(current);
-    }
+
+    wrapped.push(current);
   }
 
   return wrapped.length ? wrapped : [''];
 };
 
+const appendMultilineText = (
+  parent:
+    | SVG
+    | d3.Selection<SVGGElement, unknown, any, any>
+    | d3.Selection<SVGTextElement, unknown, any, any>,
+  value: string,
+  x: number,
+  y: number,
+  options?: {
+    anchor?: 'start' | 'middle' | 'end';
+    fontSize?: number;
+    fill?: string;
+    dominantBaseline?: 'middle' | 'hanging' | 'auto';
+    lineHeight?: number;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+  }
+) => {
+  const lines = getRendTextLines(value).map(sanitizeRenderedText);
+  const anchor = options?.anchor ?? 'middle';
+  const fontSize = options?.fontSize ?? BASE_FONT_SIZE;
+  const fill = options?.fill ?? 'black';
+  const dominantBaseline = options?.dominantBaseline ?? 'middle';
+  const lineHeight = options?.lineHeight ?? fontSize + 2;
+
+  const text =
+    'append' in parent && (parent as any).node()?.tagName !== 'text'
+      ? (parent as any).append('text')
+      : (parent as d3.Selection<SVGTextElement, unknown, any, any>);
+
+  text
+    .attr('x', x)
+    .attr('y', y)
+    .attr('text-anchor', anchor)
+    .attr('dominant-baseline', dominantBaseline)
+    .attr('pointer-events', 'none')
+    .text(null);
+
+  applyTextStyleAttrs(text, {
+    fontFamily: options?.fontFamily,
+    fontSize,
+    fontWeight: options?.fontWeight,
+    fontStyle: options?.fontStyle,
+    fill,
+  });
+
+  if (dominantBaseline === 'middle') {
+    const startDy = -((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, i) => {
+      const row = text
+        .append('tspan')
+        .attr('x', x)
+        .attr('dy', i === 0 ? startDy : lineHeight);
+      appendInlineMathToText(row, line, x, fontSize);
+    });
+    return text;
+  }
+
+  lines.forEach((line, i) => {
+    const row = text
+      .append('tspan')
+      .attr('x', x)
+      .attr('dy', i === 0 ? 0 : lineHeight);
+    appendInlineMathToText(row, line, x, fontSize);
+  });
+
+  return text;
+};
+
 const getWrappedSpecialSubtextLines = (
   text: string | null | undefined,
-  label: string | null | undefined
+  label: string | null | undefined,
+  fontSize = BASE_SUB_FONT_SIZE
 ) => {
-  const value = String(text ?? '').trim();
+  const value = String(text ?? '');
   if (!value) {
     return [];
   }
 
-  return wrapTextLines(value, getSpecialLabelWrapWidth(label), BASE_SUB_FONT_SIZE);
+  return wrapTextLines(value, getSpecialLabelWrapWidth(label), fontSize);
 };
 
-const getSpecialBottomTextReserved = (
-  label: string | null | undefined,
-  labelSubtext: string | null | undefined
-) => {
-  const hasLabel = !!String(label ?? '').trim();
-  const subLines = getWrappedSpecialSubtextLines(labelSubtext, label);
+const getSpecialBottomTextReserved = (node: Node, block?: Block) => {
+  const label = getNodeLabelText(node);
+  const subLabel = getNodeSubLabelText(node);
+  const mainFontSize = getNodeLabelMainFontSize(node, block);
+  const subFontSize = getNodeSubLabelFontSize(node, block);
+  const mainLines = getRendTextLines(label).filter((line) => line.length > 0);
+  const subLines = getWrappedSpecialSubtextLines(subLabel, label, subFontSize);
 
-  if (!hasLabel && subLines.length === 0) {
+  if (mainLines.length === 0 && subLines.length === 0) {
     return 0;
   }
-
   return (
     STACKED_LABEL_GAP +
-    (hasLabel ? BASE_FONT_SIZE + 8 : 0) +
-    (subLines.length > 0 ? 4 + subLines.length * RECT_SUB_LINE_HEIGHT : 0)
+    (mainLines.length > 0 ? mainLines.length * (mainFontSize + 2) : 0) +
+    (subLines.length > 0 ? 4 + subLines.length * (subFontSize + 1) : 0)
   );
 };
 
@@ -407,6 +801,132 @@ const getFullyConnectedTransitionGeometry = (node: Node, box: Box) => {
   };
 };
 
+const getTrapezoidDirection = (node: Node): TrapezoidDirection =>
+  ((node as any).direction as TrapezoidDirection) ?? 'right';
+
+const getTrapezoidInsets = (box: Box, direction: TrapezoidDirection) => {
+  if (direction === 'left' || direction === 'right') {
+    const inset = Math.max(14, Math.min(box.width * 0.22, 34));
+    return { inset, slope: inset * 0.9 };
+  }
+
+  const inset = Math.max(14, Math.min(box.height * 0.22, 34));
+  return { inset, slope: inset * 0.9 };
+};
+
+const getTrapezoidPath = (box: Box, direction: TrapezoidDirection) => {
+  const { slope } = getTrapezoidInsets(box, direction);
+
+  switch (direction) {
+    case 'left':
+      return [
+        `M ${box.x} ${box.y + slope}`,
+        `L ${box.x + box.width} ${box.y}`,
+        `L ${box.x + box.width} ${box.y + box.height}`,
+        `L ${box.x} ${box.y + box.height - slope}`,
+        'Z',
+      ].join(' ');
+
+    case 'top':
+      return [
+        `M ${box.x + slope} ${box.y}`,
+        `L ${box.x + box.width - slope} ${box.y}`,
+        `L ${box.x + box.width} ${box.y + box.height}`,
+        `L ${box.x} ${box.y + box.height}`,
+        'Z',
+      ].join(' ');
+
+    case 'bottom':
+      return [
+        `M ${box.x} ${box.y}`,
+        `L ${box.x + box.width} ${box.y}`,
+        `L ${box.x + box.width - slope} ${box.y + box.height}`,
+        `L ${box.x + slope} ${box.y + box.height}`,
+        'Z',
+      ].join(' ');
+
+    case 'right':
+    default:
+      return [
+        `M ${box.x} ${box.y}`,
+        `L ${box.x + box.width} ${box.y + slope}`,
+        `L ${box.x + box.width} ${box.y + box.height - slope}`,
+        `L ${box.x} ${box.y + box.height}`,
+        'Z',
+      ].join(' ');
+  }
+};
+
+const getTrapezoidTextBox = (box: Box, direction: TrapezoidDirection): Box => {
+  const { slope } = getTrapezoidInsets(box, direction);
+
+  const horizontalPad = RECT_HORIZONTAL_PADDING + 4;
+  const verticalPad = RECT_VERTICAL_PADDING * 0.6;
+
+  switch (direction) {
+    case 'left':
+    case 'right':
+      return {
+        x: box.x + horizontalPad,
+        y: box.y + slope + verticalPad,
+        width: Math.max(8, box.width - horizontalPad * 2),
+        height: Math.max(8, box.height - slope * 2 - verticalPad * 2),
+      };
+
+    case 'top':
+      return {
+        x: box.x + horizontalPad + slope * 0.2,
+        y: box.y + verticalPad + 2,
+        width: Math.max(8, box.width - horizontalPad * 2 - slope * 0.4),
+        height: Math.max(8, box.height - slope - verticalPad * 2 - 2),
+      };
+
+    case 'bottom':
+      return {
+        x: box.x + horizontalPad + slope * 0.2,
+        y: box.y + verticalPad,
+        width: Math.max(8, box.width - horizontalPad * 2 - slope * 0.4),
+        height: Math.max(8, box.height - slope - verticalPad * 2 - 2),
+      };
+  }
+};
+
+const getTextNodeAnchorBox = (node: Node, box: Box, block?: Block): Box => {
+  const rawLabel = getNodeLabelText(node);
+  const rawSubText = getNodeSubLabelText(node) ?? '';
+
+  if (isVerticalLabel(node)) {
+    return box;
+  }
+
+  const labelFontSize = getNodeLabelMainFontSize(node, block, TEXT_NODE_FONT_SIZE);
+  const subFontSize = getNodeSubLabelFontSize(node, block, BASE_SUB_FONT_SIZE);
+
+  const availableWidth = Math.max(8, box.width);
+  const labelLines = wrapTextLines(rawLabel, availableWidth, labelFontSize);
+  const subLines = rawSubText ? wrapTextLines(rawSubText, availableWidth, subFontSize) : [];
+
+  const labelLineHeight = labelFontSize + 2;
+  const subLineHeight = subFontSize + 1;
+
+  const totalTextHeight =
+    labelLines.length * labelLineHeight +
+    (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
+  const maxTextWidth = Math.max(
+    ...labelLines.map((line) => estimateTextWidth(line, labelFontSize)),
+    ...subLines.map((line) => estimateTextWidth(line, subFontSize)),
+    10
+  );
+
+  return {
+    x: box.x + (box.width - maxTextWidth) / 2,
+    y: box.y + (box.height - totalTextHeight) / 2,
+    width: maxTextWidth,
+    height: totalTextHeight,
+  };
+};
+
 const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
   if (!node) {
     return box;
@@ -450,6 +970,10 @@ const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
     };
   }
 
+  if (node.type === 'text') {
+    return getTextNodeAnchorBox(node, box);
+  }
+
   return box;
 };
 const getMarkerSpanBoxFromSiblings = (itemBox: Box, prevBox?: Box, nextBox?: Box): Box => {
@@ -478,8 +1002,13 @@ const getEffectiveDepth = (depth: number): number => {
 
 const getStackedSliceOffset = (
   shape: { depth: number; width: number; height: number },
-  featureScale: number
+  featureScale: number,
+  filterSpacing?: number
 ) => {
+  if (filterSpacing !== undefined) {
+    return filterSpacing;
+  }
+
   const rectWidth = shape.width * featureScale;
   const rectHeight = shape.height * featureScale;
   const effectiveDepth = getEffectiveDepth(shape.depth);
@@ -490,42 +1019,41 @@ const getStackedSliceOffset = (
   );
 };
 
-const getStackedNodeBodySize = (node: Node) => {
+const getStackedNodeBodySize = (node: Node, block?: Block) => {
   const requested = parseSize(node.size, {
     width: STACKED_MIN_BODY_WIDTH,
     height: STACKED_MIN_BODY_HEIGHT,
   });
 
-  const shape = parse3DDims((node as any).shape);
-  if (!shape) {
+  const hasExplicitSize = !!node.size;
+
+  if (hasExplicitSize) {
     return {
       width: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width),
       height: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height),
     };
   }
 
-  const maxDim = Math.max(1, shape.width, shape.height);
-  const featureScale = STACKED_MAX_FEATURE_SIZE / maxDim;
-  const metrics = getStackedMetrics(shape, featureScale);
-  const bottomReserved = getSpecialBottomReserved(node);
-  const labelWidth = estimateTextWidth(node.label ?? '', BASE_FONT_SIZE) + 20;
+  const shape = parse3DDims((node as any).shape)!;
 
-  const naturalWidth = Math.max(metrics.visibleWidth, labelWidth + 20, STACKED_MIN_BODY_WIDTH);
-  const naturalHeight = Math.max(metrics.visibleHeight + bottomReserved, STACKED_MIN_BODY_HEIGHT);
+  const featureScale = 0.7;
 
-  const hasExplicitSize = !!node.size;
+  const filterSpacing = getStackedFilterSpacing(node);
+  const metrics = getStackedMetrics(shape, featureScale, filterSpacing);
+  const bottomReserved = getSpecialBottomReserved(node, block);
+  const labelWidth =
+    estimateMultilineTextWidth(getNodeLabelText(node), getNodeLabelMainFontSize(node, block)) + 20;
+
+  const naturalWidth = Math.max(metrics.visibleWidth, labelWidth + 20);
+  const naturalHeight = metrics.visibleHeight + bottomReserved;
 
   return {
-    width: hasExplicitSize
-      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width)
-      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalWidth),
-    height: hasExplicitSize
-      ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
-      : Math.max(ABSOLUTE_MIN_NODE_SIZE, naturalHeight),
+    width: Math.max(ABSOLUTE_MIN_NODE_SIZE, STACKED_MIN_BODY_WIDTH, naturalWidth),
+    height: Math.max(ABSOLUTE_MIN_NODE_SIZE, STACKED_MIN_BODY_HEIGHT, naturalHeight),
   };
 };
 
-const getFlattenNodeBodySize = (node: Node) => {
+const getFlattenNodeBodySize = (node: Node, block?: Block) => {
   const requested = parseSize(node.size, {
     width: FLATTEN_MIN_BODY_WIDTH,
     height: FLATTEN_MIN_BODY_HEIGHT,
@@ -541,7 +1069,7 @@ const getFlattenNodeBodySize = (node: Node) => {
   const naturalHeight = rows * FLATTEN_CELL_HEIGHT + Math.max(0, rows - 1) * FLATTEN_CELL_GAP;
 
   const naturalFullHeight = Math.max(
-    naturalHeight + getSpecialBottomReserved(node),
+    naturalHeight + getSpecialBottomReserved(node, block),
     FLATTEN_MIN_BODY_HEIGHT
   );
 
@@ -559,7 +1087,7 @@ const getFlattenNodeBodySize = (node: Node) => {
   };
 };
 
-const getFullyConnectedNodeBodySize = (node: Node) => {
+const getFullyConnectedNodeBodySize = (node: Node, block?: Block) => {
   const requested = parseSize(node.size, {
     width: FC_MIN_BODY_WIDTH,
     height: FC_MIN_BODY_HEIGHT,
@@ -574,7 +1102,7 @@ const getFullyConnectedNodeBodySize = (node: Node) => {
     maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
   const naturalFullHeight = Math.max(
-    naturalHeight + getSpecialBottomReserved(node),
+    naturalHeight + getSpecialBottomReserved(node, block),
     FC_MIN_BODY_HEIGHT
   );
 
@@ -604,8 +1132,8 @@ const parseSize = (
   height: Number(size?.height ?? fallback.height) || fallback.height,
 });
 
-const getSpecialBottomReserved = (node: Node) =>
-  getSpecialBottomTextReserved(node.label, (node as any).labelSubtext);
+const getSpecialBottomReserved = (node: Node, block?: Block) =>
+  getSpecialBottomTextReserved(node, block);
 
 const getSpecialVisualBox = (node: Node, box: Box) => {
   const reservedBottom = getSpecialBottomReserved(node);
@@ -635,7 +1163,8 @@ const getStackedFittedMetrics = (node: Node, box: Box) => {
 
   featureScale = Math.max(featureScale, 0.0001);
 
-  let metrics = getStackedMetrics(shape, featureScale);
+  const filterSpacing = getStackedFilterSpacing(node);
+  let metrics = getStackedMetrics(shape, featureScale, filterSpacing);
 
   for (let i = 0; i < 5; i++) {
     const fitScale = Math.min(
@@ -646,7 +1175,7 @@ const getStackedFittedMetrics = (node: Node, box: Box) => {
       break;
     }
     featureScale *= fitScale;
-    metrics = getStackedMetrics(shape, featureScale);
+    metrics = getStackedMetrics(shape, featureScale, filterSpacing);
   }
 
   const stackLeft = visual.x + (visual.width - metrics.visibleWidth) / 2;
@@ -664,31 +1193,42 @@ const getFlattenFittedMetrics = (node: Node, box: Box) => {
   const visual = getSpecialVisualBox(node, box);
 
   const naturalWidth = cols * FLATTEN_CELL_WIDTH + Math.max(0, cols - 1) * FLATTEN_CELL_GAP;
-
   const naturalHeight = rows * FLATTEN_CELL_HEIGHT + Math.max(0, rows - 1) * FLATTEN_CELL_GAP;
 
-  const scale = Math.max(
-    0.0001,
-    Math.min(visual.width / Math.max(1, naturalWidth), visual.height / Math.max(1, naturalHeight))
-  );
+  const hasExplicitSize = !!node.size;
 
-  const cellWidth = FLATTEN_CELL_WIDTH * scale;
-  const cellHeight = FLATTEN_CELL_HEIGHT * scale;
-  const cellGap = FLATTEN_CELL_GAP * scale;
+  let renderWidth: number;
+  let renderHeight: number;
 
-  const renderWidth = cols * cellWidth + Math.max(0, cols - 1) * cellGap;
-  const renderHeight = rows * cellHeight + Math.max(0, rows - 1) * cellGap;
+  if (hasExplicitSize) {
+    renderWidth = Math.max(1, visual.width);
+    renderHeight = Math.max(1, visual.height);
+  } else {
+    renderWidth = naturalWidth;
+    renderHeight = naturalHeight;
+  }
 
-  const left = visual.x + (visual.width - renderWidth) / 2;
-  const top = visual.y + (visual.height - renderHeight) / 2;
+  const scaleX = renderWidth / Math.max(1, naturalWidth);
+  const scaleY = renderHeight / Math.max(1, naturalHeight);
+
+  const cellWidth = FLATTEN_CELL_WIDTH * scaleX;
+  const cellHeight = FLATTEN_CELL_HEIGHT * scaleY;
+  const cellGapX = FLATTEN_CELL_GAP * scaleX;
+  const cellGapY = FLATTEN_CELL_GAP * scaleY;
+
+  const actualRenderWidth = cols * cellWidth + Math.max(0, cols - 1) * cellGapX;
+  const actualRenderHeight = rows * cellHeight + Math.max(0, rows - 1) * cellGapY;
+
+  const left = visual.x + (visual.width - actualRenderWidth) / 2;
+  const top = visual.y + (visual.height - actualRenderHeight) / 2;
 
   const cellCenters = Array.from({ length: rows * cols }, (_, index) => {
     const row = Math.floor(index / cols);
     const col = index % cols;
 
     return {
-      x: left + col * (cellWidth + cellGap) + cellWidth / 2,
-      y: top + row * (cellHeight + cellGap) + cellHeight / 2,
+      x: left + col * (cellWidth + cellGapX) + cellWidth / 2,
+      y: top + row * (cellHeight + cellGapY) + cellHeight / 2,
     };
   });
 
@@ -699,13 +1239,15 @@ const getFlattenFittedMetrics = (node: Node, box: Box) => {
     flattenedCount: rows * cols,
     cellWidth,
     cellHeight,
-    cellGap,
-    renderWidth,
-    renderHeight,
+    cellGap: Math.min(cellGapX, cellGapY),
+    cellGapX,
+    cellGapY,
+    renderWidth: actualRenderWidth,
+    renderHeight: actualRenderHeight,
     left,
     top,
-    right: left + renderWidth,
-    bottom: top + renderHeight,
+    right: left + actualRenderWidth,
+    bottom: top + actualRenderHeight,
     centersY: cellCenters.map((p) => p.y),
     cellCenters,
   };
@@ -726,14 +1268,20 @@ const getFullyConnectedFittedMetrics = (node: Node, box: Box) => {
   const naturalHeight =
     maxNeurons * FC_NEURON_RADIUS * 2 + Math.max(0, maxNeurons - 1) * FC_NEURON_GAP;
 
-  const scale = Math.max(
-    0.0001,
-    Math.min(visual.width / Math.max(1, naturalWidth), visual.height / Math.max(1, naturalHeight))
-  );
+  const scaleX = Math.max(0.0001, visual.width / Math.max(1, naturalWidth));
+  const scaleY = Math.max(0.0001, visual.height / Math.max(1, naturalHeight));
 
-  const radius = FC_NEURON_RADIUS * scale;
-  const layerGap = FC_LAYER_GAP * scale;
-  const neuronGap = FC_NEURON_GAP * scale;
+  const combinedScale = (scaleX + scaleY) / 2;
+
+  let radius = FC_NEURON_RADIUS * combinedScale;
+
+  const maxRadiusFromHeight =
+    maxNeurons > 0 ? visual.height / (maxNeurons * 2 + Math.max(0, maxNeurons - 1) * 0.6) : radius;
+
+  radius = Math.max(1, Math.min(radius, maxRadiusFromHeight));
+
+  const layerGap = FC_LAYER_GAP * combinedScale;
+  const neuronGap = FC_NEURON_GAP * combinedScale;
 
   const denseWidth = (layerCount - 1) * layerGap + radius * 2;
   const denseHeight = maxNeurons * radius * 2 + Math.max(0, maxNeurons - 1) * neuronGap;
@@ -775,39 +1323,104 @@ const getFullyConnectedFittedMetrics = (node: Node, box: Box) => {
   };
 };
 
-const getRectHeightForWidth = (node: Node, width: number) => {
+const getRectHeightForWidth = (node: Node, width: number, block?: Block) => {
+  const mainFontSize = getNodeLabelMainFontSize(node, block);
+  const subFontSize = getNodeSubLabelFontSize(node, block);
+  const mainLineHeight = mainFontSize + 2;
+  const subLineHeight = subFontSize + 1;
+
   const contentWidth = Math.max(8, width - RECT_HORIZONTAL_PADDING * 2);
-  const labelLines = wrapTextLines(node.label ?? '', contentWidth, BASE_FONT_SIZE);
-  const subLines = node.labelSubtext
-    ? wrapTextLines(node.labelSubtext, contentWidth, BASE_SUB_FONT_SIZE)
-    : [];
+  const labelLines = wrapTextLines(getNodeLabelText(node), contentWidth, mainFontSize);
+  const subLabelText = getNodeSubLabelText(node);
+  const subLines = subLabelText ? wrapTextLines(subLabelText, contentWidth, subFontSize) : [];
 
   const textHeight =
-    labelLines.length * RECT_LINE_HEIGHT +
-    (subLines.length > 0 ? 4 + subLines.length * RECT_SUB_LINE_HEIGHT : 0);
+    labelLines.length * mainLineHeight +
+    (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
 
   return Math.max(RECT_MIN_HEIGHT, textHeight + RECT_VERTICAL_PADDING * 2);
 };
 
-const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
+const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Block) => {
+  if (node.type === 'trapezoid') {
+    const requested = node.size
+      ? { width: Number(node.size.width), height: Number(node.size.height) }
+      : undefined;
+
+    const naturalWidth = Math.max(
+      RECT_MIN_WIDTH,
+      Math.max(
+        estimateMultilineTextWidth(getNodeLabelText(node), getNodeLabelMainFontSize(node, block)),
+        estimateMultilineTextWidth(getNodeSubLabelText(node), getNodeSubLabelFontSize(node, block))
+      ) +
+        RECT_HORIZONTAL_PADDING * 2 +
+        18
+    );
+
+    const width = requested?.width || sharedRectWidth || naturalWidth;
+    const baseHeight = requested?.height || getRectHeightForWidth(node, width);
+
+    return { width, height: baseHeight };
+  }
   if (node.type === 'stacked') {
-    return getStackedNodeBodySize(node);
+    return getStackedNodeBodySize(node, block);
   }
 
   if (node.type === 'flatten') {
-    return getFlattenNodeBodySize(node);
+    return getFlattenNodeBodySize(node, block);
   }
 
   if (node.type === 'fullyConnected') {
-    return getFullyConnectedNodeBodySize(node);
+    return getFullyConnectedNodeBodySize(node, block);
+  }
+
+  if (node.type === 'arrow') {
+    const requested = parseSize(node.size, { width: 24, height: 16 });
+
+    if (isVerticalLabel(node)) {
+      const verticalTextExtent =
+        requested.height && requested.height > 0 ? Math.max(24, requested.height - 8) : 120;
+
+      const mainFontSize = getNodeLabelMainFontSize(node, block);
+      const subFontSize = getNodeSubLabelFontSize(node, block);
+
+      const labelLines = wrapTextLines(
+        node.labelProperties?.labelText ?? '',
+        verticalTextExtent,
+        mainFontSize
+      );
+      const subLines = getNodeSubLabelText(node)
+        ? wrapTextLines(getNodeSubLabelText(node), verticalTextExtent, subFontSize)
+        : [];
+
+      const totalTextHeight =
+        labelLines.length * (mainFontSize + 2) +
+        (subLines.length > 0 ? subLines.length * (subFontSize + 1) + 4 : 0);
+
+      const maxLineWidth = Math.max(
+        ...labelLines.map((line) => estimateTextWidth(line, mainFontSize)),
+        ...subLines.map((line) => estimateTextWidth(line, subFontSize)),
+        10
+      );
+
+      return {
+        width: Math.max(requested.width, totalTextHeight + 12),
+        height: Math.max(requested.height, maxLineWidth + 12),
+      };
+    }
+
+    return {
+      width: requested.width,
+      height: requested.height,
+    };
   }
 
   if (node.type === 'text') {
     const requested = parseSize(node.size, DEFAULT_TEXT);
-    const rawLabel = node.label ?? '';
-    const rawSubText = node.labelSubtext ?? '';
+    const rawLabel = getNodeLabelText(node);
+    const rawSubText = getNodeSubLabelText(node) ?? '';
 
-    if (node.labelOrientation === 'vertical') {
+    if (isVerticalLabel(node)) {
       const availableVerticalExtent =
         requested.height && requested.height > 0 ? Math.max(20, requested.height - 8) : 120;
 
@@ -836,8 +1449,8 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
     }
 
     const naturalWidth = Math.max(
-      estimateTextWidth(rawLabel, TEXT_NODE_FONT_SIZE),
-      estimateTextWidth(rawSubText, BASE_SUB_FONT_SIZE)
+      estimateMultilineTextWidth(rawLabel, TEXT_NODE_FONT_SIZE),
+      estimateMultilineTextWidth(rawSubText, BASE_SUB_FONT_SIZE)
     );
 
     const naturalHeight = TEXT_NODE_FONT_SIZE + (rawSubText ? 4 + BASE_SUB_FONT_SIZE : 0);
@@ -850,8 +1463,38 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
   if (node.type === 'circle') {
     const requested = parseSize(node.size, DEFAULT_CIRCLE);
 
-    const needed = Math.max(requested.width, requested.height);
+    if (isVerticalLabel(node)) {
+      const verticalTextExtent =
+        requested.height && requested.height > 0 ? Math.max(28, requested.height - 8) : 120;
+      const mainFontSize = getNodeLabelMainFontSize(node, block);
+      const subFontSize = getNodeSubLabelFontSize(node, block);
 
+      const labelLines = wrapTextLines(
+        node.labelProperties?.labelText ?? '',
+        verticalTextExtent,
+        mainFontSize
+      );
+      const subLines = getNodeSubLabelText(node)
+        ? wrapTextLines(getNodeSubLabelText(node), verticalTextExtent, subFontSize)
+        : [];
+
+      const totalTextHeight =
+        labelLines.length * (mainFontSize + 2) +
+        (subLines.length > 0 ? subLines.length * (subFontSize + 1) + 4 : 0);
+
+      const maxLineWidth = Math.max(
+        ...labelLines.map((line) => estimateTextWidth(line, mainFontSize)),
+        ...subLines.map((line) => estimateTextWidth(line, subFontSize)),
+        10
+      );
+
+      return {
+        width: Math.max(requested.width, totalTextHeight + 12),
+        height: Math.max(requested.height, maxLineWidth + 12),
+      };
+    }
+
+    const needed = Math.max(requested.width, requested.height);
     return { width: needed, height: needed };
   }
 
@@ -859,15 +1502,19 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
     ? { width: Number(node.size.width), height: Number(node.size.height) }
     : undefined;
 
-  if (node.labelOrientation === 'vertical') {
+  if (isVerticalLabel(node)) {
     const verticalTextExtent =
       requested?.height && requested.height > 0
         ? Math.max(40, requested.height - RECT_HORIZONTAL_PADDING * 2)
         : 120;
 
-    const labelLines = wrapTextLines(node.label ?? '', verticalTextExtent, BASE_FONT_SIZE);
-    const subLines = node.labelSubtext
-      ? wrapTextLines(node.labelSubtext, verticalTextExtent, BASE_SUB_FONT_SIZE)
+    const labelLines = wrapTextLines(
+      node.labelProperties?.labelText ?? '',
+      verticalTextExtent,
+      BASE_FONT_SIZE
+    );
+    const subLines = getNodeSubLabelText(node)
+      ? wrapTextLines(getNodeSubLabelText(node), verticalTextExtent, BASE_SUB_FONT_SIZE)
       : [];
 
     const totalTextHeight =
@@ -885,13 +1532,17 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number) => {
       height: requested?.height ?? Math.max(64, maxLineWidth + RECT_HORIZONTAL_PADDING * 2),
     };
   }
+  const mainFontSize = getNodeLabelMainFontSize(node, block);
+  const subFontSize = getNodeSubLabelFontSize(node, block);
 
-  const naturalWidth =
+  const naturalWidth = Math.max(
+    RECT_MIN_WIDTH,
     Math.max(
-      estimateTextWidth(node.label ?? '', BASE_FONT_SIZE),
-      estimateTextWidth(node.labelSubtext ?? '', BASE_SUB_FONT_SIZE)
+      estimateMultilineTextWidth(node.labelProperties?.labelText ?? '', mainFontSize),
+      estimateMultilineTextWidth(getNodeSubLabelText(node) ?? '', subFontSize)
     ) +
-    RECT_HORIZONTAL_PADDING * 2;
+      RECT_HORIZONTAL_PADDING * 2
+  );
 
   const width = requested?.width || sharedRectWidth || naturalWidth;
   const baseHeight = requested?.height || getRectHeightForWidth(node, width);
@@ -1076,12 +1727,21 @@ const applyExternalPortCounts = (
   }
 };
 
-const getPaddedVisualBox = (box: Box, clip: Box): Box => {
+const getPaddedVisualBox = (
+  box: Box,
+  clip: Box,
+  annotations?: Record<Side, Annotation | undefined>
+): Box => {
+  const leftExtra = annotations?.left ? GROUP_ANNOTATION_GAP : 0;
+  const rightExtra = annotations?.right ? GROUP_ANNOTATION_GAP : 0;
+  const topExtra = annotations?.top ? GROUP_ANNOTATION_GAP : 0;
+  const bottomExtra = annotations?.bottom ? GROUP_ANNOTATION_GAP : 0;
+
   const padded = {
-    x: box.x - GROUP_PAD_X,
-    y: box.y - GROUP_PAD_Y,
-    width: box.width + GROUP_PAD_X * 2,
-    height: box.height + GROUP_PAD_Y * 2,
+    x: box.x - GROUP_PAD_X - leftExtra,
+    y: box.y - GROUP_PAD_Y - topExtra,
+    width: box.width + GROUP_PAD_X * 2 + leftExtra + rightExtra,
+    height: box.height + GROUP_PAD_Y * 2 + topExtra + bottomExtra,
   };
 
   return {
@@ -1096,6 +1756,40 @@ const getPaddedVisualBox = (box: Box, clip: Box): Box => {
       Math.min(clip.y + clip.height, padded.y + padded.height) - Math.max(clip.y, padded.y)
     ),
   };
+};
+const hasGroupColorBoxAdjustments = (groupDef: any): boolean => {
+  const raw = groupDef?.colorBoxAdjustments;
+  if (!raw) {
+    return false;
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.some((v) => Number(v) !== 0);
+  }
+
+  if (typeof raw === 'object') {
+    return ['top', 'right', 'bottom', 'left'].some((k) => Number(raw[k]) !== 0);
+  }
+
+  return false;
+};
+
+const getEffectiveGroupBox = (
+  metrics: BlockMetrics,
+  groupDefs: Block['groups'] | undefined,
+  groupName: string
+): Box | undefined => {
+  const groupDef = (groupDefs ?? []).find((g) => g.name === groupName);
+
+  if (groupDef && hasGroupColorBoxAdjustments(groupDef)) {
+    return (
+      metrics.groupColorBoxes.get(groupName) ??
+      metrics.groupVisualBoxes.get(groupName) ??
+      metrics.groups.get(groupName)
+    );
+  }
+
+  return metrics.groups.get(groupName);
 };
 
 const getGroupColorRenderBox = (groupDef: any, visualBox: Box): Box => {
@@ -1129,6 +1823,15 @@ const getGroupColorRenderBox = (groupDef: any, visualBox: Box): Box => {
   };
 };
 
+const isVerticalLabel = (node: Node) =>
+  node.labelProperties?.labelOrientation?.orientation === 'vertical';
+
+const getVerticalLabelOrientationSide = (node: Node): 'left' | 'right' =>
+  node.labelProperties?.labelOrientation?.side ?? 'right';
+
+const getVerticalLabelRotation = (node: Node) =>
+  getVerticalLabelOrientationSide(node) === 'left' ? -90 : 90;
+
 const computeBlockMetrics = (
   block: Block,
   externalPortCounts?: Map<string, Record<Side, number>>
@@ -1137,10 +1840,20 @@ const computeBlockMetrics = (
   const groups = block.groups ?? [];
   const groupBoxes = new Map<string, Box>();
   const groupVisualBoxes = new Map<string, Box>();
+  const groupColorBoxes = new Map<string, Box>();
   const groupNodeMembers = new Map<string, Set<string>>();
   const nodeMap = new Map(nodes.map((n) => [n.name, n]));
   const groupMarkerBoxes = new Map<string, Box>();
-  const rectNodes = nodes.filter((n) => n.type === 'rect' && n.labelOrientation !== 'vertical');
+
+  const rectNodes = nodes.filter(
+    (n) =>
+      (n.type === 'rect' ||
+        n.type === 'arrow' ||
+        n.type === 'circle' ||
+        n.type === 'text' ||
+        n.type === 'trapezoid') &&
+      !isVerticalLabel(n)
+  );
   const MAX_SHARED_RECT_WIDTH = 110;
 
   const alignCircularSourcesToIndexedTargets = (
@@ -1188,10 +1901,6 @@ const computeBlockMetrics = (
         Number(to.portIndex)
       );
       nodeBoxes.set(from.nodeName, {
-        ...fromBox,
-        x: targetX - fromSize.width / 2,
-      });
-      nodeBoxes.set(from.nodeName, {
         x: targetX - fromSize.width / 2,
         y: fromBox.y,
         width: fromSize.width,
@@ -1213,19 +1922,21 @@ const computeBlockMetrics = (
           Math.max(
             ...rectNodes.map((n) => {
               const requestedWidth = n.size?.width ? Number(n.size.width) : 0;
-              const naturalWidth =
+              const naturalWidth = Math.max(
+                RECT_MIN_WIDTH,
                 Math.max(
-                  estimateTextWidth(n.label ?? '', BASE_FONT_SIZE),
-                  estimateTextWidth(n.labelSubtext ?? '', BASE_SUB_FONT_SIZE)
+                  estimateTextWidth(getNodeLabelText(n), getNodeLabelMainFontSize(n, block)),
+                  estimateTextWidth(getNodeSubLabelText(n), getNodeSubLabelFontSize(n, block))
                 ) +
-                RECT_HORIZONTAL_PADDING * 2;
+                  RECT_HORIZONTAL_PADDING * 2
+              );
               return Math.max(requestedWidth, naturalWidth);
             })
           )
         )
       : undefined;
 
-  const nodeSizes = new Map(nodes.map((n) => [n.name, getNodeBodySize(n, sharedRectWidth)]));
+  const nodeSizes = new Map(nodes.map((n) => [n.name, getNodeBodySize(n, sharedRectWidth, block)]));
   const groupAnnotationMaps = new Map<string, Record<Side, Annotation | undefined>>();
   const nodeBoxes = new Map<string, Box>();
   const nodeShapeBoxes = new Map<string, Box>();
@@ -1234,6 +1945,24 @@ const computeBlockMetrics = (
   const defaultGap = block.gap ?? ROW_GAP;
 
   const groupMap = new Map(groups.map((g) => [g.name, g]));
+  const directChildGroups = new Map<string, string[]>();
+  const directChildNodes = new Map<string, string[]>();
+
+  for (const group of groups) {
+    const childGroups: string[] = [];
+    const childNodes: string[] = [];
+
+    for (const member of group.members ?? []) {
+      if (groupMap.has(member)) {
+        childGroups.push(member);
+      } else if (nodeMap.has(member)) {
+        childNodes.push(member);
+      }
+    }
+
+    directChildGroups.set(group.name, childGroups);
+    directChildNodes.set(group.name, childNodes);
+  }
   const resolvedGroups = new Map<string, ResolvedGroup>();
   const resolving = new Set<string>();
   const groupedNodeNames = new Set<string>();
@@ -1300,22 +2029,84 @@ const computeBlockMetrics = (
         nodeBoxes.set(nodeName, box);
         nodeShapeBoxes.set(nodeName, box);
       },
+      getAnchor: (name: string) =>
+        name === nodeName
+          ? {
+              x: gapPad.left + size.width / 2,
+              y: gapPad.top + getNodeVisualAlignY(nodeDef, size),
+            }
+          : null,
     };
   };
 
   const arrangeItems = (
     items: LayoutItem[],
     layout: LayoutKind,
-    gap: number
-  ): {
-    width: number;
-    height: number;
-    apply: (x: number, y: number) => void;
-    alignX: number;
-    alignY: number;
-  } => {
+    gap: number,
+    alignMembers = false,
+    anchorSource?: string,
+    anchorTarget?: string
+  ): ArrangedItemsResult => {
+    const findAnchorInPlacedItems = (
+      placedBoxes: Box[],
+      anchorName: string
+    ): { itemIndex: number; point: Point } | null => {
+      for (const [i, item] of items.entries()) {
+        const local = item.getAnchor(anchorName);
+        if (!local) {
+          continue;
+        }
+
+        return {
+          itemIndex: i,
+          point: {
+            x: placedBoxes[i].x + local.x,
+            y: placedBoxes[i].y + local.y,
+          },
+        };
+      }
+
+      return null;
+    };
+
+    const normalizeHorizontalBoxes = (placedBoxes: Box[]) => {
+      const minTop = Math.min(...placedBoxes.map((b) => b.y));
+      const maxBottom = Math.max(...placedBoxes.map((b) => b.y + b.height));
+
+      if (minTop !== 0) {
+        for (const box of placedBoxes) {
+          box.y -= minTop;
+        }
+      }
+
+      return {
+        height: maxBottom - minTop,
+      };
+    };
+
+    const normalizeVerticalBoxes = (placedBoxes: Box[]) => {
+      const minLeft = Math.min(...placedBoxes.map((b) => b.x));
+      const maxRight = Math.max(...placedBoxes.map((b) => b.x + b.width));
+
+      if (minLeft !== 0) {
+        for (const box of placedBoxes) {
+          box.x -= minLeft;
+        }
+      }
+
+      return {
+        width: maxRight - minLeft,
+      };
+    };
     if (!items.length) {
-      return { width: 0, height: 0, alignX: 0, alignY: 0, apply: () => {} };
+      return {
+        width: 0,
+        height: 0,
+        boxes: [],
+        alignX: 0,
+        alignY: 0,
+        apply: () => {},
+      };
     }
 
     const registerMarkerBoxes = (placedBoxes: Box[], ox: number, oy: number) => {
@@ -1362,22 +2153,46 @@ const computeBlockMetrics = (
     };
 
     if (layout === 'horizontal') {
-      const baseline = Math.max(...items.map((i) => i.alignY));
-      const belowBaseline = Math.max(...items.map((i) => i.height - i.alignY));
+      const memberAlignYs = items.map((i) => (alignMembers ? i.height / 2 : i.alignY));
+      const baseline = Math.max(...memberAlignYs);
+
+      const minTop = Math.min(...items.map((i, idx) => baseline - memberAlignYs[idx]));
+      const maxBottom = Math.max(
+        ...items.map((i, idx) => baseline - memberAlignYs[idx] + i.height)
+      );
+
       let x = 0;
 
       const boxes = items.map((item) => {
-        const box = { x, y: baseline - item.alignY, width: item.width, height: item.height };
+        const box = {
+          x,
+          y: baseline - (alignMembers ? item.height / 2 : item.alignY) - minTop,
+          width: item.width,
+          height: item.height,
+        };
         x += item.width + gap;
         return box;
       });
 
+      if (anchorSource && anchorTarget) {
+        const source = findAnchorInPlacedItems(boxes, anchorSource);
+        const target = findAnchorInPlacedItems(boxes, anchorTarget);
+
+        if (source && target && source.itemIndex !== target.itemIndex) {
+          const deltaY = source.point.y - target.point.y;
+          boxes[target.itemIndex].y += deltaY;
+        }
+      }
+
       const width = items.length ? x - gap : 0;
+      const normalized = normalizeHorizontalBoxes(boxes);
+
       return {
         width,
-        height: baseline + belowBaseline,
+        height: normalized.height,
+        boxes,
         alignX: width / 2,
-        alignY: baseline,
+        alignY: items.length ? boxes[0].y + items[0].alignY : 0,
         apply: (ox, oy) => {
           boxes.forEach((box, i) => items[i].apply(ox + box.x, oy + box.y));
           registerMarkerBoxes(boxes, ox, oy);
@@ -1386,15 +2201,35 @@ const computeBlockMetrics = (
     }
 
     if (layout === 'vertical') {
-      const maxLeft = Math.max(...items.map((i) => i.alignX));
-      const maxRight = Math.max(...items.map((i) => i.width - i.alignX));
+      const memberAlignXs = items.map((i) => (alignMembers ? i.width / 2 : i.alignX));
+      const centerLine = Math.max(...memberAlignXs);
+
+      const minLeft = Math.min(...items.map((i, idx) => centerLine - memberAlignXs[idx]));
+
       let y = 0;
 
       const boxes = items.map((item) => {
-        const box = { x: maxLeft - item.alignX, y, width: item.width, height: item.height };
+        const box = {
+          x: centerLine - (alignMembers ? item.width / 2 : item.alignX) - minLeft,
+          y,
+          width: item.width,
+          height: item.height,
+        };
         y += item.height + gap;
         return box;
       });
+
+      if (anchorSource && anchorTarget) {
+        const source = findAnchorInPlacedItems(boxes, anchorSource);
+        const target = findAnchorInPlacedItems(boxes, anchorTarget);
+
+        if (source && target && source.itemIndex !== target.itemIndex) {
+          const deltaX = source.point.x - target.point.x;
+          boxes[target.itemIndex].x += deltaX;
+        }
+      }
+
+      const normalized = normalizeVerticalBoxes(boxes);
 
       let bestIndex = 0;
       let bestWidth = -Infinity;
@@ -1406,9 +2241,10 @@ const computeBlockMetrics = (
       });
 
       return {
-        width: maxLeft + maxRight,
+        width: normalized.width,
         height: items.length ? y - gap : 0,
-        alignX: maxLeft,
+        boxes,
+        alignX: items.length ? boxes[0].x + items[0].alignX : 0,
         alignY: (boxes[bestIndex]?.y ?? 0) + items[bestIndex].alignY,
         apply: (ox, oy) => boxes.forEach((box, i) => items[i].apply(ox + box.x, oy + box.y)),
       };
@@ -1433,9 +2269,35 @@ const computeBlockMetrics = (
     return {
       width: arranged.width,
       height: arranged.height,
+      boxes: arranged.boxes,
       alignX: arranged.width / 2,
       alignY: (arranged.boxes[bestIndex]?.y ?? 0) + items[bestIndex].alignY,
       apply: (ox, oy) => arranged.boxes.forEach((box, i) => items[i].apply(ox + box.x, oy + box.y)),
+    };
+  };
+  const translateBox = (box: Box, dx: number, dy: number): Box => ({
+    x: box.x + dx,
+    y: box.y + dy,
+    width: box.width,
+    height: box.height,
+  });
+
+  const getGroupShiftDelta = (
+    groupDef: any
+  ): {
+    dx: number;
+    dy: number;
+  } => {
+    const shift = groupDef?.shiftProperties;
+
+    const shiftLeft = Number(shift?.shiftLeft ?? 0) || 0;
+    const shiftRight = Number(shift?.shiftRight ?? 0) || 0;
+    const shiftTop = Number(shift?.shiftTop ?? 0) || 0;
+    const shiftBottom = Number(shift?.shiftBottom ?? 0) || 0;
+
+    return {
+      dx: shiftRight - shiftLeft,
+      dy: shiftBottom - shiftTop,
     };
   };
 
@@ -1458,7 +2320,7 @@ const computeBlockMetrics = (
     groupAnnotationMaps.set(groupName, annotationMap);
 
     const layout = group.layout ?? 'horizontal';
-    const gap = group.gap ?? NODE_GAP;
+    const gap = group.gap ?? block.gap ?? NODE_GAP;
     const items: LayoutItem[] = [];
     const nodeMembers = new Set<string>();
 
@@ -1485,39 +2347,22 @@ const computeBlockMetrics = (
             alignX: nested.alignX,
             alignY: nested.alignY,
             apply: nested.apply,
+            getAnchor: nested.getAnchor,
           });
         }
       }
     }
 
-    const arranged = arrangeItems(items, layout, gap);
-    let alignX = arranged.alignX;
-    let alignY = arranged.alignY;
-
-    const anchorName = (group as any).anchor;
-    if (anchorName) {
-      if (layout === 'horizontal') {
-        let runningX = 0;
-        for (const item of items) {
-          const itemCenterX = runningX + item.alignX;
-          if (item.name === anchorName) {
-            alignX = itemCenterX;
-            break;
-          }
-          runningX += item.width + gap;
-        }
-      } else if (layout === 'vertical') {
-        let runningY = 0;
-        for (const item of items) {
-          const itemCenterY = runningY + item.alignY;
-          if (item.name === anchorName) {
-            alignY = itemCenterY;
-            break;
-          }
-          runningY += item.height + gap;
-        }
-      }
-    }
+    const arranged = arrangeItems(
+      items,
+      layout,
+      gap,
+      !!(group as any).align,
+      (group as any).anchorSource,
+      (group as any).anchorTarget
+    );
+    const alignX = arranged.alignX;
+    const alignY = arranged.alignY;
 
     const resolved: ResolvedGroup = {
       name: groupName,
@@ -1530,11 +2375,96 @@ const computeBlockMetrics = (
         groupBoxes.set(groupName, { x, y, width: arranged.width, height: arranged.height });
         arranged.apply(x, y);
       },
+      getAnchor: (name: string) => {
+        // allow anchoring to the group itself
+        if (name === groupName) {
+          const groupDef = groupMap.get(groupName);
+
+          const baseBox = { x: 0, y: 0, width: arranged.width, height: arranged.height };
+
+          const anchorBox =
+            groupDef && hasGroupColorBoxAdjustments(groupDef)
+              ? getGroupColorRenderBox(groupDef, baseBox)
+              : baseBox;
+
+          return {
+            x: anchorBox.x + anchorBox.width / 2,
+            y: anchorBox.y + anchorBox.height / 2,
+          };
+        }
+
+        // otherwise search inside child items
+        for (const [i, item] of items.entries()) {
+          const local = item.getAnchor(name);
+          if (!local) {
+            continue;
+          }
+
+          const childBox = arranged.boxes[i];
+          return {
+            x: childBox.x + local.x,
+            y: childBox.y + local.y,
+          };
+        }
+
+        return null;
+      },
     };
     groupNodeMembers.set(groupName, nodeMembers);
     resolving.delete(groupName);
     resolvedGroups.set(groupName, resolved);
     return resolved;
+  };
+  const shiftNode = (nodeName: string, dx: number, dy: number) => {
+    const nodeBox = nodeBoxes.get(nodeName);
+    if (nodeBox) {
+      nodeBoxes.set(nodeName, translateBox(nodeBox, dx, dy));
+    }
+
+    const nodeShapeBox = nodeShapeBoxes.get(nodeName);
+    if (nodeShapeBox) {
+      nodeShapeBoxes.set(nodeName, translateBox(nodeShapeBox, dx, dy));
+    }
+  };
+
+  const shiftGroupTree = (groupName: string, dx: number, dy: number) => {
+    if (dx === 0 && dy === 0) {
+      return;
+    }
+
+    const groupBox = groupBoxes.get(groupName);
+    if (groupBox) {
+      groupBoxes.set(groupName, translateBox(groupBox, dx, dy));
+    }
+
+    const markerBox = groupMarkerBoxes.get(groupName);
+    if (markerBox) {
+      groupMarkerBoxes.set(groupName, translateBox(markerBox, dx, dy));
+    }
+
+    for (const nodeName of directChildNodes.get(groupName) ?? []) {
+      shiftNode(nodeName, dx, dy);
+    }
+
+    for (const childGroupName of directChildGroups.get(groupName) ?? []) {
+      shiftGroupTree(childGroupName, dx, dy);
+    }
+  };
+
+  const applyOwnShiftRecursively = (groupName: string) => {
+    const groupDef = groupMap.get(groupName);
+    if (!groupDef) {
+      return;
+    }
+
+    const { dx, dy } = getGroupShiftDelta(groupDef);
+    if (dx !== 0 || dy !== 0) {
+      shiftGroupTree(groupName, dx, dy);
+    }
+
+    for (const childGroupName of directChildGroups.get(groupName) ?? []) {
+      applyOwnShiftRecursively(childGroupName);
+    }
   };
 
   const topLevelItems: LayoutItem[] = [];
@@ -1543,6 +2473,7 @@ const computeBlockMetrics = (
     if (referencedGroupNames.has(group.name)) {
       continue;
     }
+
     const resolved = resolveGroup(group.name);
     if (resolved) {
       topLevelItems.push({
@@ -1553,6 +2484,7 @@ const computeBlockMetrics = (
         alignX: resolved.alignX,
         alignY: resolved.alignY,
         apply: resolved.apply,
+        getAnchor: resolved.getAnchor,
       });
     }
   }
@@ -1569,35 +2501,102 @@ const computeBlockMetrics = (
   }
 
   const content = arrangeItems(topLevelItems, outerLayout, defaultGap);
-  const leftSpace = annotations.left ? 44 : 0;
-  const rightSpace = annotations.right ? 44 : 0;
-  const topSpace = annotations.top ? 28 : 0;
-  const bottomSpace = annotations.bottom ? 28 : 0;
+  // Block annotations should not affect layout size.
+  const leftSpace = 0;
+  const rightSpace = 0;
+  const topSpace = 0;
+  const bottomSpace = 0;
+
+  const naturalBodyWidth = content.width + BLOCK_PADDING_X * 2;
+  const naturalBodyHeight = content.height + BLOCK_PADDING_Y * 2;
+  const requested = parseSize(block.size, { width: 0, height: 0 });
 
   const fittedWidth = content.width + BLOCK_PADDING_X * 2;
   const fittedHeight = content.height + BLOCK_PADDING_Y * 2;
-  const requested = parseSize(block.size, { width: 0, height: 0 });
 
-  const bodyWidth =
-    requested.width > 0
-      ? Math.max(fittedWidth, Math.min(requested.width, fittedWidth * 1.15))
-      : fittedWidth;
+  const targetBodyWidth = requested.width > 0 ? requested.width : fittedWidth;
+  const targetBodyHeight = requested.height > 0 ? requested.height : fittedHeight;
 
-  const bodyHeight =
-    requested.height > 0
-      ? Math.max(fittedHeight, Math.min(requested.height, fittedHeight * 1.15))
-      : fittedHeight;
+  const scaleX = targetBodyWidth / Math.max(1, fittedWidth);
+  const scaleY = targetBodyHeight / Math.max(1, fittedHeight);
+  const scale = requested.width > 0 || requested.height > 0 ? Math.min(scaleX, scaleY) : 1;
+
+  const bodyWidth = fittedWidth * scale;
+  const bodyHeight = fittedHeight * scale;
 
   const bodyX = leftSpace;
   const bodyY = topSpace;
-  const contentX = bodyX + (bodyWidth - content.width) / 2;
-  const contentY = bodyY + (bodyHeight - content.height) / 2;
-  content.apply(contentX, contentY);
+
+  const naturalContentX = bodyX + BLOCK_PADDING_X;
+  const naturalContentY = bodyY + BLOCK_PADDING_Y;
+
+  content.apply(naturalContentX, naturalContentY);
   alignCircularSourcesToIndexedTargets(block, nodeBoxes, nodeSizes);
 
-  const blockBodyBox = { x: bodyX, y: bodyY, width: bodyWidth, height: bodyHeight };
+  const scaledNaturalBodyWidth = naturalBodyWidth * scale;
+  const scaledNaturalBodyHeight = naturalBodyHeight * scale;
+
+  // Shift the scaled content so it is centered in the requested body.
+  const contentOffsetX = (bodyWidth - scaledNaturalBodyWidth) / 2;
+  const contentOffsetY = (bodyHeight - scaledNaturalBodyHeight) / 2;
+
+  for (const [name, box] of nodeBoxes.entries()) {
+    nodeBoxes.set(name, {
+      x: box.x + contentOffsetX,
+      y: box.y + contentOffsetY,
+      width: box.width,
+      height: box.height,
+    });
+  }
+
+  for (const [name, box] of nodeShapeBoxes.entries()) {
+    nodeShapeBoxes.set(name, {
+      x: box.x + contentOffsetX,
+      y: box.y + contentOffsetY,
+      width: box.width,
+      height: box.height,
+    });
+  }
+
+  for (const [name, box] of groupBoxes.entries()) {
+    groupBoxes.set(name, {
+      x: box.x + contentOffsetX,
+      y: box.y + contentOffsetY,
+      width: box.width,
+      height: box.height,
+    });
+  }
+
+  for (const [name, box] of groupMarkerBoxes.entries()) {
+    groupMarkerBoxes.set(name, {
+      x: box.x + contentOffsetX,
+      y: box.y + contentOffsetY,
+      width: box.width,
+      height: box.height,
+    });
+  }
+  for (const group of groups) {
+    if (!referencedGroupNames.has(group.name)) {
+      applyOwnShiftRecursively(group.name);
+    }
+  }
+
+  const blockBodyBox = {
+    x: bodyX,
+    y: bodyY,
+    width: bodyWidth,
+    height: bodyHeight,
+  };
+
   for (const [groupName, box] of groupBoxes.entries()) {
-    groupVisualBoxes.set(groupName, getPaddedVisualBox(box, blockBodyBox));
+    const visualBox = getPaddedVisualBox(box, blockBodyBox, groupAnnotationMaps.get(groupName));
+    groupVisualBoxes.set(groupName, visualBox);
+
+    const groupDef = groupMap.get(groupName);
+    groupColorBoxes.set(
+      groupName,
+      groupDef ? getGroupColorRenderBox(groupDef, visualBox) : visualBox
+    );
   }
 
   const portCounts = initPortCounts(block);
@@ -1610,11 +2609,13 @@ const computeBlockMetrics = (
     bodyHeight,
     bodyX,
     bodyY,
+    scale,
     annotations,
     nodes: nodeBoxes,
     nodeShapes: nodeShapeBoxes,
     groups: groupBoxes,
     groupVisualBoxes,
+    groupColorBoxes,
     groupMarkerBoxes,
     groupNodeMembers,
     groupAnnotations: groupAnnotationMaps,
@@ -1660,12 +2661,13 @@ const buildDiagramPortCounts = (connections: Connection[]) => {
   return byInstance;
 };
 
-const ensureDefs = (svg: SVG, componentId: number | string, color: string) => {
+const ensureDefs = (svg: SVG, componentId: number | string, color: string, strokeWidth: number) => {
   const idSuffix = String(componentId).replace(/[^\w-]/g, '_');
   const colorSuffix = String(color).replace(/[^\w-]/g, '_');
 
   const defsId = `arch-defs-${idSuffix}`;
   const arrowId = `nn-arrowhead-${idSuffix}-${colorSuffix}`;
+  const arrowStartId = `nn-arrowhead-start-${idSuffix}-${colorSuffix}`;
 
   let defs = svg.select<SVGDefsElement>(`#${defsId}`);
   if (defs.empty()) {
@@ -1687,7 +2689,22 @@ const ensureDefs = (svg: SVG, componentId: number | string, color: string) => {
       .attr('fill', 'context-stroke');
   }
 
-  return { arrowId };
+  if (defs.select(`#${arrowStartId}`).empty()) {
+    defs
+      .append('marker')
+      .attr('id', arrowStartId)
+      .attr('viewBox', '0 0 10 10')
+      .attr('refX', 3.5)
+      .attr('refY', 5)
+      .attr('markerWidth', 4)
+      .attr('markerHeight', 4)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M 10 0 L 0 5 L 10 10 z')
+      .attr('fill', 'context-stroke');
+  }
+
+  return { arrowId, arrowStartId };
 };
 const shouldPreferVerticalPortAlignment = (edge: Edge) => {
   const from = edge.from as any;
@@ -1705,6 +2722,30 @@ const getFixedSlotCoordinate = (start: number, end: number, portIndex: number) =
   const usable = Math.max(0, end - start);
 
   return start + (usable * index) / (FIXED_PORT_SLOTS - 1);
+};
+
+const getRoundedRectBoundaryX = (box: Box, y: number, side: 'left' | 'right', radius = 14) => {
+  const r = Math.max(0, Math.min(radius, box.width / 2, box.height / 2));
+
+  if (r <= 0) {
+    return side === 'left' ? box.x : box.x + box.width;
+  }
+
+  const topArcCenterY = box.y + r;
+  const bottomArcCenterY = box.y + box.height - r;
+  let inset = 0;
+
+  if (y < topArcCenterY) {
+    const dy = topArcCenterY - y;
+
+    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
+  } else if (y > bottomArcCenterY) {
+    const dy = y - bottomArcCenterY;
+
+    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
+  }
+
+  return side === 'left' ? box.x + inset : box.x + box.width - inset;
 };
 
 const getRoundedRectBoundaryY = (box: Box, x: number, side: 'top' | 'bottom', radius = 15) => {
@@ -1729,6 +2770,64 @@ const getRoundedRectBoundaryY = (box: Box, x: number, side: 'top' | 'bottom', ra
   return side === 'top' ? box.y + inset : box.y + box.height - inset;
 };
 
+const interpolatePoint = (a: Point, b: Point, t: number): Point => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
+});
+
+const getPointAlongSegmentWithPadding = (
+  a: Point,
+  b: Point,
+  portIndex: number,
+  useFixedSlot: boolean,
+  edgePadding: number
+): Point => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return { ...a };
+  }
+
+  if (!useFixedSlot) {
+    return interpolatePoint(a, b, 0.5);
+  }
+
+  const clampedPadding = Math.min(edgePadding, len / 2);
+  const usable = Math.max(0, len - clampedPadding * 2);
+
+  const slotT = Math.max(0, Math.min(1, portIndex / Math.max(1, FIXED_PORT_SLOTS - 1)));
+  const dist = clampedPadding + usable * slotT;
+  const t = dist / len;
+
+  return interpolatePoint(a, b, t);
+};
+
+const offsetPointNormalFromSegment = (
+  p: Point,
+  a: Point,
+  b: Point,
+  amount: number,
+  outwardSign: 1 | -1
+): Point => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return { ...p };
+  }
+
+  const nx = (-dy / len) * outwardSign;
+  const ny = (dx / len) * outwardSign;
+
+  return {
+    x: p.x + nx * amount,
+    y: p.y + ny * amount,
+  };
+};
+
 const getAnchorPoint = (
   box: Box,
   side: Side,
@@ -1736,9 +2835,102 @@ const getAnchorPoint = (
   preferredX?: number,
   preferredY?: number,
   nodeType?: Node['type'],
-  nodeStyle?: Node['style'],
+  nodeStyle?: Node['shape'],
   useFixedSlot = false
 ): Point => {
+  if (nodeType === 'trapezoid') {
+    const direction: TrapezoidDirection = (nodeStyle as TrapezoidDirection | undefined) ?? 'right';
+    const useSlots = useFixedSlot;
+
+    // Make left/right behave exactly like rectangles
+    if (side === 'left' || side === 'right') {
+      const centerY = box.y + box.height / 2;
+      const slotY = getFixedSlotCoordinate(
+        box.y + FIXED_PORT_EDGE_PADDING,
+        box.y + box.height - FIXED_PORT_EDGE_PADDING,
+        portIndex
+      );
+
+      return {
+        x: side === 'left' ? box.x - NODE_EDGE_GAP : box.x + box.width + NODE_EDGE_GAP,
+        y: preferredY ?? (useSlots ? slotY : centerY),
+      };
+    }
+
+    // Keep top/bottom following the trapezoid shape
+    const { slope } = getTrapezoidInsets(box, direction);
+
+    let topA: Point;
+    let topB: Point;
+    let bottomA: Point;
+    let bottomB: Point;
+
+    switch (direction) {
+      case 'left':
+        topA = { x: box.x, y: box.y + slope };
+        topB = { x: box.x + box.width, y: box.y };
+        bottomA = { x: box.x, y: box.y + box.height - slope };
+        bottomB = { x: box.x + box.width, y: box.y + box.height };
+        break;
+
+      case 'top':
+        topA = { x: box.x + slope, y: box.y };
+        topB = { x: box.x + box.width - slope, y: box.y };
+        bottomA = { x: box.x, y: box.y + box.height };
+        bottomB = { x: box.x + box.width, y: box.y + box.height };
+        break;
+
+      case 'bottom':
+        topA = { x: box.x, y: box.y };
+        topB = { x: box.x + box.width, y: box.y };
+        bottomA = { x: box.x + slope, y: box.y + box.height };
+        bottomB = { x: box.x + box.width - slope, y: box.y + box.height };
+        break;
+
+      case 'right':
+      default:
+        topA = { x: box.x, y: box.y };
+        topB = { x: box.x + box.width, y: box.y + slope };
+        bottomA = { x: box.x, y: box.y + box.height };
+        bottomB = { x: box.x + box.width, y: box.y + box.height - slope };
+        break;
+    }
+
+    const edgePadding = FIXED_PORT_EDGE_PADDING;
+
+    if (side === 'top') {
+      const p = getPointAlongSegmentWithPadding(topA, topB, portIndex, useSlots, edgePadding);
+      return offsetPointNormalFromSegment(p, topA, topB, NODE_EDGE_GAP, -1);
+    }
+
+    const p = getPointAlongSegmentWithPadding(bottomA, bottomB, portIndex, useSlots, edgePadding);
+    return offsetPointNormalFromSegment(p, bottomA, bottomB, NODE_EDGE_GAP, 1);
+  }
+  if (nodeType === 'arrow') {
+    const headWidth = Math.min(Math.max(box.width * 0.28, 10), box.width * 0.45);
+    const shaftRight = box.x + box.width - headWidth;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    if (side === 'left') {
+      return { x: box.x - NODE_EDGE_GAP, y: cy };
+    }
+
+    if (side === 'right') {
+      return { x: box.x + box.width + NODE_EDGE_GAP, y: cy };
+    }
+
+    const slotX = getFixedSlotCoordinate(
+      box.x + FIXED_PORT_EDGE_PADDING,
+      shaftRight - FIXED_PORT_EDGE_PADDING,
+      portIndex
+    );
+
+    return {
+      x: preferredX ?? (useFixedSlot ? slotX : cx),
+      y: side === 'top' ? box.y - NODE_EDGE_GAP : box.y + box.height + NODE_EDGE_GAP,
+    };
+  }
   if (nodeType === 'circle') {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
@@ -1766,7 +2958,7 @@ const getAnchorPoint = (
 
     const x = preferredX ?? (useFixedSlot ? slotX : centerX);
 
-    if (nodeType === 'rect' && nodeStyle && nodeStyle !== 'box' && useFixedSlot) {
+    if (nodeType === 'rect' && nodeStyle && nodeStyle === 'rounded' && useFixedSlot) {
       const boundaryY = getRoundedRectBoundaryY(box, x, side, 8.7);
       return {
         x,
@@ -1805,15 +2997,6 @@ const retreatPoint = (from: Point, to: Point, amount: number): Point => {
 
   const step = Math.min(amount, Math.max(0, len - 0.01));
   return { x: to.x - (dx / len) * step, y: to.y - (dy / len) * step };
-};
-
-const trimPolylineEnd = (points: Point[], amount: number): Point[] => {
-  if (points.length < 2 || amount <= 0) {
-    return points;
-  }
-  const out = [...points];
-  out[out.length - 1] = retreatPoint(out[out.length - 2], out[out.length - 1], amount);
-  return out;
 };
 
 const roundedPolylinePath = (points: Point[], radius = 10): string => {
@@ -1892,6 +3075,101 @@ const polylineMidpoint = (points: Point[]): Point => {
   }
 
   return points[Math.floor(points.length / 2)];
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const getPointOnSegment = (a: Point, b: Point, distanceFromA: number): Point => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return { ...a };
+  }
+
+  const t = clamp(distanceFromA / len, 0, 1);
+  return {
+    x: a.x + dx * t,
+    y: a.y + dy * t,
+  };
+};
+
+const getPolylineLength = (points: Point[]) => {
+  if (points.length < 2) {
+    return 0;
+  }
+
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    total += distance(points[i - 1], points[i]);
+  }
+  return total;
+};
+
+const getPointAlongPolyline = (points: Point[], distanceAlong: number): Point => {
+  if (!points.length) {
+    return { x: 0, y: 0 };
+  }
+
+  if (points.length === 1) {
+    return points[0];
+  }
+
+  const totalLength = getPolylineLength(points);
+  const clampedDistance = clamp(distanceAlong, 0, totalLength);
+
+  let walked = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segLen = distance(a, b);
+
+    if (segLen <= 0.001) {
+      continue;
+    }
+
+    if (walked + segLen >= clampedDistance) {
+      return getPointOnSegment(a, b, clampedDistance - walked);
+    }
+
+    walked += segLen;
+  }
+
+  return points[points.length - 1];
+};
+
+const getPolylineMidDistance = (points: Point[]) => getPolylineLength(points) / 2;
+
+const getEdgeAnchorPoint = (
+  edge: RenderedConnector,
+  edgeAnchor: 'start' | 'mid' | 'end' | undefined,
+  edgeAnchorOffset: number
+): Point => {
+  const points = edge.points?.length ? edge.points : [edge.start, edge.end];
+  const totalLength = getPolylineLength(points);
+
+  if (totalLength <= 0.001) {
+    if (edgeAnchor === 'end') {
+      return edge.end;
+    }
+    if (edgeAnchor === 'mid') {
+      return edge.mid;
+    }
+    return edge.start;
+  }
+
+  if (edgeAnchor === 'end') {
+    // end is the max; positive cannot go beyond it
+    return getPointAlongPolyline(points, totalLength + Math.min(0, edgeAnchorOffset));
+  }
+
+  if (edgeAnchor === 'mid') {
+    return getPointAlongPolyline(points, getPolylineMidDistance(points) + edgeAnchorOffset);
+  }
+
+  // start is the min; negative cannot go beyond it
+  return getPointAlongPolyline(points, Math.max(0, edgeAnchorOffset));
 };
 
 const getBestLabelSegment = (
@@ -1978,14 +3256,46 @@ const getHorizontalLabelSide = (startSide?: Side, endSide?: Side): 'top' | 'bott
   return 'top';
 };
 
-const getLabelPosition = (points: Point[], label: string, startSide?: Side, endSide?: Side) => {
+const getConnectorLabelShift = (connector: Edge | Connection) => {
+  const labelProps = connector.labelProperties as
+    | {
+        labelShiftLeft?: number;
+        labelShiftRight?: number;
+        labelShiftTop?: number;
+        labelShiftBottom?: number;
+      }
+    | undefined;
+
+  const shiftLeft = Number(labelProps?.labelShiftLeft ?? (connector as any).labelShiftLeft ?? 0);
+  const shiftRight = Number(labelProps?.labelShiftRight ?? (connector as any).labelShiftRight ?? 0);
+  const shiftTop = Number(labelProps?.labelShiftTop ?? (connector as any).labelShiftTop ?? 0);
+  const shiftBottom = Number(
+    labelProps?.labelShiftBottom ?? (connector as any).labelShiftBottom ?? 0
+  );
+
+  return {
+    dx:
+      (Number.isFinite(shiftRight) ? shiftRight : 0) - (Number.isFinite(shiftLeft) ? shiftLeft : 0),
+    dy:
+      (Number.isFinite(shiftBottom) ? shiftBottom : 0) - (Number.isFinite(shiftTop) ? shiftTop : 0),
+  };
+};
+
+const getLabelPosition = (
+  connector: Edge | Connection,
+  points: Point[],
+  label: string,
+  startSide?: Side,
+  endSide?: Side
+) => {
   const best = getBestLabelSegment(points, startSide, endSide);
   const fallback = polylineMidpoint(points);
+  const shift = getConnectorLabelShift(connector);
 
   if (!best) {
     return {
-      x: fallback.x,
-      y: fallback.y - 10,
+      x: fallback.x + shift.dx,
+      y: fallback.y - 10 + shift.dy,
       textAnchor: 'middle' as const,
       dominantBaseline: 'middle' as const,
     };
@@ -2002,14 +3312,14 @@ const getLabelPosition = (points: Point[], label: string, startSide?: Side, endS
 
     return side === 'left'
       ? {
-          x: mid.x - offset,
-          y: mid.y,
+          x: mid.x - offset + shift.dx,
+          y: mid.y + shift.dy,
           textAnchor: 'end' as const,
           dominantBaseline: 'middle' as const,
         }
       : {
-          x: mid.x + offset,
-          y: mid.y,
+          x: mid.x + offset + shift.dx,
+          y: mid.y + shift.dy,
           textAnchor: 'start' as const,
           dominantBaseline: 'middle' as const,
         };
@@ -2020,14 +3330,14 @@ const getLabelPosition = (points: Point[], label: string, startSide?: Side, endS
 
   return side === 'bottom'
     ? {
-        x: mid.x,
-        y: mid.y + offset,
+        x: mid.x + shift.dx,
+        y: mid.y + offset + shift.dy,
         textAnchor: 'middle' as const,
         dominantBaseline: 'hanging' as const,
       }
     : {
-        x: mid.x,
-        y: mid.y - offset,
+        x: mid.x + shift.dx,
+        y: mid.y - offset + shift.dy,
         textAnchor: 'middle' as const,
         dominantBaseline: 'auto' as const,
       };
@@ -2136,20 +3446,687 @@ const getInnerRouteBounds = (box: Box, pad = 14) => ({
   bottom: box.y + box.height - pad,
 });
 
-const connectorPoints = (
+const getArcLift = (connector: Edge | Connection, start: Point, end: Point) => {
+  const explicit = Number((connector as any).curveHeight);
+  if (Number.isFinite(explicit)) {
+    return Math.max(10, explicit);
+  }
+
+  // Default: larger horizontal span => taller arch
+  const dx = Math.abs(end.x - start.x);
+  return Math.max(30, Math.min(180, dx * 0.35));
+};
+
+const getCubicBezierPoint = (p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point => {
+  const mt = 1 - t;
+
+  return {
+    x: mt * mt * mt * p0.x + 3 * mt * mt * t * p1.x + 3 * mt * t * t * p2.x + t * t * t * p3.x,
+    y: mt * mt * mt * p0.y + 3 * mt * mt * t * p1.y + 3 * mt * t * t * p2.y + t * t * t * p3.y,
+  };
+};
+
+const getArcLabelPosition = (
+  connector: Edge | Connection,
   start: Point,
   end: Point,
-  style: 'straight' | 'bow' | undefined,
+  lift: number,
   startSide?: Side,
-  endSide?: Side,
+  endSide?: Side
+): {
+  x: number;
+  y: number;
+  textAnchor: 'middle';
+  dominantBaseline: 'auto';
+} => {
+  const bendDown = startSide === 'bottom' && endSide === 'bottom';
+  const bendY = bendDown ? Math.max(start.y, end.y) + lift : Math.min(start.y, end.y) - lift;
+
+  const c1 = {
+    x: start.x + (end.x - start.x) * 0.25,
+    y: bendY,
+  };
+
+  const c2 = {
+    x: start.x + (end.x - start.x) * 0.75,
+    y: bendY,
+  };
+
+  const mid = getCubicBezierPoint(start, c1, c2, end, 0.5);
+  const shift = getConnectorLabelShift(connector);
+
+  return {
+    x: mid.x + shift.dx,
+    y: (bendDown ? mid.y + 14 : mid.y - 10) + shift.dy,
+    textAnchor: 'middle',
+    dominantBaseline: 'auto',
+  };
+};
+
+const getArcPath = (start: Point, end: Point, lift: number, startSide?: Side, endSide?: Side) => {
+  const bendDown = startSide === 'bottom' && endSide === 'bottom';
+  const bendY = bendDown ? Math.max(start.y, end.y) + lift : Math.min(start.y, end.y) - lift;
+  const dx = end.x - start.x;
+
+  const c1 = {
+    x: start.x + dx * 0.25,
+    y: bendY,
+  };
+
+  const c2 = {
+    x: start.x + dx * 0.75,
+    y: bendY,
+  };
+
+  return `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
+};
+
+const getBoxCenter = (box: Box) => ({
+  x: box.x + box.width / 2,
+  y: box.y + box.height / 2,
+});
+
+const getRelativePosition = (fromBox?: Box, toBox?: Box): RelativePosition => {
+  if (!fromBox || !toBox) {
+    return 'overlap';
+  }
+
+  const a = getBoxCenter(fromBox);
+  const b = getBoxCenter(toBox);
+
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+
+  const horizontalThreshold = Math.max(fromBox.width, toBox.width) * 0.35;
+  const verticalThreshold = Math.max(fromBox.height, toBox.height) * 0.35;
+
+  const isLeft = dx < -horizontalThreshold;
+  const isRight = dx > horizontalThreshold;
+  const isAbove = dy < -verticalThreshold;
+  const isBelow = dy > verticalThreshold;
+
+  if (isLeft && isAbove) {
+    return 'upperLeft';
+  }
+  if (isRight && isAbove) {
+    return 'upperRight';
+  }
+  if (isLeft && isBelow) {
+    return 'lowerLeft';
+  }
+  if (isRight && isBelow) {
+    return 'lowerRight';
+  }
+  if (isLeft) {
+    return 'left';
+  }
+  if (isRight) {
+    return 'right';
+  }
+  if (isAbove) {
+    return 'above';
+  }
+  if (isBelow) {
+    return 'below';
+  }
+
+  return 'overlap';
+};
+
+const isRelationLeft = (r: RelativePosition) =>
+  r === 'left' || r === 'upperLeft' || r === 'lowerLeft';
+
+const isRelationRight = (r: RelativePosition) =>
+  r === 'right' || r === 'upperRight' || r === 'lowerRight';
+
+const isRelationAbove = (r: RelativePosition) =>
+  r === 'above' || r === 'upperLeft' || r === 'upperRight';
+
+const isRelationBelow = (r: RelativePosition) =>
+  r === 'below' || r === 'lowerLeft' || r === 'lowerRight';
+
+const getRelationAxisPriority = (
+  relation: RelativePosition,
+  startSide?: Side,
+  endSide?: Side
+): 'horizontal-first' | 'vertical-first' => {
+  if (isVerticalSide(startSide) && isHorizontalSide(endSide)) {
+    return 'vertical-first';
+  }
+
+  if (isHorizontalSide(startSide) && isVerticalSide(endSide)) {
+    return 'horizontal-first';
+  }
+
+  // same-axis should stay on that axis
+  if (isHorizontalSide(startSide) && isHorizontalSide(endSide)) {
+    return 'horizontal-first';
+  }
+
+  if (isVerticalSide(startSide) && isVerticalSide(endSide)) {
+    return 'vertical-first';
+  }
+
+  if (relation === 'left' || relation === 'right') {
+    return 'horizontal-first';
+  }
+
+  if (relation === 'above' || relation === 'below') {
+    return 'vertical-first';
+  }
+
+  return 'horizontal-first';
+};
+
+const isMonotonicFromSide = (from: Point, to: Point, side?: Side) => {
+  switch (side) {
+    case 'right':
+      return to.x >= from.x - 0.5;
+    case 'left':
+      return to.x <= from.x + 0.5;
+    case 'bottom':
+      return to.y >= from.y - 0.5;
+    case 'top':
+      return to.y <= from.y + 0.5;
+    default:
+      return true;
+  }
+};
+
+const getRelationOuterCoord = (
+  axis: 'x' | 'y',
+  relation: RelativePosition,
+  bounds: ReturnType<typeof getBoundsForBow>,
+  inner?: { left: number; right: number; top: number; bottom: number }
+) => {
+  if (axis === 'x') {
+    if (isRelationLeft(relation)) {
+      return inner ? Math.max(inner.right, bounds.outerRight) : bounds.outerRight;
+    }
+    if (isRelationRight(relation)) {
+      return inner ? Math.min(inner.left, bounds.outerLeft) : bounds.outerLeft;
+    }
+    return inner ? Math.min(inner.left, bounds.outerLeft) : bounds.outerLeft;
+  }
+
+  if (isRelationAbove(relation)) {
+    return inner ? Math.max(inner.bottom, bounds.outerBottom) : bounds.outerBottom;
+  }
+  if (isRelationBelow(relation)) {
+    return inner ? Math.min(inner.top, bounds.outerTop) : bounds.outerTop;
+  }
+  return inner ? Math.min(inner.top, bounds.outerTop) : bounds.outerTop;
+};
+
+const tryDirectOrthogonalRoute = (
+  start: Point,
+  end: Point,
+  s1: Point,
+  e1: Point,
+  startSide?: Side,
+  endSide?: Side
+): Point[] | null => {
+  if (!startSide && !endSide) {
+    return null;
+  }
+
+  // mixed: vertical source -> horizontal target
+  if (startSide && endSide && isVerticalSide(startSide) && isHorizontalSide(endSide)) {
+    const turn = { x: s1.x, y: e1.y };
+    if (isMonotonicFromSide(s1, turn, startSide)) {
+      return dedupePoints([start, s1, turn, e1, end]);
+    }
+    return null;
+  }
+
+  // mixed: horizontal source -> vertical target
+  if (startSide && endSide && isHorizontalSide(startSide) && isVerticalSide(endSide)) {
+    const turn = { x: e1.x, y: s1.y };
+    if (isMonotonicFromSide(s1, turn, startSide)) {
+      return dedupePoints([start, s1, turn, e1, end]);
+    }
+    return null;
+  }
+
+  // same-axis vertical
+  if (startSide && endSide && isVerticalSide(startSide) && isVerticalSide(endSide)) {
+    const turn = { x: s1.x, y: e1.y };
+    if (isMonotonicFromSide(s1, turn, startSide)) {
+      return dedupePoints([start, s1, turn, e1, end]);
+    }
+    return null;
+  }
+
+  // same-axis horizontal
+  if (startSide && endSide && isHorizontalSide(startSide) && isHorizontalSide(endSide)) {
+    const turn = { x: e1.x, y: s1.y };
+    if (isMonotonicFromSide(s1, turn, startSide)) {
+      return dedupePoints([start, s1, turn, e1, end]);
+    }
+    return null;
+  }
+
+  // one-sided source
+  if (startSide && !endSide) {
+    if (isHorizontalSide(startSide)) {
+      const turn = { x: end.x, y: s1.y };
+      if (isMonotonicFromSide(s1, turn, startSide)) {
+        return dedupePoints([start, s1, turn, end]);
+      }
+    } else {
+      const turn = { x: s1.x, y: end.y };
+      if (isMonotonicFromSide(s1, turn, startSide)) {
+        return dedupePoints([start, s1, turn, end]);
+      }
+    }
+    return null;
+  }
+
+  // one-sided target
+  if (!startSide && endSide) {
+    if (isHorizontalSide(endSide)) {
+      return dedupePoints([start, { x: e1.x, y: start.y }, e1, end]);
+    }
+    return dedupePoints([start, { x: start.x, y: e1.y }, e1, end]);
+  }
+
+  return null;
+};
+
+const getBowCornerRadius = (connector: Edge | Connection) => {
+  const explicit = Number((connector as any).cornerRadius);
+
+  if (Number.isFinite(explicit)) {
+    return Math.max(0, explicit);
+  }
+
+  return 24;
+};
+
+const getBowDepthDelta = (connector: Edge | Connection) => {
+  const explicit = Number((connector as any).curveHeight);
+  return Number.isFinite(explicit) ? explicit : 0;
+};
+
+const clampToInnerX = (
+  x: number,
+  inner?: { left: number; right: number; top: number; bottom: number }
+) => {
+  if (!inner) {
+    return x;
+  }
+  return clamp(x, inner.left, inner.right);
+};
+
+const clampToInnerY = (
+  y: number,
+  inner?: { left: number; right: number; top: number; bottom: number }
+) => {
+  if (!inner) {
+    return y;
+  }
+  return clamp(y, inner.top, inner.bottom);
+};
+
+const chooseCompactHorizontalLane = (
+  start: Point,
+  end: Point,
+  bounds: ReturnType<typeof getBoundsForBow>,
+  inner?: { left: number; right: number; top: number; bottom: number },
+  preferred?: 'left' | 'right'
+) => {
+  const localLeft = clampToInnerX(bounds.outerLeft, inner);
+  const localRight = clampToInnerX(bounds.outerRight, inner);
+
+  const candidates = [
+    { side: 'left' as const, x: localLeft },
+    { side: 'right' as const, x: localRight },
+  ];
+
+  candidates.sort((a, b) => {
+    if (preferred && a.side === preferred && b.side !== preferred) {
+      return -1;
+    }
+    if (preferred && b.side === preferred && a.side !== preferred) {
+      return 1;
+    }
+
+    const aCost = Math.abs(start.x - a.x) + Math.abs(end.x - a.x);
+    const bCost = Math.abs(start.x - b.x) + Math.abs(end.x - b.x);
+    return aCost - bCost;
+  });
+
+  return candidates[0].x;
+};
+
+const chooseCompactVerticalLane = (
+  start: Point,
+  end: Point,
+  bounds: ReturnType<typeof getBoundsForBow>,
+  inner?: { left: number; right: number; top: number; bottom: number },
+  preferred?: 'top' | 'bottom'
+) => {
+  const localTop = clampToInnerY(bounds.outerTop, inner);
+  const localBottom = clampToInnerY(bounds.outerBottom, inner);
+
+  const candidates = [
+    { side: 'top' as const, y: localTop },
+    { side: 'bottom' as const, y: localBottom },
+  ];
+
+  candidates.sort((a, b) => {
+    if (preferred && a.side === preferred && b.side !== preferred) {
+      return -1;
+    }
+    if (preferred && b.side === preferred && a.side !== preferred) {
+      return 1;
+    }
+
+    const aCost = Math.abs(start.y - a.y) + Math.abs(end.y - a.y);
+    const bCost = Math.abs(start.y - b.y) + Math.abs(end.y - b.y);
+    return aCost - bCost;
+  });
+
+  return candidates[0].y;
+};
+
+const getOrthogonalBowPoints = (
+  connector: Edge | Connection,
+  start: Point,
+  end: Point,
+  startSide: Side | undefined,
+  endSide: Side | undefined,
   startBox?: Box,
   endBox?: Box,
   isFromEdge = false,
   isToEdge = false,
   routeBoundary?: Box
 ): Point[] => {
+  const localStartBox = isFromEdge && startBox ? expandBox(startBox, 18, 14) : startBox;
+  const localEndBox = isToEdge && endBox ? expandBox(endBox, 18, 14) : endBox;
+  const bounds = getBoundsForBow(start, end, localStartBox, localEndBox);
+
+  const explicitCurveHeight = Number((connector as any).curveHeight);
+  const hasExplicitCurveHeight = Number.isFinite(explicitCurveHeight);
+
+  if (hasExplicitCurveHeight && isFromEdge && !isToEdge && endSide === 'bottom') {
+    const bendY = Math.max(start.y, end.y) + explicitCurveHeight;
+
+    return dedupePoints([start, { x: start.x, y: bendY }, { x: end.x, y: bendY }, end]);
+  }
+
+  if (hasExplicitCurveHeight && isFromEdge && !isToEdge && endSide === 'top') {
+    const bendY = Math.min(start.y, end.y) - explicitCurveHeight;
+
+    return dedupePoints([start, { x: start.x, y: bendY }, { x: end.x, y: bendY }, end]);
+  }
+
+  const hasExplicitBowDepth = Number.isFinite(Number((connector as any).curveHeight));
+  const inner = hasExplicitBowDepth
+    ? undefined
+    : routeBoundary
+      ? getInnerRouteBounds(routeBoundary, 14)
+      : undefined;
+
+  const bowDelta = getBowDepthDelta(connector);
+
+  const bowedBounds = {
+    ...bounds,
+    outerLeft: bounds.outerLeft - bowDelta,
+    outerRight: bounds.outerRight + bowDelta,
+    outerTop: bounds.outerTop - bowDelta,
+    outerBottom: bounds.outerBottom + bowDelta,
+  };
+
+  const spanX = Math.abs(end.x - start.x);
+  const spanY = Math.abs(end.y - start.y);
+  const compactBow = spanX < 30 || spanY < 30;
+
+  const stub = compactBow ? 10 : Math.max(18, Math.min(bowedBounds.padX, bowedBounds.padY) * 0.7);
+  const s1 = startSide ? offsetFromSide(start, startSide, stub) : start;
+  const e1 = endSide ? offsetFromSide(end, endSide, stub) : end;
+  const relation = getRelativePosition(startBox, endBox);
+  const axisPriority = getRelationAxisPriority(relation, startSide, endSide);
+
+  const horizontalGap = Math.abs(s1.x - e1.x);
+  const verticalGap = Math.abs(s1.y - e1.y);
+  const minSameAxisClearance = Math.max(22, stub * 1.15);
+
+  const direct = hasExplicitBowDepth
+    ? null
+    : tryDirectOrthogonalRoute(start, end, s1, e1, startSide, endSide);
+
+  if (direct) {
+    return direct;
+  }
+
+  if (!startSide && !endSide) {
+    if (axisPriority === 'horizontal-first') {
+      const corridorX = chooseCompactHorizontalLane(start, end, bowedBounds, inner);
+      return dedupePoints([start, { x: corridorX, y: start.y }, { x: corridorX, y: end.y }, end]);
+    }
+
+    const corridorY = chooseCompactVerticalLane(start, end, bowedBounds, inner);
+    return dedupePoints([start, { x: start.x, y: corridorY }, { x: end.x, y: corridorY }, end]);
+  }
+
+  if (startSide && !endSide) {
+    if (isHorizontalSide(startSide) || axisPriority === 'horizontal-first') {
+      const corridorX = chooseCompactHorizontalLane(
+        start,
+        end,
+        bowedBounds,
+        inner,
+        startSide === 'left' ? 'left' : startSide === 'right' ? 'right' : undefined
+      );
+      return dedupePoints([start, s1, { x: corridorX, y: s1.y }, { x: corridorX, y: end.y }, end]);
+    }
+
+    const corridorY = chooseCompactVerticalLane(
+      start,
+      end,
+      bowedBounds,
+      inner,
+      startSide === 'top' ? 'top' : startSide === 'bottom' ? 'bottom' : undefined
+    );
+    return dedupePoints([start, s1, { x: s1.x, y: corridorY }, { x: end.x, y: corridorY }, end]);
+  }
+
+  if (!startSide && endSide) {
+    if (isHorizontalSide(endSide) || axisPriority === 'horizontal-first') {
+      const corridorX = chooseCompactHorizontalLane(
+        start,
+        end,
+        bowedBounds,
+        inner,
+        endSide === 'left' ? 'left' : endSide === 'right' ? 'right' : undefined
+      );
+      return dedupePoints([
+        start,
+        { x: corridorX, y: start.y },
+        { x: corridorX, y: e1.y },
+        e1,
+        end,
+      ]);
+    }
+
+    const corridorY = chooseCompactVerticalLane(
+      start,
+      end,
+      bowedBounds,
+      inner,
+      endSide === 'top' ? 'top' : endSide === 'bottom' ? 'bottom' : undefined
+    );
+    return dedupePoints([start, { x: start.x, y: corridorY }, { x: e1.x, y: corridorY }, e1, end]);
+  }
+
+  if (startSide === 'top' && endSide === 'bottom') {
+    const gapTooSmall = horizontalGap < minSameAxisClearance;
+    const bendOffset = horizontalGap < 120 ? 14 : horizontalGap < 220 ? 28 : 18;
+
+    let bendX: number;
+    if (gapTooSmall) {
+      bendX = chooseCompactHorizontalLane(
+        start,
+        end,
+        bowedBounds,
+        inner,
+        start.x <= end.x ? 'left' : 'right'
+      );
+    } else if (startBox && endBox) {
+      const startCx = startBox.x + startBox.width / 2;
+      const endCx = endBox.x + endBox.width / 2;
+      bendX = startCx < endCx ? endBox.x - bendOffset : endBox.x + endBox.width + bendOffset;
+    } else {
+      bendX = chooseCompactHorizontalLane(start, end, bowedBounds, inner);
+    }
+
+    const localS1 = offsetFromSide(start, 'top', 9);
+    const localE1 = offsetFromSide(end, 'bottom', 12);
+
+    return dedupePoints([
+      start,
+      localS1,
+      { x: bendX, y: localS1.y },
+      { x: bendX, y: localE1.y },
+      localE1,
+      end,
+    ]);
+  }
+
+  if (startSide === 'bottom' && endSide === 'top') {
+    const gapTooSmall = horizontalGap < minSameAxisClearance;
+
+    let bendX: number;
+    if (gapTooSmall) {
+      bendX = chooseCompactHorizontalLane(
+        start,
+        end,
+        bowedBounds,
+        inner,
+        start.x <= end.x ? 'left' : 'right'
+      );
+    } else if (startBox && endBox) {
+      const startCx = startBox.x + startBox.width / 2;
+      const endCx = endBox.x + endBox.width / 2;
+      bendX = startCx < endCx ? bowedBounds.outerLeft : bowedBounds.outerRight;
+      bendX = clampToInnerX(bendX, inner);
+    } else {
+      bendX = chooseCompactHorizontalLane(start, end, bowedBounds, inner);
+    }
+
+    const corridorY = clampToInnerY(bowedBounds.outerBottom, inner);
+    const localE1 = offsetFromSide(end, 'top', 13);
+
+    return dedupePoints([
+      start,
+      s1,
+      { x: s1.x, y: corridorY },
+      { x: bendX, y: corridorY },
+      { x: bendX, y: localE1.y },
+      localE1,
+      end,
+    ]);
+  }
+
+  if (axisPriority === 'horizontal-first') {
+    const sameRight = startSide === 'right' && endSide === 'right';
+    const sameLeft = startSide === 'left' && endSide === 'left';
+    const gapTooSmall = horizontalGap < minSameAxisClearance;
+
+    let corridorX: number;
+
+    if (sameRight) {
+      corridorX = gapTooSmall
+        ? Math.max(s1.x, e1.x) + 10
+        : chooseCompactHorizontalLane(start, end, bowedBounds, inner, 'right');
+    } else if (sameLeft) {
+      corridorX = gapTooSmall
+        ? Math.min(s1.x, e1.x) - 10
+        : chooseCompactHorizontalLane(start, end, bowedBounds, inner, 'left');
+    } else if (gapTooSmall) {
+      corridorX = chooseCompactHorizontalLane(start, end, bowedBounds, inner);
+    } else {
+      corridorX = getRelationOuterCoord('x', relation, bowedBounds, inner);
+      corridorX = clampToInnerX(corridorX, inner);
+    }
+
+    return dedupePoints([start, s1, { x: corridorX, y: s1.y }, { x: corridorX, y: e1.y }, e1, end]);
+  }
+
+  const sameTop = startSide === 'top' && endSide === 'top';
+  const sameBottom = startSide === 'bottom' && endSide === 'bottom';
+  const gapTooSmall = verticalGap < minSameAxisClearance;
+
+  let corridorY: number;
+
+  if (sameTop) {
+    corridorY = gapTooSmall
+      ? chooseCompactVerticalLane(start, end, bowedBounds, inner, 'top')
+      : clampToInnerY(bowedBounds.outerTop, inner);
+  } else if (sameBottom) {
+    corridorY = gapTooSmall
+      ? chooseCompactVerticalLane(start, end, bowedBounds, inner, 'bottom')
+      : clampToInnerY(bowedBounds.outerBottom, inner);
+  } else if (gapTooSmall) {
+    corridorY = chooseCompactVerticalLane(start, end, bowedBounds, inner);
+  } else {
+    corridorY = getRelationOuterCoord('y', relation, bowedBounds, inner);
+    corridorY = clampToInnerY(corridorY, inner);
+  }
+
+  return dedupePoints([start, s1, { x: s1.x, y: corridorY }, { x: e1.x, y: corridorY }, e1, end]);
+};
+
+const connectorPoints = (
+  connector: Edge | Connection,
+  start: Point,
+  end: Point,
+  style: 'straight' | 'bow' | 'arc' | undefined,
+  startSide?: Side,
+  endSide?: Side,
+  startBox?: Box,
+  endBox?: Box,
+  isFromEdge = false,
+  isToEdge = false,
+  routeBoundary?: Box,
+  startEdgeAxis?: 'horizontal' | 'vertical'
+): Point[] => {
   if (style === 'straight') {
     return [start, end];
+  }
+
+  const explicitCurveHeight = Number((connector as any).curveHeight);
+  const hasExplicitCurveHeight = Number.isFinite(explicitCurveHeight);
+
+  if (
+    isFromEdge &&
+    startEdgeAxis === 'horizontal' &&
+    Math.abs(end.y - start.y) > 1 &&
+    !hasExplicitCurveHeight
+  ) {
+    const verticalFirstTurn = { x: start.x, y: end.y };
+
+    if (Math.abs(end.x - start.x) < 1) {
+      return dedupePoints([start, end]);
+    }
+
+    return dedupePoints([start, verticalFirstTurn, end]);
+  }
+
+  if (style === undefined || style === 'bow') {
+    return getOrthogonalBowPoints(
+      connector,
+      start,
+      end,
+      startSide,
+      endSide,
+      startBox,
+      endBox,
+      isFromEdge,
+      isToEdge,
+      routeBoundary
+    );
   }
 
   const SELF_LOOP_STUB = 21;
@@ -2186,235 +4163,6 @@ const connectorPoints = (
   }
   const EXTRA_CLEARANCE = 22;
 
-  if (style === 'bow') {
-    const bowStartBox = isFromEdge && startBox ? expandBox(startBox, 18, 14) : startBox;
-    const bowEndBox = isToEdge && endBox ? expandBox(endBox, 18, 14) : endBox;
-    const bounds = getBoundsForBow(start, end, bowStartBox, bowEndBox);
-
-    const inner = routeBoundary ? getInnerRouteBounds(routeBoundary, 14) : undefined;
-
-    const clearanceX = bounds.padX;
-    const clearanceY = bounds.padY;
-    const stub = Math.max(18, Math.min(clearanceX, clearanceY) * 0.7);
-
-    const s1 = startSide ? offsetFromSide(start, startSide, stub) : start;
-
-    const e1 = endSide ? offsetFromSide(end, endSide, stub) : end;
-
-    if (!startSide && endSide) {
-      if (isHorizontalSide(endSide)) {
-        const corridorX = inner
-          ? endSide === 'right'
-            ? inner.right
-            : inner.left
-          : endSide === 'right'
-            ? bounds.outerRight
-            : bounds.outerLeft;
-
-        return dedupePoints([
-          start,
-          { x: corridorX, y: start.y },
-          { x: corridorX, y: e1.y },
-          e1,
-          end,
-        ]);
-      }
-
-      const corridorY = inner
-        ? endSide === 'bottom'
-          ? inner.bottom
-          : inner.top
-        : endSide === 'bottom'
-          ? bounds.outerBottom
-          : bounds.outerTop;
-
-      return dedupePoints([
-        start,
-        { x: start.x, y: corridorY },
-        { x: e1.x, y: corridorY },
-        e1,
-        end,
-      ]);
-    }
-
-    if (startSide && !endSide) {
-      if (isHorizontalSide(startSide)) {
-        const corridorX = inner
-          ? startSide === 'right'
-            ? inner.right
-            : inner.left
-          : startSide === 'right'
-            ? bounds.outerRight
-            : bounds.outerLeft;
-
-        return dedupePoints([
-          start,
-          s1,
-          { x: corridorX, y: s1.y },
-          { x: corridorX, y: end.y },
-          end,
-        ]);
-      }
-
-      const corridorY = inner
-        ? startSide === 'bottom'
-          ? inner.bottom
-          : inner.top
-        : startSide === 'bottom'
-          ? bounds.outerBottom
-          : bounds.outerTop;
-
-      return dedupePoints([start, s1, { x: s1.x, y: corridorY }, { x: end.x, y: corridorY }, end]);
-    }
-
-    if (!startSide && !endSide) {
-      const routeOutsideX =
-        Math.abs(bounds.outerLeft - start.x) > Math.abs(bounds.outerRight - start.x)
-          ? bounds.outerLeft
-          : bounds.outerRight;
-      return dedupePoints([
-        start,
-        { x: routeOutsideX, y: start.y },
-        { x: routeOutsideX, y: end.y },
-        end,
-      ]);
-    }
-    if (isVerticalSide(startSide) || isVerticalSide(endSide)) {
-      const bothBottom = startSide === 'bottom' && endSide === 'bottom';
-      const topToBottom = startSide === 'top' && endSide === 'bottom';
-      const bottomToTop = startSide === 'bottom' && endSide === 'top';
-
-      let corridorY = inner ? inner.top : bounds.outerTop;
-      if (bothBottom || bottomToTop) {
-        corridorY = inner ? inner.bottom : bounds.outerBottom;
-      }
-      if (topToBottom) {
-        const endStub = 12;
-        const localE1 = endSide ? offsetFromSide(end, endSide, endStub) : end;
-
-        const gapX = Math.abs((endBox?.x ?? end.x) - (startBox?.x ?? start.x));
-
-        const bendOffset = gapX < 120 ? 14 : gapX < 220 ? 45 : 14;
-
-        let bendX: number;
-
-        if (startBox && endBox) {
-          const startCx = startBox.x + startBox.width / 2;
-          const endCx = endBox.x + endBox.width / 2;
-
-          bendX = startCx < endCx ? endBox.x - bendOffset : endBox.x + endBox.width + bendOffset;
-        } else {
-          bendX = end.x < start.x ? end.x - bendOffset : end.x + bendOffset;
-        }
-
-        const startStub = 9;
-        const localS1 = startSide ? offsetFromSide(start, startSide, startStub) : start;
-
-        return dedupePoints([
-          start,
-          localS1,
-          { x: bendX, y: localS1.y },
-          { x: bendX, y: localE1.y },
-          localE1,
-          end,
-        ]);
-      }
-
-      if (bottomToTop) {
-        let bendX: number;
-        if (startBox && endBox) {
-          const startCx = startBox.x + startBox.width / 2;
-          const endCx = endBox.x + endBox.width / 2;
-
-          if (inner) {
-            bendX = startCx < endCx ? inner.left : inner.right;
-          } else {
-            bendX = startCx < endCx ? endBox.x - 14 : endBox.x + endBox.width + 14;
-          }
-        } else {
-          bendX = inner
-            ? end.x < start.x
-              ? inner.left
-              : inner.right
-            : end.x < start.x
-              ? bounds.outerLeft
-              : bounds.outerRight;
-        }
-
-        const endStub = 13;
-        const localE1 = endSide ? offsetFromSide(end, endSide, endStub) : end;
-
-        return dedupePoints([
-          start,
-          s1,
-          { x: s1.x, y: corridorY },
-          { x: bendX, y: corridorY },
-          { x: bendX, y: localE1.y },
-          localE1,
-          end,
-        ]);
-      }
-
-      return dedupePoints([
-        start,
-        s1,
-        { x: s1.x, y: corridorY },
-        { x: e1.x, y: corridorY },
-        e1,
-        end,
-      ]);
-    }
-
-    if (isHorizontalSide(startSide) && isHorizontalSide(endSide)) {
-      const facesEachOther =
-        (startSide === 'left' && endSide === 'right' && start.x > end.x) ||
-        (startSide === 'right' && endSide === 'left' && start.x < end.x);
-
-      if (facesEachOther) {
-        const corridorX = inner
-          ? end.x < start.x
-            ? inner.left
-            : inner.right
-          : end.x < start.x
-            ? bounds.outerLeft
-            : bounds.outerRight;
-        return dedupePoints([
-          start,
-          s1,
-          { x: corridorX, y: s1.y },
-          { x: corridorX, y: e1.y },
-          e1,
-          end,
-        ]);
-      }
-
-      const corridorX = inner
-        ? startSide === 'left' && endSide === 'left'
-          ? inner.left
-          : startSide === 'right' && endSide === 'right'
-            ? inner.right
-            : startSide === 'left' && endSide === 'right'
-              ? inner.left
-              : inner.right
-        : startSide === 'left' && endSide === 'left'
-          ? bounds.outerLeft
-          : startSide === 'right' && endSide === 'right'
-            ? bounds.outerRight
-            : startSide === 'left' && endSide === 'right'
-              ? bounds.outerLeft
-              : bounds.outerRight;
-
-      return dedupePoints([
-        start,
-        s1,
-        { x: corridorX, y: s1.y },
-        { x: corridorX, y: e1.y },
-        e1,
-        end,
-      ]);
-    }
-  }
-
   if (Math.abs(end.x - start.x) < 1 || Math.abs(end.y - start.y) < 1) {
     return [start, end];
   }
@@ -2431,23 +4179,20 @@ const connectorPoints = (
     (startSide === 'top' || startSide === 'bottom') &&
     (endSide === 'left' || endSide === 'right')
   ) {
+    const targetLeft = endBox ? endBox.x : end.x;
+    const targetRight = endBox ? endBox.x + endBox.width : end.x;
+
+    const verticalLaneIsOutsideTarget = start.x <= targetLeft || start.x >= targetRight;
+
+    if (verticalLaneIsOutsideTarget) {
+      return dedupePoints([start, { x: start.x, y: end.y }, end]);
+    }
+
+    // Fallback for overlapping cases: route around the outside of the target first.
     const sideStub = 14;
-    const startLift = 6;
+    const outsideX = endSide === 'left' ? targetLeft - sideStub : targetRight + sideStub;
 
-    const outsideX =
-      endSide === 'left'
-        ? (endBox ? endBox.x : end.x) - sideStub
-        : (endBox ? endBox.x + endBox.width : end.x) + sideStub;
-
-    const liftedY = startSide === 'top' ? start.y - startLift : start.y + startLift;
-
-    return dedupePoints([
-      start,
-      { x: start.x, y: liftedY },
-      { x: outsideX, y: liftedY },
-      { x: outsideX, y: end.y },
-      end,
-    ]);
+    return dedupePoints([start, { x: start.x, y: end.y }, { x: outsideX, y: end.y }, end]);
   }
 
   const horizontalLike =
@@ -2468,119 +4213,260 @@ const connectorPoints = (
   return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
 };
 
+const drawTopGrowingUpText = (
+  text: d3.Selection<SVGTextElement, unknown, any, any>,
+  value: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  options?: {
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    fill?: string;
+  }
+) => {
+  const lineHeight = fontSize + 2;
+  const lines = getRendTextLines(value).map(sanitizeRenderedText);
+
+  text
+    .attr('x', x)
+    .attr('y', y)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'auto')
+    .attr('pointer-events', 'none')
+    .text(null);
+
+  applyTextStyleAttrs(text, {
+    fontFamily: options?.fontFamily,
+    fontSize,
+    fontWeight: options?.fontWeight,
+    fontStyle: options?.fontStyle,
+    fill: options?.fill ?? 'black',
+  });
+
+  lines.forEach((line, i) => {
+    const row = text
+      .append('tspan')
+      .attr('x', x)
+      .attr('dy', i === 0 ? -(lines.length - 1) * lineHeight : lineHeight);
+
+    appendInlineMathToText(row, line, x, fontSize);
+  });
+};
 const drawSideAnnotation = (
   text: d3.Selection<SVGTextElement, unknown, any, any>,
   side: Side,
   box: Box,
-  value: string,
+  annotation: Annotation,
   gap: number,
-  fontSize: number
+  fallbackFontSize: number,
+  block?: Block
 ) => {
-  text.attr('font-size', fontSize).attr('pointer-events', 'none');
+  const fontSize = getAnnotationFontSize(annotation, fallbackFontSize, block);
+  const resolvedGap = getAnnotationGap(annotation, gap);
+  const fill = getAnnotationFontColor(annotation, block);
+  const fontFamily = getAnnotationFontFamily(annotation, block);
+  const fontWeight = getAnnotationFontWeight(annotation, block);
+  const fontStyle = getAnnotationFontStyle(annotation, block);
+  const shift = getAnnotationShift(annotation);
 
   if (side === 'top') {
-    text
-      .attr('x', box.x + box.width / 2)
-      .attr('y', box.y - gap)
-      .attr('text-anchor', 'middle')
-      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
+    drawTopGrowingUpText(
+      text,
+      annotation.value,
+      box.x + box.width / 2 + shift.dx,
+      box.y - resolvedGap - 7 + shift.dy,
+      fontSize,
+      {
+        fill,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+      }
+    );
     return;
   }
+
   if (side === 'bottom') {
-    text
-      .attr('x', box.x + box.width / 2)
-      .attr('y', box.y + box.height + gap)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'hanging')
-      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
+    appendMultilineText(
+      text,
+      annotation.value,
+      box.x + box.width / 2 + shift.dx,
+      box.y + box.height + resolvedGap + shift.dy,
+      {
+        anchor: 'middle',
+        fontSize,
+        fill,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        dominantBaseline: 'hanging',
+        lineHeight: fontSize + 2,
+      }
+    );
     return;
   }
+
   if (side === 'left') {
-    text
-      .attr('x', box.x - gap)
-      .attr('y', box.y + box.height / 2)
-      .attr('text-anchor', 'end')
-      .attr('dominant-baseline', 'middle')
-      .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
+    appendMultilineText(
+      text,
+      annotation.value,
+      box.x - resolvedGap - 5 + shift.dx,
+      box.y + box.height / 2 + shift.dy,
+      {
+        anchor: 'end',
+        fontSize,
+        fill,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        dominantBaseline: 'middle',
+        lineHeight: fontSize + 2,
+      }
+    );
     return;
   }
-  text
-    .attr('x', box.x + box.width + gap)
-    .attr('y', box.y + box.height / 2)
-    .attr('text-anchor', 'start')
-    .attr('dominant-baseline', 'middle')
-    .text(value === '\\null' ? 'null' : value === 'null' ? '' : value);
+
+  appendMultilineText(
+    text,
+    annotation.value,
+    box.x + box.width + resolvedGap + 5 + shift.dx,
+    box.y + box.height / 2 + shift.dy,
+    {
+      anchor: 'start',
+      fontSize,
+      fill,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      dominantBaseline: 'middle',
+      lineHeight: fontSize + 2,
+    }
+  );
 };
 
 const renderCenteredTextLines = (
   textGroup: d3.Selection<SVGGElement, unknown, any, any>,
   lines: string[],
   subLines: string[],
-  box: Box
+  box: Box,
+  options?: {
+    labelColor?: string;
+    labelFontFamily?: string;
+    labelFontSize?: number;
+    labelFontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    labelFontStyle?: 'normal' | 'italic' | 'oblique';
+    subLabelColor?: string;
+    subLabelFontFamily?: string;
+    subFontSize?: number;
+    subLabelFontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    subLabelFontStyle?: 'normal' | 'italic' | 'oblique';
+  }
 ) => {
-  const totalTextHeight =
-    lines.length * RECT_LINE_HEIGHT +
-    (subLines.length > 0 ? 4 + subLines.length * RECT_SUB_LINE_HEIGHT : 0);
+  const labelColor = options?.labelColor ?? 'black';
+  const subLabelColor = options?.subLabelColor ?? labelColor;
+  const labelFontSize = options?.labelFontSize ?? BASE_FONT_SIZE;
+  const subFontSize = options?.subFontSize ?? BASE_SUB_FONT_SIZE;
+  const mainLineHeight = labelFontSize + 2;
+  const subLineHeight = subFontSize + 1;
 
-  let y = box.y + box.height / 2 - totalTextHeight / 2 + BASE_FONT_SIZE / 2;
+  const totalTextHeight =
+    lines.length * mainLineHeight + (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
+
+  let y = box.y + box.height / 2 - totalTextHeight / 2 + labelFontSize / 2;
 
   for (const line of lines) {
-    textGroup
+    const t = textGroup
       .append('text')
       .attr('x', box.x + box.width / 2)
       .attr('y', y)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', BASE_FONT_SIZE)
-      .attr('pointer-events', 'none')
-      .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
-    y += RECT_LINE_HEIGHT;
+      .attr('pointer-events', 'none');
+
+    applyTextStyleAttrs(t, {
+      fontFamily: options?.labelFontFamily,
+      fontSize: labelFontSize,
+      fontWeight: options?.labelFontWeight,
+      fontStyle: options?.labelFontStyle,
+      fill: labelColor,
+    });
+
+    appendInlineMathToText(
+      t,
+      line === '\\null' ? 'null' : line === 'null' ? '' : line,
+      box.x + box.width / 2,
+      labelFontSize
+    );
+
+    y += mainLineHeight;
   }
 
   if (subLines.length > 0) {
     y += 2;
     for (const line of subLines) {
-      textGroup
+      const t = textGroup
         .append('text')
         .attr('x', box.x + box.width / 2)
         .attr('y', y)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
-        .attr('font-size', BASE_SUB_FONT_SIZE)
-        .attr('pointer-events', 'none')
-        .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
-      y += RECT_SUB_LINE_HEIGHT;
+        .attr('pointer-events', 'none');
+
+      applyTextStyleAttrs(t, {
+        fontFamily: options?.subLabelFontFamily,
+        fontSize: subFontSize,
+        fontWeight: options?.subLabelFontWeight,
+        fontStyle: options?.subLabelFontStyle,
+        fill: subLabelColor,
+      });
+
+      appendInlineMathToText(
+        t,
+        line === '\\null' ? 'null' : line === 'null' ? '' : line,
+        box.x + box.width / 2,
+        subFontSize
+      );
+
+      y += subLineHeight;
     }
   }
 };
-
 const drawText = (
   parent: SVG,
   text: string,
   x: number,
   y: number,
   anchor: 'start' | 'middle' | 'end' = 'middle',
-  fontSize = NODE_ANNOTATION_FONT_SIZE
+  fontSize = NODE_ANNOTATION_FONT_SIZE,
+  fill = 'black',
+  options?: {
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+  }
 ) => {
-  return parent
-    .append('text')
-    .attr('x', x)
-    .attr('y', y)
-    .attr('font-size', fontSize)
-    .attr('font-family', 'Arial, sans-serif')
-    .attr('text-anchor', anchor)
-    .attr('dominant-baseline', 'middle')
-    .attr('pointer-events', 'none')
-    .text(text === '\\null' ? 'null' : text === 'null' ? '' : text);
+  return appendMultilineText(parent, text, x, y, {
+    anchor,
+    fontSize,
+    fill,
+    fontFamily: options?.fontFamily,
+    fontWeight: options?.fontWeight,
+    fontStyle: options?.fontStyle,
+    dominantBaseline: 'middle',
+    lineHeight: fontSize + 2,
+  });
 };
-
 const drawProjectionLine = (
   parent: d3.Selection<SVGGElement, unknown, any, any>,
   x1: number,
   y1: number,
   x2: number,
   y2: number,
-  color = '#333'
+  color = '#333',
+  dasharray: string | null = null,
+  strokeWidth = 1.1
 ) => {
   parent
     .append('line')
@@ -2588,10 +4474,37 @@ const drawProjectionLine = (
     .attr('y1', y1)
     .attr('x2', x2)
     .attr('y2', y2)
-    .attr('stroke', safeColorName(color, '#333'))
-    .attr('stroke-width', 1.1)
-    .attr('opacity', 0.95)
+    .attr('stroke', safeColorName(color, 'black'))
+    .attr('stroke-width', strokeWidth)
+    .attr('stroke-dasharray', dasharray)
+    .attr('stroke-linecap', dasharray ? 'round' : 'butt')
+    .attr('opacity', 0.75)
     .attr('pointer-events', 'none');
+};
+
+const isRoundedRectLike = (node: Node | undefined) =>
+  !!node && node.type === 'rect' && node.shape === 'rounded';
+
+const getRoundedRectRightBoundaryX = (box: Box, y: number, radius = 8) => {
+  const r = Math.max(0, Math.min(radius, box.width / 2, box.height / 2));
+  if (r <= 0) {
+    return box.x + box.width;
+  }
+
+  const topArcCenterY = box.y + r;
+  const bottomArcCenterY = box.y + box.height - r;
+
+  let inset = 0;
+
+  if (y < topArcCenterY) {
+    const dy = topArcCenterY - y;
+    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
+  } else if (y > bottomArcCenterY) {
+    const dy = y - bottomArcCenterY;
+    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
+  }
+
+  return box.x + box.width - inset;
 };
 
 const drawSpecialTransitionConnector = (
@@ -2602,10 +4515,14 @@ const drawSpecialTransitionConnector = (
   fromBox: Box,
   toNode: Node,
   toBox: Box,
-  layoutDirection: 'horizontal' | 'vertical' = 'horizontal'
+  layoutDirection: 'horizontal' | 'vertical' = 'horizontal',
+  fromSide?: Side,
+  toSide?: Side
 ): RenderedConnector | null => {
   const transition = (connector as any).transition ?? 'default';
-  const color = safeColorName(connector.color, '#333');
+  const color = safeColorName(connector.color, 'black');
+  const dasharray = getConnectorStrokeDasharray(connector);
+  const strokeWidth = getConnectorStrokeWidth(connector);
 
   if (transition === 'featureMap') {
     if (fromNode.type !== 'stacked' || toNode.type !== 'stacked') {
@@ -2670,8 +4587,17 @@ const drawSpecialTransitionConnector = (
       hitX = Math.max(minX, Math.min(hitX, maxX));
       hitY = Math.max(minY, Math.min(hitY, maxY));
 
-      drawProjectionLine(connectorG, startLeftX, startY, hitX, hitY, color);
-      drawProjectionLine(connectorG, startRightX, startY, hitX, hitY, color);
+      drawProjectionLine(connectorG, startLeftX, startY, hitX, hitY, color, dasharray, strokeWidth);
+      drawProjectionLine(
+        connectorG,
+        startRightX,
+        startY,
+        hitX,
+        hitY,
+        color,
+        dasharray,
+        strokeWidth
+      );
 
       const points = [
         { x: startLeftX, y: startY },
@@ -2690,8 +4616,9 @@ const drawSpecialTransitionConnector = (
     }
 
     const startX = kernel.x + kernel.width;
-    const startTopY = kernel.y;
-    const startBottomY = kernel.y + kernel.height;
+
+    const startTopY = kernel.y + 0.3;
+    const startBottomY = kernel.y + kernel.height - 0.3;
 
     const minX = nextFace.x + facePad;
     const maxX = nextFace.x + nextFace.width - facePad;
@@ -2731,8 +4658,8 @@ const drawSpecialTransitionConnector = (
     hitX = Math.max(minX, Math.min(hitX, maxX));
     hitY = Math.max(minY, Math.min(hitY, maxY));
 
-    drawProjectionLine(connectorG, startX, startTopY, hitX, hitY, color);
-    drawProjectionLine(connectorG, startX, startBottomY, hitX, hitY, color);
+    drawProjectionLine(connectorG, startX, startTopY, hitX, hitY, color, dasharray, strokeWidth);
+    drawProjectionLine(connectorG, startX, startBottomY, hitX, hitY, color, dasharray, strokeWidth);
 
     const points = [
       { x: startX, y: startTopY },
@@ -2751,63 +4678,177 @@ const drawSpecialTransitionConnector = (
   }
 
   if (transition === 'flatten') {
-    if (fromNode.type !== 'stacked' || toNode.type !== 'flatten') {
-      return null;
-    }
-
-    const fromGeom = getStackedTransitionGeometry(fromNode, fromBox);
-    const toGeom = getFlattenTransitionGeometry(toNode, toBox);
-    if (!fromGeom?.stackContour || !toGeom) {
-      return null;
-    }
-
     const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+
+    // Existing stacked -> flatten/rect behavior
+    if (fromNode.type === 'stacked' && (toNode.type === 'flatten' || toNode.type === 'rect')) {
+      const fromGeom = getStackedTransitionGeometry(fromNode, fromBox);
+      if (!fromGeom?.stackContour) {
+        return null;
+      }
+
+      let toLeft: number;
+      let toTopY: number;
+      let toBottomY: number;
+
+      if (toNode.type === 'flatten') {
+        const toGeom = getFlattenTransitionGeometry(toNode, toBox);
+        if (!toGeom) {
+          return null;
+        }
+
+        toLeft = toGeom.x;
+        toTopY = toGeom.topY;
+        toBottomY = toGeom.bottomY;
+      } else {
+        toLeft = toBox.x;
+        toTopY = toBox.y;
+        toBottomY = toBox.y + toBox.height;
+      }
+
+      drawProjectionLine(
+        connectorG,
+        fromGeom.stackContour.topRightX,
+        fromGeom.stackContour.topRightY,
+        toLeft,
+        toTopY,
+        color,
+        dasharray,
+        strokeWidth
+      );
+
+      drawProjectionLine(
+        connectorG,
+        fromGeom.stackContour.bottomRightX,
+        fromGeom.stackContour.bottomRightY,
+        toLeft,
+        toBottomY,
+        color,
+        dasharray,
+        strokeWidth
+      );
+
+      const points = [
+        { x: fromGeom.stackContour.topRightX, y: fromGeom.stackContour.topRightY },
+        { x: toLeft, y: toTopY },
+        { x: fromGeom.stackContour.bottomRightX, y: fromGeom.stackContour.bottomRightY },
+        { x: toLeft, y: toBottomY },
+      ];
+
+      return {
+        name: 'name' in connector ? connector.name : '',
+        start: {
+          x: (fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2,
+          y: (fromGeom.stackContour.topRightY + fromGeom.stackContour.bottomRightY) / 2,
+        },
+        end: {
+          x: toLeft,
+          y: (toTopY + toBottomY) / 2,
+        },
+        mid: {
+          x:
+            ((fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2 + toLeft) /
+            2,
+          y:
+            (fromGeom.stackContour.topRightY +
+              fromGeom.stackContour.bottomRightY +
+              toTopY +
+              toBottomY) /
+            4,
+        },
+        points,
+        bounds: expandBox(getPolylineBounds(points), 12, 12),
+      };
+    }
+
+    const resolvedFromSide = fromSide ?? 'right';
+    const resolvedToSide = toSide ?? 'left';
+
+    // slight inset so the line touches the visible border more cleanly
+    const fromTopY = fromBox.y + 1;
+    const fromBottomY = fromBox.y + fromBox.height - 1;
+    const toTopY = toBox.y + 1;
+    const toBottomY = toBox.y + toBox.height - 1;
+
+    const getSideX = (node: Node, box: Box, side: Side, topY: number, bottomY: number) => {
+      if (side === 'left') {
+        return {
+          topX:
+            node.type === 'rect' && node.shape === 'rounded'
+              ? getRoundedRectBoundaryX(box, topY, 'left', 14)
+              : box.x,
+          bottomX:
+            node.type === 'rect' && node.shape === 'rounded'
+              ? getRoundedRectBoundaryX(box, bottomY, 'left', 14)
+              : box.x,
+        };
+      }
+
+      if (side === 'right') {
+        return {
+          topX:
+            node.type === 'rect' && node.shape === 'rounded'
+              ? getRoundedRectBoundaryX(box, topY, 'right', 14)
+              : box.x + box.width,
+          bottomX:
+            node.type === 'rect' && node.shape === 'rounded'
+              ? getRoundedRectBoundaryX(box, bottomY, 'right', 14)
+              : box.x + box.width,
+        };
+      }
+
+      const cx = box.x + box.width / 2;
+      return {
+        topX: cx,
+        bottomX: cx,
+      };
+    };
+
+    const fromSideXs = getSideX(fromNode, fromBox, resolvedFromSide, fromTopY, fromBottomY);
+    const toSideXs = getSideX(toNode, toBox, resolvedToSide, toTopY, toBottomY);
 
     drawProjectionLine(
       connectorG,
-      fromGeom.stackContour.topRightX,
-      fromGeom.stackContour.topRightY,
-      toGeom.x,
-      toGeom.topY,
-      color
+      fromSideXs.topX,
+      fromTopY,
+      toSideXs.topX,
+      toTopY,
+      color,
+      dasharray,
+      strokeWidth
     );
 
     drawProjectionLine(
       connectorG,
-      fromGeom.stackContour.bottomRightX,
-      fromGeom.stackContour.bottomRightY,
-      toGeom.x,
-      toGeom.bottomY,
-      color
+      fromSideXs.bottomX,
+      fromBottomY,
+      toSideXs.bottomX,
+      toBottomY,
+      color,
+      dasharray,
+      strokeWidth
     );
 
     const points = [
-      { x: fromGeom.stackContour.topRightX, y: fromGeom.stackContour.topRightY },
-      { x: toGeom.x, y: toGeom.topY },
-      { x: fromGeom.stackContour.bottomRightX, y: fromGeom.stackContour.bottomRightY },
-      { x: toGeom.x, y: toGeom.bottomY },
+      { x: fromSideXs.topX, y: fromTopY },
+      { x: toSideXs.topX, y: toTopY },
+      { x: fromSideXs.bottomX, y: fromBottomY },
+      { x: toSideXs.bottomX, y: toBottomY },
     ];
 
     return {
       name: 'name' in connector ? connector.name : '',
       start: {
-        x: (fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2,
-        y: (fromGeom.stackContour.topRightY + fromGeom.stackContour.bottomRightY) / 2,
+        x: (fromSideXs.topX + fromSideXs.bottomX) / 2,
+        y: (fromTopY + fromBottomY) / 2,
       },
       end: {
-        x: toGeom.x,
-        y: (toGeom.topY + toGeom.bottomY) / 2,
+        x: (toSideXs.topX + toSideXs.bottomX) / 2,
+        y: (toTopY + toBottomY) / 2,
       },
       mid: {
-        x:
-          ((fromGeom.stackContour.topRightX + fromGeom.stackContour.bottomRightX) / 2 + toGeom.x) /
-          2,
-        y:
-          (fromGeom.stackContour.topRightY +
-            fromGeom.stackContour.bottomRightY +
-            toGeom.topY +
-            toGeom.bottomY) /
-          4,
+        x: (fromSideXs.topX + fromSideXs.bottomX + toSideXs.topX + toSideXs.bottomX) / 4,
+        y: (fromTopY + fromBottomY + toTopY + toBottomY) / 4,
       },
       points,
       bounds: expandBox(getPolylineBounds(points), 12, 12),
@@ -2815,6 +4856,50 @@ const drawSpecialTransitionConnector = (
   }
 
   if (transition === 'fullyConnected') {
+    if (fromNode.type === 'rect' && toNode.type === 'fullyConnected') {
+      const toGeom = getFullyConnectedTransitionGeometry(toNode, toBox);
+      if (!toGeom?.firstLayer) {
+        return null;
+      }
+
+      const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+
+      const start = {
+        x: fromBox.x + fromBox.width,
+        y: fromBox.y + fromBox.height / 2,
+      };
+
+      const inputX = toGeom.firstLayer.x - toGeom.radius;
+      const points: Point[] = [];
+
+      for (const y2 of toGeom.firstLayer.ys) {
+        drawProjectionLine(connectorG, start.x, start.y, inputX, y2, color, dasharray, strokeWidth);
+        points.push({ x: start.x, y: start.y }, { x: inputX, y: y2 });
+      }
+
+      if (!points.length) {
+        return null;
+      }
+
+      return {
+        name: 'name' in connector ? connector.name : '',
+        start,
+        end: {
+          x: inputX,
+          y: toGeom.firstLayer.ys[Math.floor(toGeom.firstLayer.ys.length / 2)] ?? toBox.y,
+        },
+        mid: {
+          x: (start.x + inputX) / 2,
+          y:
+            ((toGeom.firstLayer.ys[0] ?? start.y) +
+              (toGeom.firstLayer.ys[toGeom.firstLayer.ys.length - 1] ?? start.y)) /
+            2,
+        },
+        points,
+        bounds: expandBox(getPolylineBounds(points), 12, 12),
+      };
+    }
+
     if (fromNode.type !== 'flatten' || toNode.type !== 'fullyConnected') {
       return null;
     }
@@ -2839,7 +4924,7 @@ const drawSpecialTransitionConnector = (
       const x2 = toGeom.firstLayer.x - toGeom.radius;
       const y2 = toGeom.firstLayer.ys[i];
 
-      drawProjectionLine(connectorG, x1, y1, x2, y2, color);
+      drawProjectionLine(connectorG, x1, y1, x2, y2, color, dasharray, strokeWidth);
       points.push({ x: x1, y: y1 }, { x: x2, y: y2 });
     }
 
@@ -2863,17 +4948,99 @@ const drawSpecialTransitionConnector = (
   return null;
 };
 
+const drawGroupBracketMarkerVertical = (
+  parent: SVG,
+  x: number,
+  startY: number,
+  endY: number,
+  position: 'left' | 'right' = 'right',
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
+) => {
+  const tickSize = 14;
+  const labelGap = 18 + (options?.labelOffset ?? 0);
+
+  parent
+    .append('line')
+    .attr('x1', x)
+    .attr('y1', startY)
+    .attr('x2', x)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  const tickDirection = position === 'right' ? -1 : 1;
+
+  parent
+    .append('line')
+    .attr('x1', x)
+    .attr('y1', startY)
+    .attr('x2', x + tickDirection * tickSize)
+    .attr('y2', startY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x)
+    .attr('y1', endY)
+    .attr('x2', x + tickDirection * tickSize)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  if (options?.label) {
+    const labelX = position === 'right' ? x + labelGap : x - labelGap;
+    drawText(
+      parent,
+      options.label,
+      labelX,
+      (startY + endY) / 2,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
+  }
+};
+
 const drawGroupBracketMarker = (
   parent: SVG,
   startX: number,
   endX: number,
   y: number,
   position: 'top' | 'bottom' = 'bottom',
-  label?: string | null
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
 ) => {
   const tickSize = 14;
-  const labelGap = 18;
-  const labelFontSizeLocal = Math.max(12, BASE_FONT_SIZE * 0.95);
+  const labelGap = 18 + (options?.labelOffset ?? 0);
 
   parent
     .append('line')
@@ -2881,7 +5048,7 @@ const drawGroupBracketMarker = (
     .attr('y1', y)
     .attr('x2', endX)
     .attr('y2', y)
-    .attr('stroke', '#444')
+    .attr('stroke', markerColor)
     .attr('stroke-width', 1.2)
     .attr('opacity', 0.9)
     .attr('pointer-events', 'none');
@@ -2894,7 +5061,7 @@ const drawGroupBracketMarker = (
     .attr('y1', y)
     .attr('x2', startX)
     .attr('y2', y + tickDirection * tickSize)
-    .attr('stroke', '#444')
+    .attr('stroke', markerColor)
     .attr('stroke-width', 1.2)
     .attr('opacity', 0.9)
     .attr('pointer-events', 'none');
@@ -2905,31 +5072,345 @@ const drawGroupBracketMarker = (
     .attr('y1', y)
     .attr('x2', endX)
     .attr('y2', y + tickDirection * tickSize)
-    .attr('stroke', '#444')
+    .attr('stroke', markerColor)
     .attr('stroke-width', 1.2)
     .attr('opacity', 0.9)
     .attr('pointer-events', 'none');
 
-  if (label) {
+  if (options?.label) {
     const labelY = position === 'bottom' ? y + labelGap : y - labelGap;
-    drawText(parent, label, (startX + endX) / 2, labelY, 'middle', labelFontSizeLocal);
+    drawText(
+      parent,
+      options.label,
+      (startX + endX) / 2,
+      labelY,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
   }
 };
 
+const drawGroupArrowMarkerVertical = (
+  parent: SVG,
+  x: number,
+  startY: number,
+  endY: number,
+  position: 'left' | 'right' = 'right',
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
+) => {
+  const strokeWidth = 1.1;
+  const capHalfWidth = 9;
+  const arrowLen = 10;
+  const arrowSpread = 5;
+  const labelGap = 18 + (options?.labelOffset ?? 0);
+  const midY = (startY + endY) / 2;
+
+  parent
+    .append('line')
+    .attr('x1', x)
+    .attr('y1', startY)
+    .attr('x2', x)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x - capHalfWidth)
+    .attr('y1', startY)
+    .attr('x2', x + capHalfWidth)
+    .attr('y2', startY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x - capHalfWidth)
+    .attr('y1', endY)
+    .attr('x2', x + capHalfWidth)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  const dir = position === 'right' ? 1 : -1;
+
+  parent
+    .append('line')
+    .attr('x1', x + dir * arrowSpread)
+    .attr('y1', startY + arrowLen)
+    .attr('x2', x)
+    .attr('y2', startY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x - dir * arrowSpread)
+    .attr('y1', startY + arrowLen)
+    .attr('x2', x)
+    .attr('y2', startY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x + dir * arrowSpread)
+    .attr('y1', endY - arrowLen)
+    .attr('x2', x)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', x - dir * arrowSpread)
+    .attr('y1', endY - arrowLen)
+    .attr('x2', x)
+    .attr('y2', endY)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  if (options?.label) {
+    const labelX = position === 'right' ? x + labelGap : x - labelGap;
+    drawText(
+      parent,
+      options.label,
+      labelX,
+      midY,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
+  }
+};
+
+const drawGroupArrowMarker = (
+  parent: SVG,
+  startX: number,
+  endX: number,
+  y: number,
+  position: 'top' | 'bottom' = 'top',
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
+) => {
+  const strokeWidth = 1.1;
+  const capHalfHeight = 9;
+  const arrowLen = 10;
+  const arrowSpread = 5;
+  const labelGap = 18 + (options?.labelOffset ?? 0);
+  const midX = (startX + endX) / 2;
+
+  // main line
+  parent
+    .append('line')
+    .attr('x1', startX)
+    .attr('y1', y)
+    .attr('x2', endX)
+    .attr('y2', y)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  // end caps
+  parent
+    .append('line')
+    .attr('x1', startX)
+    .attr('y1', y - capHalfHeight)
+    .attr('x2', startX)
+    .attr('y2', y + capHalfHeight)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', endX)
+    .attr('y1', y - capHalfHeight)
+    .attr('x2', endX)
+    .attr('y2', y + capHalfHeight)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  // inward arrowheads
+  parent
+    .append('line')
+    .attr('x1', startX + arrowLen)
+    .attr('y1', y - arrowSpread)
+    .attr('x2', startX)
+    .attr('y2', y)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', startX + arrowLen)
+    .attr('y1', y + arrowSpread)
+    .attr('x2', startX)
+    .attr('y2', y)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', endX - arrowLen)
+    .attr('y1', y - arrowSpread)
+    .attr('x2', endX)
+    .attr('y2', y)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  parent
+    .append('line')
+    .attr('x1', endX - arrowLen)
+    .attr('y1', y + arrowSpread)
+    .attr('x2', endX)
+    .attr('y2', y)
+    .attr('stroke', markerColor)
+    .attr('stroke-width', strokeWidth)
+    .attr('pointer-events', 'none');
+
+  if (options?.label) {
+    const labelY = position === 'bottom' ? y + labelGap : y - labelGap;
+
+    drawText(
+      parent,
+      options.label,
+      midX,
+      labelY,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
+  }
+};
+
+const drawGroupBraceMarkerVertical = (
+  parent: SVG,
+  x: number,
+  startY: number,
+  endY: number,
+  position: 'left' | 'right' = 'right',
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
+) => {
+  const midY = (startY + endY) / 2;
+  const width = 18;
+  const labelGap = 18 + (options?.labelOffset ?? 0);
+  const dir = position === 'right' ? 1 : -1;
+  const h = endY - startY;
+
+  const path = [
+    `M ${x} ${startY}`,
+    `C ${x + dir * width * 0.55} ${startY}, ${x + dir * width} ${startY + h * 0.08}, ${x + dir * width} ${startY + h * 0.18}`,
+    `L ${x + dir * width} ${midY - h * 0.08}`,
+    `C ${x + dir * width} ${midY - h * 0.03}, ${x + dir * width * 1.7} ${midY - h * 0.02}, ${x + dir * width * 1.7} ${midY}`,
+    `C ${x + dir * width * 1.7} ${midY + h * 0.02}, ${x + dir * width} ${midY + h * 0.03}, ${x + dir * width} ${midY + h * 0.08}`,
+    `L ${x + dir * width} ${endY - h * 0.18}`,
+    `C ${x + dir * width} ${endY - h * 0.08}, ${x + dir * width * 0.55} ${endY}, ${x} ${endY}`,
+  ].join(' ');
+
+  parent
+    .append('path')
+    .attr('d', path)
+    .attr('fill', 'none')
+    .attr('stroke', markerColor)
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.9)
+    .attr('pointer-events', 'none');
+
+  if (options?.label) {
+    const labelX = position === 'right' ? x + width * 1.7 + labelGap : x - width * 1.7 - labelGap;
+
+    drawText(
+      parent,
+      options.label,
+      labelX,
+      midY,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
+  }
+};
 const drawGroupBraceMarker = (
   parent: SVG,
   startX: number,
   endX: number,
   y: number,
   position: 'top' | 'bottom' = 'bottom',
-  label?: string | null
+  markerColor: string,
+  options?: {
+    label?: string | null;
+    fontSize?: number;
+    fill?: string;
+    fontFamily?: string;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    labelOffset?: number;
+  }
 ) => {
   const midX = (startX + endX) / 2;
   const height = 18;
-  const labelGap = 18;
+  const labelGap = 18 + (options?.labelOffset ?? 0);
   const dir = position === 'bottom' ? 1 : -1;
   const w = endX - startX;
-  const labelFontSizeLocal = Math.max(12, BASE_FONT_SIZE * 0.95);
 
   const path = [
     `M ${startX} ${y}`,
@@ -2945,57 +5426,178 @@ const drawGroupBraceMarker = (
     .append('path')
     .attr('d', path)
     .attr('fill', 'none')
-    .attr('stroke', '#444')
+    .attr('stroke', markerColor)
     .attr('stroke-width', 1.2)
     .attr('opacity', 0.9)
     .attr('pointer-events', 'none');
 
-  if (label) {
+  if (options?.label) {
     const labelY =
       position === 'bottom' ? y + height * 1.7 + labelGap : y - height * 1.7 - labelGap;
 
-    drawText(parent, label, midX, labelY, 'middle', labelFontSizeLocal);
+    drawText(
+      parent,
+      options.label,
+      midX,
+      labelY,
+      'middle',
+      options.fontSize ?? 12,
+      options.fill ?? 'black',
+      {
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      }
+    );
   }
 };
 
-const drawGroupMarker = (parent: SVG, groupDef: any, markerBox: Box, visualBox: Box) => {
-  const markerType = groupDef.markerType;
+const drawGroupMarker = (
+  parent: SVG,
+  groupDef: any,
+  markerBox: Box,
+  visualBox: Box,
+  block?: Block
+) => {
+  const markerType = getMarkerType(groupDef);
   if (!markerType) {
     return;
   }
 
-  const position: 'top' | 'bottom' = groupDef.markerPosition === 'top' ? 'top' : 'bottom';
-  const label = groupDef.markerLabel ?? null;
+  const position = getMarkerPosition(groupDef);
+  const label = getMarkerLabelText(groupDef) || null;
 
-  const startX = markerBox.x;
-  const endX = markerBox.x + markerBox.width;
+  const markerLabelOptions = {
+    label,
+    fontSize: getMarkerLabelFontSize(groupDef, block),
+    fill: getMarkerLabelColor(groupDef, block),
+    fontFamily: getMarkerLabelFontFamily(groupDef, block),
+    fontWeight: getMarkerLabelFontWeight(groupDef, block),
+    fontStyle: getMarkerLabelFontStyle(groupDef, block),
+  };
 
-  if (endX <= startX) {
+  const leftAdjust = getMarkerOffsetLeft(groupDef);
+  const rightAdjust = getMarkerOffsetRight(groupDef);
+  const topAdjust = getMarkerOffsetTop(groupDef);
+  const bottomAdjust = getMarkerOffsetBottom(groupDef);
+  const markerColor = getMarkerColor(groupDef);
+
+  const baseGap = markerType === 'arrow' ? 10 : markerType === 'bracket' ? 20 : 15;
+
+  // Horizontal marker span
+  const startX = markerBox.x - leftAdjust;
+  const endX = markerBox.x + markerBox.width + rightAdjust;
+
+  // Vertical marker span
+  const startY = markerBox.y - topAdjust;
+  const endY = markerBox.y + markerBox.height + bottomAdjust;
+
+  if (position === 'top' || position === 'bottom') {
+    if (endX <= startX) {
+      return;
+    }
+
+    let y: number;
+    let labelOffset: number;
+
+    if (position === 'top') {
+      // bottom => object↔marker
+      y = visualBox.y - baseGap - bottomAdjust;
+
+      // top => label↔marker
+      labelOffset = topAdjust;
+    } else {
+      // top => object↔marker
+      y = visualBox.y + visualBox.height + baseGap + topAdjust;
+
+      // bottom => marker↔label
+      labelOffset = bottomAdjust;
+    }
+
+    if (markerType === 'brace') {
+      drawGroupBraceMarker(parent, startX, endX, y, position, markerColor, {
+        ...markerLabelOptions,
+        labelOffset,
+      });
+    } else if (markerType === 'arrow') {
+      drawGroupArrowMarker(parent, startX, endX, y, position, markerColor, {
+        ...markerLabelOptions,
+        labelOffset,
+      });
+    } else {
+      drawGroupBracketMarker(parent, startX, endX, y, position, markerColor, {
+        ...markerLabelOptions,
+        labelOffset,
+      });
+    }
+
     return;
   }
 
-  const y = position === 'bottom' ? visualBox.y + visualBox.height + 28 : visualBox.y - 28;
+  // left / right
+  if (endY <= startY) {
+    return;
+  }
+
+  let x: number;
+  let labelOffset: number;
+
+  if (position === 'left') {
+    // right => object↔marker
+    x = visualBox.x - baseGap - rightAdjust;
+
+    // left => label↔marker
+    labelOffset = leftAdjust;
+  } else {
+    // left => object↔marker
+    x = visualBox.x + visualBox.width + baseGap + leftAdjust;
+
+    // right => marker↔label
+    labelOffset = rightAdjust;
+  }
 
   if (markerType === 'brace') {
-    drawGroupBraceMarker(parent, startX, endX, y, position, label);
+    drawGroupBraceMarkerVertical(parent, x, startY, endY, position, markerColor, {
+      ...markerLabelOptions,
+      labelOffset,
+    });
+  } else if (markerType === 'arrow') {
+    drawGroupArrowMarkerVertical(parent, x, startY, endY, position, markerColor, {
+      ...markerLabelOptions,
+      labelOffset,
+    });
   } else {
-    drawGroupBracketMarker(parent, startX, endX, y, position, label);
+    drawGroupBracketMarkerVertical(parent, x, startY, endY, position, markerColor, {
+      ...markerLabelOptions,
+      labelOffset,
+    });
   }
 };
 
-function splitWordsToLines(text: string, maxCharsPerLine: number): string[] {
-  const words = text.trim().split(/\s+/);
+function splitWordsToLines(
+  text: string,
+  maxCharsPerLine: number,
+  fontSize = BASE_FONT_SIZE
+): string[] {
+  const input = normalizeRendText(text);
+
+  if (!input) {
+    return [''];
+  }
+
+  const maxWidth = maxCharsPerLine * fontSize * 0.58;
+  const tokens = input.match(/\S+|\s+/g) ?? [];
   const lines: string[] = [];
   let current = '';
 
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
+  for (const token of tokens) {
+    const next = current + token;
 
-    if (next.length <= maxCharsPerLine || !current) {
+    if (!current || estimateTextWidth(next, fontSize) <= maxWidth) {
       current = next;
     } else {
       lines.push(current);
-      current = word;
+      current = token;
     }
   }
 
@@ -3011,22 +5613,44 @@ function getApproxMaxCharsFromWidth(width: number, fontSize: number): number {
   return Math.max(6, Math.floor(width / avgCharWidth));
 }
 
-const drawBetweenNodeOpLabel = (parent: SVG, firstBox: Box, secondBox: Box, node: Node) => {
-  const opLabel = String((node as any).opLabel ?? '').trim();
-  const opLabelSubtext = String((node as any).opLabelSubtext ?? '').trim();
+const drawBetweenNodeOpLabel = (
+  parent: SVG,
+  firstNode: Node,
+  firstBox: Box,
+  secondNode: Node,
+  secondBox: Box,
+  node: Node,
+  block?: Block
+) => {
+  const opLabel = getNodeOpLabelText(node);
+  const opLabelSubtext = getNodeOpLabelSubtext(node);
 
   if (!opLabel && !opLabelSubtext) {
     return;
   }
 
-  const mainFontSize = BASE_FONT_SIZE;
-  const subFontSize = BASE_SUB_FONT_SIZE;
+  const mainFontSize = getNodeOpLabelFontSize(node, block, BASE_FONT_SIZE);
+  const subFontSize = getNodeOpLabelSubFontSize(node, block, BASE_SUB_FONT_SIZE);
+  const fontFamily = getNodeOpLabelFontFamily(node, block);
+  const fontWeight = getNodeOpLabelFontWeight(node, block);
+  const fontStyle = getNodeOpLabelFontStyle(node, block);
+  const fill = getNodeOpLabelColor(node, block);
   const lineGap = 4;
 
-  const firstCenterX = firstBox.x + firstBox.width / 2;
-  const firstCenterY = firstBox.y + firstBox.height / 2;
-  const secondCenterX = secondBox.x + secondBox.width / 2;
-  const secondCenterY = secondBox.y + secondBox.height / 2;
+  const anchorFirstBox =
+    firstNode.type === 'stacked' && secondNode.type === 'stacked'
+      ? getStackedBackFaceBox(firstNode, firstBox)
+      : firstBox;
+
+  const anchorSecondBox =
+    firstNode.type === 'stacked' && secondNode.type === 'stacked'
+      ? getStackedBackFaceBox(secondNode, secondBox)
+      : secondBox;
+
+  const firstCenterX = anchorFirstBox.x + anchorFirstBox.width / 2;
+  const firstCenterY = anchorFirstBox.y + anchorFirstBox.height / 2;
+  const secondCenterX = anchorSecondBox.x + anchorSecondBox.width / 2;
+  const secondCenterY = anchorSecondBox.y + anchorSecondBox.height / 2;
 
   const dx = secondCenterX - firstCenterX;
   const dy = secondCenterY - firstCenterY;
@@ -3034,12 +5658,15 @@ const drawBetweenNodeOpLabel = (parent: SVG, firstBox: Box, secondBox: Box, node
   const isVerticalFlow = Math.abs(dy) > Math.abs(dx);
 
   if (isVerticalFlow) {
-    const gapTop = firstBox.y + firstBox.height;
-    const gapBottom = secondBox.y;
+    const gapTop = anchorFirstBox.y + anchorFirstBox.height;
+    const gapBottom = anchorSecondBox.y;
     const midY = (gapTop + gapBottom) / 2;
 
-    const rightEdge = Math.max(firstBox.x + firstBox.width, secondBox.x + secondBox.width);
-    const textX = rightEdge + 16;
+    const rightEdge = Math.max(
+      anchorFirstBox.x + anchorFirstBox.width,
+      anchorSecondBox.x + anchorSecondBox.width
+    );
+    const textX = rightEdge + 36;
     const availableWidth = 120;
 
     const mainLines = opLabel
@@ -3060,20 +5687,28 @@ const drawBetweenNodeOpLabel = (parent: SVG, firstBox: Box, secondBox: Box, node
     let currentY = midY - totalHeight / 2 + mainFontSize / 2;
 
     for (const line of mainLines) {
-      drawText(parent, line, textX, currentY, 'start', mainFontSize);
+      drawText(parent, line, textX, currentY, 'start', mainFontSize, fill, {
+        fontFamily,
+        fontWeight,
+        fontStyle,
+      });
       currentY += mainFontSize + lineGap;
     }
 
     for (const line of subLines) {
-      drawText(parent, line, textX, currentY, 'start', subFontSize);
+      drawText(parent, line, textX, currentY, 'start', subFontSize, fill, {
+        fontFamily,
+        fontWeight,
+        fontStyle,
+      });
       currentY += subFontSize + lineGap;
     }
 
     return;
   }
 
-  const gapLeft = firstBox.x + firstBox.width;
-  const gapRight = secondBox.x;
+  const gapLeft = anchorFirstBox.x + anchorFirstBox.width;
+  const gapRight = anchorSecondBox.x;
   const midX = (gapLeft + gapRight) / 2;
   const availableWidth = Math.max(60, gapRight - gapLeft - 12);
 
@@ -3092,74 +5727,119 @@ const drawBetweenNodeOpLabel = (parent: SVG, firstBox: Box, secondBox: Box, node
       ? lineGap + subLines.length * subFontSize + Math.max(0, subLines.length - 1) * lineGap
       : 0);
 
-  const textTopY = Math.min(firstBox.y, secondBox.y) - 18 - totalHeight / 2 + mainFontSize / 2;
+  const textTopY =
+    Math.min(anchorFirstBox.y, anchorSecondBox.y) - 18 - totalHeight / 2 + mainFontSize / 2;
 
   let currentY = textTopY;
 
   for (const line of mainLines) {
-    drawText(parent, line, midX, currentY, 'middle', mainFontSize);
+    drawText(parent, line, midX, currentY, 'middle', mainFontSize, fill, {
+      fontFamily,
+      fontWeight,
+      fontStyle,
+    });
     currentY += mainFontSize + lineGap;
   }
 
   for (const line of subLines) {
-    drawText(parent, line, midX, currentY, 'middle', subFontSize);
+    drawText(parent, line, midX, currentY, 'middle', subFontSize, fill, {
+      fontFamily,
+      fontWeight,
+      fontStyle,
+    });
     currentY += subFontSize + lineGap;
   }
 };
 
 const drawGrowingDownLabelBlock = (
   parent: SVG,
+  node: Node,
   label: string | null | undefined,
-  labelSubtext: string | null | undefined,
+  subLabel: string | null | undefined,
   x: number,
-  startY: number
+  startY: number,
+  block?: Block
 ) => {
-  const main = String(label ?? '').trim();
-  const subLines = getWrappedSpecialSubtextLines(labelSubtext, label);
+  const mainColor = getNodeLabelColor(node, block);
+  const mainFontSize = getNodeLabelMainFontSize(node, block);
+  const subFontSize = getNodeSubLabelFontSize(node, block);
+  const mainLines = getRendTextLines(label)
+    .map((line) => sanitizeRenderedText(line))
+    .filter((line) => line.length > 0);
+
+  const subLines = getWrappedSpecialSubtextLines(subLabel, label, subFontSize).map(
+    sanitizeRenderedText
+  );
 
   let currentY = startY;
 
-  if (main) {
-    parent
+  for (const line of mainLines) {
+    const t = parent
       .append('text')
       .attr('x', x)
       .attr('y', currentY)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', BASE_FONT_SIZE)
-      .attr('pointer-events', 'none')
-      .text(main === '\\null' ? 'null' : main === 'null' ? '' : main);
+      .attr('pointer-events', 'none');
 
-    currentY += BASE_FONT_SIZE / 2 + 6;
+    applyTextStyleAttrs(t, {
+      fontFamily: getNodeLabelFontFamily(node, block),
+      fontSize: mainFontSize,
+      fontWeight: getNodeLabelFontWeight(node, block),
+      fontStyle: getNodeLabelFontStyle(node, block),
+      fill: mainColor,
+    });
+    appendInlineMathToText(t, line, x, mainFontSize);
+
+    currentY += mainFontSize + 2;
   }
 
-  for (const line of subLines) {
-    parent
-      .append('text')
-      .attr('x', x)
-      .attr('y', currentY)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'hanging')
-      .attr('font-size', BASE_SUB_FONT_SIZE)
-      .attr('pointer-events', 'none')
-      .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+  if (subLines.length > 0) {
+    currentY += 2;
+    for (const line of subLines) {
+      const t = parent
+        .append('text')
+        .attr('x', x)
+        .attr('y', currentY)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'hanging')
+        .attr('pointer-events', 'none');
 
-    currentY += RECT_SUB_LINE_HEIGHT;
+      applyTextStyleAttrs(t, {
+        fontFamily: getNodeSubLabelFontFamily(node, block),
+        fontSize: getNodeSubLabelFontSize(node, block),
+        fontWeight: getNodeSubLabelFontWeight(node, block),
+        fontStyle: getNodeSubLabelFontStyle(node, block),
+        fill: getNodeSubLabelColor(node, block),
+      });
+      appendInlineMathToText(t, line, x, subFontSize);
+      currentY += subFontSize + 1;
+    }
   }
 };
-
 const drawStackedNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
-  box: Box
+  box: Box,
+  block?: Block
 ) => {
   const fitted = getStackedFittedMetrics(node, box);
+  const nodeStrokeWidth = getNodeStrokeWidth(node, 1.1);
+  const outerStrokeWidth = getStackedOuterStrokeWidth(node, 1.4);
 
   if (!fitted) {
     return;
   }
 
-  const { featureScale, metrics, stackLeft, stackTop, visual } = fitted;
+  const { featureScale, metrics, stackLeft, stackTop } = fitted;
+
+  const stroke = safeColorName(node.strokeColor, 'black');
+  const strokeStyle = (node as any).strokeStyle as StrokeStyle | undefined;
+  const strokeDasharray = getStrokeDasharrayFromStyle(strokeStyle);
+
+  const outerStroke = safeColorName(node.outerStrokeColor, 'black');
+  const outerStrokeStyle = (node as any).outerStrokeStyle as StrokeStyle | undefined;
+  const outerStrokeDasharray = getStrokeDasharrayFromStyle(outerStrokeStyle);
 
   const rectWidth = metrics.rectWidth;
   const rectHeight = metrics.rectHeight;
@@ -3188,12 +5868,30 @@ const drawStackedNode = (
       .attr('height', rectHeight)
       .attr('fill', fromFront % 2 === 0 ? shadeA : shadeB)
       .attr('fill-opacity', 0.55)
-      .attr('stroke', safeColorName(node.stroke, 'black'))
-      .attr('stroke-width', 1.1)
+      .attr('stroke', stroke)
+      .attr('stroke-dasharray', strokeDasharray)
+      .attr('stroke-width', nodeStrokeWidth)
+      .style('pointer-events', 'none');
+  }
+
+  // outer rectangle around the whole stacked node
+
+  if (node.outerStrokeColor !== undefined && node.outerStrokeColor !== null) {
+    group
+      .append('rect')
+      .attr('x', stackLeft - STACKED_OUTER_STROKE_PAD)
+      .attr('y', stackTop - STACKED_OUTER_STROKE_PAD)
+      .attr('width', metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2)
+      .attr('height', metrics.visibleHeight + STACKED_OUTER_STROKE_PAD * 2)
+      .attr('fill', 'none')
+      .attr('stroke', outerStroke)
+      .attr('stroke-width', outerStrokeWidth)
+      .attr('stroke-dasharray', outerStrokeDasharray)
       .style('pointer-events', 'none');
   }
 
   const kernel = parse2DDims((node as any).kernelSize);
+
   if (kernel) {
     const kernelW = Math.min(rectWidth, Math.max(10, kernel.width * featureScale));
     const kernelH = Math.min(rectHeight, Math.max(10, kernel.height * featureScale));
@@ -3208,26 +5906,28 @@ const drawStackedNode = (
       .attr('height', kernelH)
       .attr('fill', 'none')
       .attr('stroke', '#444')
-      .attr('stroke-width', 1.4)
+      .attr('stroke-width', outerStrokeWidth)
       .style('pointer-events', 'none');
   }
 
-  const label = node.label ?? '';
-  const subText = (node as any).labelSubtext ?? '';
+  const label = getNodeLabelText(node);
+  const subText = getNodeSubLabelText(node);
   const centerX = frontX + rectWidth / 2;
   const labelY = stackTop + metrics.visibleHeight + STACKED_LABEL_GAP;
 
   if (label || subText) {
-    drawGrowingDownLabelBlock(group as any, label, subText, centerX, labelY);
+    drawGrowingDownLabelBlock(group as any, node, label, subText, centerX, labelY, block);
   }
 };
 
 const drawFlattenNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
-  box: Box
+  box: Box,
+  block?: Block
 ) => {
   const fitted = getFlattenFittedMetrics(node, box);
+  const nodeStrokeWidth = getNodeStrokeWidth(node, 0.8);
 
   const fillColor =
     getLightenedColor(
@@ -3236,8 +5936,8 @@ const drawFlattenNode = (
 
   for (let row = 0; row < fitted.rows; row++) {
     for (let col = 0; col < fitted.cols; col++) {
-      const x = fitted.left + col * (fitted.cellWidth + fitted.cellGap);
-      const y = fitted.top + row * (fitted.cellHeight + fitted.cellGap);
+      const x = fitted.left + col * (fitted.cellWidth + fitted.cellGapX);
+      const y = fitted.top + row * (fitted.cellHeight + fitted.cellGapY);
 
       group
         .append('rect')
@@ -3247,29 +5947,32 @@ const drawFlattenNode = (
         .attr('height', fitted.cellHeight)
         .attr('fill', fillColor)
         .attr('stroke', '#444')
-        .attr('stroke-width', 0.8);
+        .attr('stroke-width', nodeStrokeWidth);
     }
   }
 
-  const label = node.label ?? '';
-  const labelSubtext = (node as any).labelSubtext ?? '';
+  const label = getNodeLabelText(node);
+  const labelSubtext = getNodeSubLabelText(node) ?? '';
   const centerX = box.x + box.width / 2;
   const labelY = fitted.visual.y + fitted.visual.height + STACKED_LABEL_GAP;
 
   if (label || labelSubtext) {
-    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelY);
+    drawGrowingDownLabelBlock(group as any, node, label, labelSubtext, centerX, labelY, block);
   }
 };
 
 const drawFullyConnectedNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
-  box: Box
+  box: Box,
+  block?: Block
 ) => {
   const fitted = getFullyConnectedFittedMetrics(node, box);
   if (!fitted) {
     return;
   }
+  const nodeStrokeWidth = getNodeStrokeWidth(node, 1.1);
+  const labelColor = getNodeLabelColor(node, block);
 
   const layerColors = Array.isArray(node.color) ? node.color : [];
 
@@ -3294,7 +5997,7 @@ const drawFullyConnectedNode = (
           .attr('x2', to.x - fitted.radius)
           .attr('y2', y2)
           .attr('stroke', '#444')
-          .attr('stroke-width', 0.8)
+          .attr('stroke-width', nodeStrokeWidth)
           .attr('opacity', 0.5)
           .attr('pointer-events', 'none');
       }
@@ -3325,28 +6028,54 @@ const drawFullyConnectedNode = (
         lastLayer.x + fitted.radius + 5,
         lastLayer.ys[i],
         'start',
-        BASE_SUB_FONT_SIZE
+        BASE_SUB_FONT_SIZE,
+        labelColor
       );
     }
   }
 
-  const label = node.label ?? '';
-  const labelSubtext = (node as any).labelSubtext ?? '';
+  const label = getNodeLabelText(node);
+  const labelSubtext = getNodeSubLabelText(node) ?? '';
   const centerX = box.x + box.width / 2;
   const labelY = fitted.visual.y + fitted.visual.height + STACKED_LABEL_GAP;
 
   if (label || labelSubtext) {
-    drawGrowingDownLabelBlock(group as any, label, labelSubtext, centerX, labelY);
+    drawGrowingDownLabelBlock(group as any, node, label, labelSubtext, centerX, labelY, block);
   }
 };
+
+const getArrowPath = (box: Box) => {
+  const headWidth = Math.min(Math.max(box.width * 0.36, 18), box.width * 0.46);
+  const shaftRight = box.x + box.width - headWidth;
+
+  const shaftThickness = Math.max(8, box.height * 0.28);
+  const shaftTop = box.y + (box.height - shaftThickness) / 2;
+  const shaftBottom = shaftTop + shaftThickness;
+  const midY = box.y + box.height / 2;
+
+  return [
+    `M ${box.x} ${shaftTop}`,
+    `L ${shaftRight} ${shaftTop}`,
+    `L ${shaftRight} ${box.y}`,
+    `L ${box.x + box.width} ${midY}`,
+    `L ${shaftRight} ${box.y + box.height}`,
+    `L ${shaftRight} ${shaftBottom}`,
+    `L ${box.x} ${shaftBottom}`,
+    'Z',
+  ].join(' ');
+};
+
 const drawNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
   box: Box,
   blockIndex: number,
-  nodeIndex: number
+  nodeIndex: number,
+  block?: Block
 ) => {
   const nodeId = `unit_(${blockIndex},${nodeIndex})`;
+  const nodeStrokeStyle = (node as any).strokeStyle as StrokeStyle | undefined;
+  const nodeStrokeWidth = getNodeStrokeWidth(node, 1.3);
 
   const g = group
     .append('g')
@@ -3354,16 +6083,122 @@ const drawNode = (
     .attr('id', nodeId)
     .attr('transform', `translate(${box.x}, ${box.y})`);
 
-  const rawLabel = node.label ?? '';
-  const subText = node.labelSubtext ?? '';
-  const defaultStroke = safeColorName(node.stroke, 'black');
+  const rawLabel = getNodeLabelText(node);
+  const subText = getNodeSubLabelText(node) ?? '';
+  const defaultStroke = safeColorName(node.strokeColor, 'black');
   const defaultFill = getLightenedColor(
     safeColorName(!Array.isArray(node.color) ? node.color : 'white', 'white')
   );
-  const defaultStyle = node.style ?? 'box';
 
   const innerBox = { x: 0, y: 0, width: box.width, height: box.height };
 
+  if (node.type === 'trapezoid') {
+    const path = g
+      .append('path')
+      .attr('d', getTrapezoidPath(innerBox, getTrapezoidDirection(node)))
+      .style('fill', defaultFill)
+      .style('stroke', defaultStroke)
+      .style('stroke-width', nodeStrokeWidth)
+      .style('pointer-events', 'auto');
+
+    applyStrokeStyleAttrs(path, nodeStrokeStyle);
+
+    const textGroup = g.append('g');
+
+    if (shouldCenterSingleLabel(node)) {
+      drawCenteredNodeLabel(textGroup, node, innerBox, block);
+
+      return;
+    }
+
+    if (isVerticalLabel(node)) {
+      const textBox = getTrapezoidTextBox(innerBox, getTrapezoidDirection(node));
+      const availableVerticalExtent = Math.max(20, textBox.height - 16);
+      const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, BASE_FONT_SIZE);
+      const subLines = subText
+        ? wrapTextLines(subText, availableVerticalExtent, BASE_SUB_FONT_SIZE)
+        : [];
+
+      const labelLineHeight = BASE_FONT_SIZE + 2;
+      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+      const totalTextHeight =
+        labelLines.length * labelLineHeight +
+        (subLines.length > 0 ? subLines.length * subLineHeight + 4 : 0);
+
+      textGroup.attr(
+        'transform',
+        `translate(${textBox.x + textBox.width / 2}, ${textBox.y + textBox.height / 2}) rotate(${getVerticalLabelRotation(node)})`
+      );
+
+      let y = -totalTextHeight / 2 + BASE_FONT_SIZE / 2;
+
+      for (const line of labelLines) {
+        const fontSize = getNodeLabelMainFontSize(node, block);
+
+        const t = textGroup
+          .append('text')
+          .attr('x', 0)
+          .attr('y', y)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('pointer-events', 'none');
+
+        applyTextStyleAttrs(t, {
+          fontFamily: getNodeLabelFontFamily(node, block),
+          fontSize,
+          fontWeight: getNodeLabelFontWeight(node, block),
+          fontStyle: getNodeLabelFontStyle(node, block),
+          fill: getNodeLabelColor(node, block),
+        });
+
+        setInlineMathText(t, line, 0, fontSize);
+        y += labelLineHeight;
+      }
+
+      for (const line of subLines) {
+        const fontSize = getNodeSubLabelFontSize(node, block);
+
+        const t = textGroup
+          .append('text')
+          .attr('x', 0)
+          .attr('y', y)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('pointer-events', 'none');
+
+        applyTextStyleAttrs(t, {
+          fontFamily: getNodeSubLabelFontFamily(node, block),
+          fontSize,
+          fontWeight: getNodeSubLabelFontWeight(node, block),
+          fontStyle: getNodeSubLabelFontStyle(node, block),
+          fill: getNodeSubLabelColor(node, block),
+        });
+
+        setInlineMathText(t, line, 0, fontSize);
+        y += subLineHeight;
+      }
+    } else {
+      const textBox = getTrapezoidTextBox(innerBox, getTrapezoidDirection(node));
+      const availableWidth = Math.max(8, textBox.width);
+      const labelLines = wrapTextLines(rawLabel, availableWidth, BASE_FONT_SIZE);
+      const subLines = subText ? wrapTextLines(subText, availableWidth, BASE_SUB_FONT_SIZE) : [];
+
+      renderCenteredTextLines(textGroup, labelLines, subLines, textBox, {
+        labelColor: getNodeLabelColor(node, block),
+        labelFontFamily: getNodeLabelFontFamily(node, block),
+        labelFontSize: getNodeLabelMainFontSize(node, block),
+        labelFontWeight: getNodeLabelFontWeight(node, block),
+        labelFontStyle: getNodeLabelFontStyle(node, block),
+        subLabelColor: getNodeSubLabelColor(node, block),
+        subLabelFontFamily: getNodeSubLabelFontFamily(node, block),
+        subFontSize: getNodeSubLabelFontSize(node, block),
+        subLabelFontWeight: getNodeSubLabelFontWeight(node, block),
+        subLabelFontStyle: getNodeSubLabelFontStyle(node, block),
+      });
+    }
+
+    return;
+  }
   if (node.type === 'stacked') {
     g.append('rect')
       .attr('x', 0)
@@ -3373,7 +6208,7 @@ const drawNode = (
       .attr('fill', 'transparent')
       .style('pointer-events', 'all');
 
-    drawStackedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    drawStackedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
     return;
   }
 
@@ -3386,7 +6221,7 @@ const drawNode = (
       .attr('fill', 'transparent')
       .style('pointer-events', 'all');
 
-    drawFlattenNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    drawFlattenNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
     return;
   }
 
@@ -3399,46 +6234,58 @@ const drawNode = (
       .attr('fill', 'transparent')
       .style('pointer-events', 'all');
 
-    drawFullyConnectedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height });
+    drawFullyConnectedNode(
+      g as any,
+      node,
+      { x: 0, y: 0, width: box.width, height: box.height },
+      block
+    );
     return;
   }
 
   if (node.type === 'rect') {
-    g.append('rect')
+    const rect = g
+      .append('rect')
       .attr('x', innerBox.x)
       .attr('y', innerBox.y)
       .attr('width', innerBox.width)
       .attr('height', innerBox.height)
-      .attr('rx', defaultStyle === 'box' ? 0 : 8)
-      .attr('ry', defaultStyle === 'box' ? 0 : 8)
+      .attr('rx', node.shape === 'rounded' ? 8 : 0)
+      .attr('ry', node.shape === 'rounded' ? 8 : 0)
       .attr('fill', defaultFill)
       .attr('stroke', defaultStroke)
       .style('pointer-events', 'auto')
-      .attr('stroke-width', 1.3);
+      .attr('stroke-width', nodeStrokeWidth);
+
+    applyStrokeStyleAttrs(rect, nodeStrokeStyle);
   }
 
+  if (node.type === 'arrow') {
+    const arrow = g
+      .append('path')
+      .attr('d', getArrowPath(innerBox))
+      .attr('fill', defaultFill)
+      .attr('stroke', defaultStroke)
+      .attr('stroke-width', nodeStrokeWidth)
+      .style('pointer-events', 'auto');
+
+    applyStrokeStyleAttrs(arrow, nodeStrokeStyle);
+  }
   if (node.type === 'circle') {
-    g.append('circle')
+    const circle = g
+      .append('circle')
       .attr('cx', innerBox.x + innerBox.width / 2)
       .attr('cy', innerBox.y + innerBox.height / 2)
       .attr('r', Math.min(innerBox.width, innerBox.height) / 2)
       .attr('fill', defaultFill)
       .attr('stroke', defaultStroke)
       .style('pointer-events', 'auto')
-      .attr('stroke-width', 1.3);
+      .attr('stroke-width', nodeStrokeWidth);
 
-    const hasOnlyLabel = !!rawLabel.trim() && !subText.trim();
+    applyStrokeStyleAttrs(circle, nodeStrokeStyle);
 
-    if (hasOnlyLabel) {
-      g.append('text')
-        .attr('x', innerBox.x + innerBox.width / 2)
-        .attr('y', innerBox.y + innerBox.height / 2)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-size', BASE_FONT_SIZE)
-        .attr('pointer-events', 'none')
-        .text(rawLabel === '\\null' ? 'null' : rawLabel === 'null' ? '' : rawLabel);
-
+    if (shouldCenterSingleLabel(node)) {
+      drawCenteredNodeLabel(g, node, innerBox, block);
       return;
     }
   }
@@ -3453,11 +6300,15 @@ const drawNode = (
       .style('pointer-events', 'all');
 
     const textGroup = g.append('g');
-    const fill = safeColorName(!Array.isArray(node.color) ? node.color : 'black', 'black');
-    const rawLabel = node.label ?? '';
-    const rawSubText = node.labelSubtext ?? '';
 
-    if (node.labelOrientation === 'vertical') {
+    if (shouldCenterSingleLabel(node)) {
+      drawCenteredNodeLabel(textGroup, node, innerBox, block);
+      return;
+    }
+    const rawLabel = getNodeLabelText(node);
+    const rawSubText = getNodeSubLabelText(node) ?? '';
+
+    if (isVerticalLabel(node)) {
       const availableVerticalExtent = Math.max(20, innerBox.height - 8);
       const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, TEXT_NODE_FONT_SIZE);
       const subLines = rawSubText
@@ -3472,40 +6323,56 @@ const drawNode = (
 
       textGroup.attr(
         'transform',
-        `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(-90)`
+        `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(${getVerticalLabelRotation(node)})`
       );
 
       let y = -totalTextHeight / 2 + TEXT_NODE_FONT_SIZE / 2;
 
       for (const line of labelLines) {
-        textGroup
+        const fontSize = getNodeLabelMainFontSize(node, block);
+
+        const t = textGroup
           .append('text')
           .attr('x', 0)
           .attr('y', y)
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'middle')
-          .attr('fill', fill)
-          .attr('font-size', TEXT_NODE_FONT_SIZE)
-          .style('pointer-events', 'none')
-          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+          .style('pointer-events', 'none');
 
+        applyTextStyleAttrs(t, {
+          fontFamily: getNodeLabelFontFamily(node, block),
+          fontSize,
+          fontWeight: getNodeLabelFontWeight(node, block),
+          fontStyle: getNodeLabelFontStyle(node, block),
+          fill: getNodeLabelColor(node, block),
+        });
+
+        setInlineMathText(t, line, 0, fontSize);
         y += labelLineHeight;
       }
 
       if (subLines.length > 0) {
         y += 2;
         for (const line of subLines) {
-          textGroup
+          const fontSize = getNodeSubLabelFontSize(node, block);
+
+          const t = textGroup
             .append('text')
             .attr('x', 0)
             .attr('y', y)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
-            .attr('fill', fill)
-            .attr('font-size', BASE_SUB_FONT_SIZE)
-            .style('pointer-events', 'none')
-            .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+            .style('pointer-events', 'none');
 
+          applyTextStyleAttrs(t, {
+            fontFamily: getNodeSubLabelFontFamily(node, block),
+            fontSize,
+            fontWeight: getNodeSubLabelFontWeight(node, block),
+            fontStyle: getNodeSubLabelFontStyle(node, block),
+            fill: getNodeSubLabelColor(node, block),
+          });
+
+          setInlineMathText(t, line, 0, fontSize);
           y += subLineHeight;
         }
       }
@@ -3513,7 +6380,7 @@ const drawNode = (
       const availableWidth = Math.max(8, innerBox.width);
       const labelLines = wrapTextLines(rawLabel, availableWidth, TEXT_NODE_FONT_SIZE);
       const subLines = rawSubText
-        ? wrapTextLines(rawSubText, availableWidth, BASE_SUB_FONT_SIZE)
+        ? wrapTextLines(rawSubText, availableWidth, getNodeSubLabelFontSize(node, block))
         : [];
 
       const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
@@ -3525,34 +6392,52 @@ const drawNode = (
       let y = innerBox.y + innerBox.height / 2 - totalTextHeight / 2 + TEXT_NODE_FONT_SIZE / 2;
 
       for (const line of labelLines) {
-        textGroup
+        const fontSize = getNodeLabelMainFontSize(node, block);
+        const x = innerBox.x + innerBox.width / 2;
+
+        const t = textGroup
           .append('text')
-          .attr('x', innerBox.x + innerBox.width / 2)
+          .attr('x', x)
           .attr('y', y)
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'middle')
-          .attr('fill', fill)
-          .attr('font-size', TEXT_NODE_FONT_SIZE)
-          .style('pointer-events', 'none')
-          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+          .style('pointer-events', 'none');
 
+        applyTextStyleAttrs(t, {
+          fontFamily: getNodeLabelFontFamily(node, block),
+          fontSize,
+          fontWeight: getNodeLabelFontWeight(node, block),
+          fontStyle: getNodeLabelFontStyle(node, block),
+          fill: getNodeLabelColor(node, block),
+        });
+
+        setInlineMathText(t, line, x, fontSize);
         y += labelLineHeight;
       }
 
       if (subLines.length > 0) {
         y += 2;
         for (const line of subLines) {
-          textGroup
+          const fontSize = getNodeSubLabelFontSize(node, block);
+          const x = innerBox.x + innerBox.width / 2;
+
+          const t = textGroup
             .append('text')
-            .attr('x', innerBox.x + innerBox.width / 2)
+            .attr('x', x)
             .attr('y', y)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
-            .attr('fill', fill)
-            .attr('font-size', BASE_SUB_FONT_SIZE)
-            .style('pointer-events', 'none')
-            .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+            .style('pointer-events', 'none');
 
+          applyTextStyleAttrs(t, {
+            fontFamily: getNodeSubLabelFontFamily(node, block),
+            fontSize,
+            fontWeight: getNodeSubLabelFontWeight(node, block),
+            fontStyle: getNodeSubLabelFontStyle(node, block),
+            fill: getNodeSubLabelColor(node, block),
+          });
+
+          setInlineMathText(t, line, x, fontSize);
           y += subLineHeight;
         }
       }
@@ -3563,7 +6448,11 @@ const drawNode = (
 
   const textGroup = g.append('g');
 
-  if (node.labelOrientation === 'vertical') {
+  if (shouldCenterSingleLabel(node)) {
+    drawCenteredNodeLabel(textGroup, node, innerBox, block);
+    return;
+  }
+  if (isVerticalLabel(node)) {
     const availableVerticalExtent = Math.max(20, innerBox.height - 16);
     const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, BASE_FONT_SIZE);
     const subLines = subText
@@ -3578,36 +6467,58 @@ const drawNode = (
 
     textGroup.attr(
       'transform',
-      `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(-90)`
+      `translate(${innerBox.x + innerBox.width / 2}, ${innerBox.y + innerBox.height / 2}) rotate(${getVerticalLabelRotation(node)})`
     );
 
     let y = -totalTextHeight / 2 + BASE_FONT_SIZE / 2;
 
+    const labelColor = getNodeLabelColor(node, block);
+
     for (const line of labelLines) {
-      textGroup
+      const fontSize = getNodeLabelMainFontSize(node, block);
+
+      const t = textGroup
         .append('text')
         .attr('x', 0)
         .attr('y', y)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
-        .attr('font-size', BASE_FONT_SIZE)
-        .attr('pointer-events', 'none')
-        .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+        .attr('pointer-events', 'none');
+
+      applyTextStyleAttrs(t, {
+        fontFamily: getNodeLabelFontFamily(node, block),
+        fontSize,
+        fontWeight: getNodeLabelFontWeight(node, block),
+        fontStyle: getNodeLabelFontStyle(node, block),
+        fill: getNodeLabelColor(node, block),
+      });
+
+      setInlineMathText(t, line, 0, fontSize);
       y += labelLineHeight;
     }
 
     if (subLines.length > 0) {
       y += 2;
       for (const line of subLines) {
-        textGroup
+        const fontSize = getNodeSubLabelFontSize(node, block);
+
+        const t = textGroup
           .append('text')
           .attr('x', 0)
           .attr('y', y)
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'middle')
-          .attr('font-size', BASE_SUB_FONT_SIZE)
-          .attr('pointer-events', 'none')
-          .text(line === '\\null' ? 'null' : line === 'null' ? '' : line);
+          .attr('pointer-events', 'none');
+
+        applyTextStyleAttrs(t, {
+          fontFamily: getNodeSubLabelFontFamily(node, block),
+          fontSize,
+          fontWeight: getNodeSubLabelFontWeight(node, block),
+          fontStyle: getNodeSubLabelFontStyle(node, block),
+          fill: getNodeSubLabelColor(node, block),
+        });
+
+        setInlineMathText(t, line, 0, fontSize);
         y += subLineHeight;
       }
     }
@@ -3618,8 +6529,21 @@ const drawNode = (
   const availableWidth = Math.max(8, innerBox.width - RECT_HORIZONTAL_PADDING * 2);
   const labelLines = wrapTextLines(rawLabel, availableWidth, BASE_FONT_SIZE);
   const subLines = subText ? wrapTextLines(subText, availableWidth, BASE_SUB_FONT_SIZE) : [];
-  renderCenteredTextLines(textGroup, labelLines, subLines, innerBox);
+
+  renderCenteredTextLines(textGroup, labelLines, subLines, innerBox, {
+    labelColor: getNodeLabelColor(node, block),
+    labelFontFamily: getNodeLabelFontFamily(node, block),
+    labelFontSize: getNodeLabelMainFontSize(node, block),
+    labelFontWeight: getNodeLabelFontWeight(node, block),
+    labelFontStyle: getNodeLabelFontStyle(node, block),
+    subLabelColor: getNodeSubLabelColor(node, block),
+    subLabelFontFamily: getNodeSubLabelFontFamily(node, block),
+    subFontSize: getNodeSubLabelFontSize(node, block),
+    subLabelFontWeight: getNodeSubLabelFontWeight(node, block),
+    subLabelFontStyle: getNodeSubLabelFontStyle(node, block),
+  });
 };
+
 const getFullyConnectedOutputLabelsRightExtent = (node: Node, box: Box) => {
   if (node.type !== 'fullyConnected') {
     return box.x + box.width;
@@ -3650,6 +6574,76 @@ const getFullyConnectedOutputLabelsRightExtent = (node: Node, box: Box) => {
   return Math.max(box.x + box.width, labelEndX);
 };
 
+const getStackedAnnotationBoxes = (node: Node, box: Box) => {
+  const fitted = getStackedFittedMetrics(node, box);
+
+  if (!fitted) {
+    return {
+      topBox: box,
+      bottomBox: box,
+      sideBox: box,
+    };
+  }
+
+  const { metrics, stackLeft, stackTop } = fitted;
+
+  const dx = metrics.sliceOffset;
+
+  const renderedDepthSpan = Math.max(0, metrics.effectiveDepth - 1);
+
+  const frontX = stackLeft + renderedDepthSpan * dx;
+
+  const hasOuterStroke = node.outerStrokeColor !== undefined && node.outerStrokeColor !== null;
+
+  const topLabelBox: Box = hasOuterStroke
+    ? {
+        x: stackLeft - STACKED_OUTER_STROKE_PAD,
+        y: stackTop,
+        width: metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2,
+        height: metrics.visibleHeight + STACKED_OUTER_STROKE_PAD * 2,
+      }
+    : {
+        x: stackLeft,
+        y: stackTop,
+        width: metrics.rectWidth,
+        height: metrics.rectHeight,
+      };
+
+  const bottomLabelBox: Box = hasOuterStroke
+    ? {
+        x: stackLeft - STACKED_OUTER_STROKE_PAD,
+        y: stackTop + metrics.visibleHeight + STACKED_LABEL_GAP,
+        width: metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2,
+        height: 0,
+      }
+    : {
+        x: frontX,
+        y: stackTop + metrics.visibleHeight + STACKED_LABEL_GAP,
+        width: metrics.rectWidth,
+        height: 0,
+      };
+
+  const sideBox: Box = hasOuterStroke
+    ? {
+        x: stackLeft - STACKED_OUTER_STROKE_PAD,
+        y: stackTop - STACKED_OUTER_STROKE_PAD,
+        width: metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2,
+        height: metrics.visibleHeight + STACKED_OUTER_STROKE_PAD * 2,
+      }
+    : {
+        x: stackLeft,
+        y: stackTop,
+        width: metrics.visibleWidth,
+        height: metrics.visibleHeight,
+      };
+
+  return {
+    topBox: topLabelBox,
+    bottomBox: bottomLabelBox,
+    sideBox,
+  };
+};
+
 const getNodeAnnotationBox = (node: Node, box: Box): Box => {
   const anchorBox = getNodeVisualAnchorBox(node, box);
 
@@ -3670,11 +6664,42 @@ const getNodeAnnotationBox = (node: Node, box: Box): Box => {
 const drawNodeAnnotations = (
   layer: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
-  box: Box
+  box: Box,
+  scale = 1,
+  origin: Point = { x: 0, y: 0 },
+  block?: Block
 ) => {
   const annotationMap = getAnnotationMap(node.annotations);
-  const baseBox = getNodeVisualAnchorBox(node, box);
-  const annotationBox = getNodeAnnotationBox(node, box);
+
+  if (node.type === 'stacked') {
+    const raw = getStackedAnnotationBoxes(node, box);
+    const topBox = scaleBoxFromOrigin(raw.topBox, origin, scale);
+    const bottomBox = scaleBoxFromOrigin(raw.bottomBox, origin, scale);
+    const sideBox = scaleBoxFromOrigin(raw.sideBox, origin, scale);
+
+    for (const side of SIDES) {
+      const annotation = annotationMap[side];
+      if (!annotation) {
+        continue;
+      }
+
+      const targetBox = side === 'top' ? topBox : side === 'bottom' ? bottomBox : sideBox;
+
+      drawSideAnnotation(
+        layer.append('text'),
+        side,
+        targetBox,
+        annotation,
+        side === 'bottom' ? 0 : 10,
+        NODE_ANNOTATION_FONT_SIZE * scale,
+        block
+      );
+    }
+
+    return;
+  }
+  const baseBox = scaleBoxFromOrigin(getNodeVisualAnchorBox(node, box), origin, scale);
+  const annotationBox = scaleBoxFromOrigin(getNodeAnnotationBox(node, box), origin, scale);
 
   for (const side of SIDES) {
     const annotation = annotationMap[side];
@@ -3686,50 +6711,22 @@ const drawNodeAnnotations = (
       layer.append('text'),
       side,
       side === 'right' ? annotationBox : baseBox,
-      annotation.value,
+      annotation,
       side === 'bottom' ? 12 : 4,
-      NODE_ANNOTATION_FONT_SIZE
+      NODE_ANNOTATION_FONT_SIZE * scale,
+      block
     );
   }
 };
-const drawGroupAnnotation = (
-  group: d3.Selection<SVGGElement, unknown, any, any>,
-  side: Side,
-  annotation: Annotation,
-  box: Box
-) =>
-  drawSideAnnotation(
-    group.append('text'),
-    side,
-    box,
-    annotation.value,
-    8,
-    GROUP_ANNOTATION_FONT_SIZE
-  );
 
 const drawDiagramAnnotation = (svg: SVG, side: Side, annotation: Annotation, box: Box) =>
   drawSideAnnotation(
     svg.append('text'),
     side,
     box,
-    annotation.value,
+    annotation,
     ANNOTATION_SPACE,
     DIAGRAM_ANNOTATION_FONT_SIZE
-  );
-
-const drawAnnotation = (
-  group: d3.Selection<SVGGElement, unknown, null, undefined>,
-  side: Side,
-  annotation: Annotation,
-  metrics: BlockMetrics
-) =>
-  drawSideAnnotation(
-    group.append('text'),
-    side,
-    { x: metrics.bodyX, y: metrics.bodyY, width: metrics.bodyWidth, height: metrics.bodyHeight },
-    annotation.value,
-    ANNOTATION_SPACE,
-    BLOCK_ANNOTATION_FONT_SIZE
   );
 
 const isEdgeEndpoint = (endpoint: any) =>
@@ -3738,46 +6735,129 @@ const isEdgeEndpoint = (endpoint: any) =>
   endpoint?.edgeAnchor === 'mid' ||
   endpoint?.edgeAnchor === 'end';
 
-const getEndpointPortInfo = (rendered: RenderedBlock, endpoint: any) => {
+const getEndpointTargetInfo = (rendered: RenderedBlock, endpoint: any) => {
   const anchor = (endpoint.anchor ?? 'right') as Side;
   const portIndex = Number(endpoint.portIndex ?? 0);
-  const box = rendered.metrics.nodeShapes.get(endpoint.nodeName);
-  if (!box) {
-    throw new Error(`Unknown node reference: ${endpoint.nodeName}`);
+  const targetName = endpoint?.nodeName;
+
+  if (!targetName) {
+    throw new Error('Missing endpoint target name');
   }
 
-  const counts = rendered.metrics.portCounts.get(endpoint.nodeName) ?? defaultPortCounts();
-  const portCount = Math.max(counts[anchor], portIndex + 1);
+  const nodeBox = rendered.metrics.nodeShapes.get(targetName);
+  if (nodeBox) {
+    const counts = rendered.metrics.portCounts.get(targetName) ?? defaultPortCounts();
+    const portCount = Math.max(counts[anchor], portIndex + 1);
 
-  const nodeDef = rendered.nodes.get(endpoint.nodeName)?.def;
-  const nodeType = nodeDef?.type;
-  const nodeStyle = nodeDef?.style;
-  const anchorBox = getNodeVisualAnchorBox(nodeDef, box);
+    const nodeDef = rendered.nodes.get(targetName)?.def;
+    const nodeType = nodeDef?.type;
+    const nodeStyle = nodeDef?.shape;
 
-  return { anchor, portIndex, box, anchorBox, portCount, nodeDef, nodeType, nodeStyle };
+    const anchorBox =
+      nodeDef?.type === 'stacked'
+        ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
+        : getNodeVisualAnchorBox(nodeDef, nodeBox);
+
+    return {
+      kind: 'node' as const,
+      anchor,
+      portIndex,
+      box: nodeBox,
+      anchorBox,
+      portCount,
+      nodeDef,
+      nodeType,
+      nodeStyle,
+    };
+  }
+
+  const groupBox = getEffectiveGroupBox(rendered.metrics, rendered.def.groups, targetName);
+
+  if (groupBox) {
+    return {
+      kind: 'group' as const,
+      anchor,
+      portIndex,
+      box: groupBox,
+      anchorBox: groupBox,
+      portCount: Math.max(1, portIndex + 1),
+      nodeDef: undefined,
+      nodeType: undefined,
+      nodeStyle: undefined,
+    };
+  }
+
+  throw new Error(`Unknown node/group reference: ${targetName}`);
 };
-const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedEndpoint => {
+const getSegmentAxis = (a: Point, b: Point): 'horizontal' | 'vertical' =>
+  Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? 'horizontal' : 'vertical';
+
+const getEdgeAnchorAxis = (
+  edge: RenderedConnector,
+  edgeAnchor: 'start' | 'mid' | 'end' | undefined
+): 'horizontal' | 'vertical' | undefined => {
+  const points = edge.points?.length ? edge.points : [edge.start, edge.end];
+
+  if (points.length < 2) {
+    return undefined;
+  }
+
+  if (edgeAnchor === 'start') {
+    return getSegmentAxis(points[0], points[1]);
+  }
+
+  if (edgeAnchor === 'end') {
+    return getSegmentAxis(points[points.length - 2], points[points.length - 1]);
+  }
+
+  // mid: choose the segment that contains the polyline midpoint
+  const totalLength = getPolylineLength(points);
+  const target = totalLength / 2;
+
+  let walked = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segLen = distance(a, b);
+
+    if (segLen <= 0.001) {
+      continue;
+    }
+
+    if (walked + segLen >= target) {
+      return getSegmentAxis(a, b);
+    }
+
+    walked += segLen;
+  }
+
+  return getSegmentAxis(points[0], points[1]);
+};
+const resolveLocalEndpoint = (
+  rendered: RenderedBlock,
+  endpoint: any,
+  connector?: Edge | Connection,
+  endpointRole: 'from' | 'to' = 'from'
+): ResolvedEndpoint => {
   if (isEdgeEndpoint(endpoint)) {
     const edge = rendered.edges.get(endpoint.edgeName);
     if (!edge) {
       throw new Error(`Unknown edge reference: ${endpoint.edgeName}`);
     }
-    if (endpoint.edgeAnchor === 'start') {
-      return { point: edge.start, box: edge.bounds };
-    }
-    if (endpoint.edgeAnchor === 'end') {
-      return { point: edge.end, box: edge.bounds };
-    }
-    if (endpoint.edgeAnchor === 'mid') {
-      return { point: edge.mid, box: edge.bounds };
-    }
-    return { point: edge.mid, box: edge.bounds };
+
+    const edgeAnchor = (endpoint.edgeAnchor ?? 'mid') as 'start' | 'mid' | 'end';
+    const edgeAnchorOffset = getEdgeAnchorOffset(connector, endpoint, endpointRole);
+
+    return {
+      point: getEdgeAnchorPoint(edge, edgeAnchor, edgeAnchorOffset),
+      box: edge.bounds,
+      edgeAxis: getEdgeAnchorAxis(edge, edgeAnchor),
+      isGroup: false,
+    };
   }
 
-  const { anchor, portIndex, box, anchorBox, nodeType, nodeStyle } = getEndpointPortInfo(
-    rendered,
-    endpoint
-  );
+  const info = getEndpointTargetInfo(rendered, endpoint);
+  const { anchor, portIndex, anchorBox, nodeType, nodeStyle, kind } = info;
   const useFixedSlot = endpoint?.portIndex !== undefined && endpoint?.portIndex !== null;
 
   return {
@@ -3793,6 +6873,7 @@ const resolveLocalEndpoint = (rendered: RenderedBlock, endpoint: any): ResolvedE
     ),
     side: anchor,
     box: anchorBox,
+    isGroup: kind === 'group',
   };
 };
 
@@ -3882,9 +6963,603 @@ const trimPolylineStart = (points: Point[], amount: number): Point[] => {
     return points;
   }
 
+  let remaining = amount;
   const out = [...points];
-  out[0] = advancePoint(out[0], out[1], amount);
-  return out;
+
+  while (out.length >= 2 && remaining > 0) {
+    const a = out[0];
+    const b = out[1];
+    const segLen = distance(a, b);
+
+    if (segLen <= 0.001) {
+      out.shift();
+      continue;
+    }
+
+    if (remaining < segLen) {
+      out[0] = advancePoint(a, b, remaining);
+      return out;
+    }
+
+    remaining -= segLen;
+    out.shift();
+  }
+
+  return out.length ? out : [points[points.length - 1]];
+};
+
+const trimPolylineEnd = (points: Point[], amount: number): Point[] => {
+  if (points.length < 2 || amount <= 0) {
+    return points;
+  }
+
+  let remaining = amount;
+  const out = [...points];
+
+  while (out.length >= 2 && remaining > 0) {
+    const a = out[out.length - 2];
+    const b = out[out.length - 1];
+    const segLen = distance(a, b);
+
+    if (segLen <= 0.001) {
+      out.pop();
+      continue;
+    }
+
+    if (remaining < segLen) {
+      out[out.length - 1] = retreatPoint(a, b, remaining);
+      return out;
+    }
+
+    remaining -= segLen;
+    out.pop();
+  }
+
+  return out.length ? out : [points[0]];
+};
+
+const getConnectorStrokeDasharray = (connector: Edge | Connection): string | null => {
+  switch ((connector as any).style ?? 'solid') {
+    case 'dashed':
+      return '8 6';
+    case 'dotted':
+      return '2 6';
+    case 'solid':
+    default:
+      return null;
+  }
+};
+
+const getNumericStrokeWidth = (value: unknown, fallback: number) => {
+  const raw = Number(value);
+  return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+};
+
+const getBlockLabelFontColor = (block?: Block) => block?.labelProperties?.fontColor;
+
+const getBlockLabelFontFamily = (block?: Block) => block?.labelProperties?.fontFamily;
+
+const getBlockLabelFontSize = (block?: Block) => block?.labelProperties?.fontSize;
+
+const getBlockLabelFontWeight = (block?: Block) => block?.labelProperties?.fontWeight;
+
+const getBlockLabelFontStyle = (block?: Block) => block?.labelProperties?.fontStyle;
+
+const resolveFontSize = (value: unknown, fallback: number) => {
+  const n = Number(value);
+
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const getNodeStrokeWidth = (node: Node, fallback = 1.3) =>
+  getNumericStrokeWidth((node as any).strokeWidth, fallback);
+
+const getGroupStrokeWidth = (group: any, fallback = 1.3) =>
+  getNumericStrokeWidth(group?.strokeWidth, fallback);
+
+const getBlockStrokeWidth = (block: Block, fallback = 1.5) =>
+  getNumericStrokeWidth((block as any).strokeWidth, fallback);
+
+const getStackedOuterStrokeWidth = (node: Node, fallback = 1.4) =>
+  getNumericStrokeWidth((node as any).outerStrokeWidth, fallback);
+
+const getConnectorStrokeWidth = (connector: Edge | Connection) => {
+  const raw = Number((connector as any).width);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 2.0;
+};
+
+const getConnectorLabelColor = (connector: Edge | Connection, block?: Block) =>
+  safeColorName(
+    connector.labelProperties?.labelFontColor ?? getBlockLabelFontColor(block),
+    'black'
+  );
+
+const getConnectorLabelFontFamily = (connector: Edge | Connection, block?: Block) =>
+  connector.labelProperties?.labelFontFamily ?? getBlockLabelFontFamily(block);
+
+const getConnectorLabelFontWeight = (
+  connector: Edge | Connection,
+  block?: Block
+): TextFontWeight | undefined =>
+  connector.labelProperties?.labelFontWeight ?? getBlockLabelFontWeight(block);
+
+const getConnectorLabelFontStyle = (
+  connector: Edge | Connection,
+  block?: Block
+): TextFontStyle | undefined =>
+  connector.labelProperties?.labelFontStyle ?? getBlockLabelFontStyle(block);
+
+const getConnectorLabelFontSize = (
+  connector: Edge | Connection,
+  block?: Block,
+  fallback = CONNECTOR_LABEL_FONT_SIZE
+) =>
+  resolveFontSize(
+    connector.labelProperties?.labelFontSize ?? getBlockLabelFontSize(block),
+    fallback
+  );
+
+const getNodeLabelColor = (node: Node, block?: Block) =>
+  safeColorName(node.labelProperties?.labelFontColor ?? getBlockLabelFontColor(block), 'black');
+
+const getNodeLabelFontFamily = (node: Node, block?: Block) =>
+  node.labelProperties?.labelFontFamily ?? getBlockLabelFontFamily(block);
+
+const getNodeLabelFontWeight = (node: Node, block?: Block): TextFontWeight | undefined =>
+  node.labelProperties?.labelFontWeight ?? getBlockLabelFontWeight(block);
+
+const getNodeLabelFontStyle = (node: Node, block?: Block): TextFontStyle | undefined =>
+  node.labelProperties?.labelFontStyle ?? getBlockLabelFontStyle(block);
+
+const getNodeLabelMainFontSize = (node: Node, block?: Block, fallback = BASE_FONT_SIZE) =>
+  resolveFontSize(node.labelProperties?.labelFontSize ?? getBlockLabelFontSize(block), fallback);
+
+const getNodeSubLabelColor = (node: Node, block?: Block) =>
+  safeColorName(
+    node.subLabelProperties?.subLabelFontColor ?? getBlockLabelFontColor(block),
+    getNodeLabelColor(node, block)
+  );
+
+const getNodeSubLabelFontFamily = (node: Node, block?: Block) =>
+  node.subLabelProperties?.subLabelFontFamily ?? getBlockLabelFontFamily(block);
+
+const getNodeSubLabelFontWeight = (node: Node, block?: Block): TextFontWeight | undefined =>
+  node.subLabelProperties?.subLabelFontWeight ?? getBlockLabelFontWeight(block);
+
+const getNodeSubLabelFontStyle = (node: Node, block?: Block): TextFontStyle | undefined =>
+  node.subLabelProperties?.subLabelFontStyle ?? getBlockLabelFontStyle(block);
+
+const getNodeSubLabelFontSize = (node: Node, block?: Block, fallback = BASE_SUB_FONT_SIZE) =>
+  resolveFontSize(
+    node.subLabelProperties?.subLabelFontSize ?? getBlockLabelFontSize(block),
+    fallback
+  );
+
+const getNodeLabelText = (node: Node) => normalizeRendText(node.labelProperties?.labelText ?? '');
+
+const getNodeSubLabelText = (node: Node) =>
+  normalizeRendText(node.subLabelProperties?.subLabelText ?? '');
+
+const getAnnotationFontSize = (
+  annotation: Annotation | undefined,
+  fallback: number,
+  block?: Block
+) => resolveFontSize(annotation?.fontSize ?? getBlockLabelFontSize(block), fallback);
+
+const getAnnotationFontColor = (annotation: Annotation | undefined, block?: Block) =>
+  safeColorName(annotation?.fontColor ?? getBlockLabelFontColor(block), 'black');
+
+const getAnnotationFontFamily = (annotation: Annotation | undefined, block?: Block) =>
+  annotation?.fontFamily ?? getBlockLabelFontFamily(block);
+
+const getAnnotationFontWeight = (
+  annotation: Annotation | undefined,
+  block?: Block
+): TextFontWeight | undefined => annotation?.fontWeight ?? getBlockLabelFontWeight(block);
+
+const getAnnotationFontStyle = (
+  annotation: Annotation | undefined,
+  block?: Block
+): TextFontStyle | undefined => annotation?.fontStyle ?? getBlockLabelFontStyle(block);
+
+const getNodeOpLabelColor = (node: Node, block?: Block) =>
+  safeColorName(
+    (node as any).opLabelProperties?.opLabelFontColor ?? getBlockLabelFontColor(block),
+    'black'
+  );
+
+const getNodeOpLabelFontFamily = (node: Node, block?: Block) =>
+  (node as any).opLabelProperties?.opLabelFontFamily ?? getBlockLabelFontFamily(block);
+
+const getNodeOpLabelFontSize = (node: Node, block?: Block, fallback = BASE_FONT_SIZE) =>
+  resolveFontSize(
+    (node as any).opLabelProperties?.opLabelFontSize ?? getBlockLabelFontSize(block),
+    fallback
+  );
+
+const getNodeOpLabelSubFontSize = (node: Node, block?: Block, fallback = BASE_SUB_FONT_SIZE) => {
+  const explicit = Number(
+    (node as any).opLabelProperties?.opLabelFontSize ?? getBlockLabelFontSize(block)
+  );
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return Math.max(8, explicit * (BASE_SUB_FONT_SIZE / BASE_FONT_SIZE));
+  }
+  return fallback;
+};
+
+const getNodeOpLabelFontWeight = (node: Node, block?: Block): TextFontWeight | undefined =>
+  (node as any).opLabelProperties?.opLabelFontWeight ?? getBlockLabelFontWeight(block);
+
+const getNodeOpLabelFontStyle = (node: Node, block?: Block): TextFontStyle | undefined =>
+  (node as any).opLabelProperties?.opLabelFontStyle ?? getBlockLabelFontStyle(block);
+
+const getMarkerLabelColor = (group: any, block?: Block) =>
+  safeColorName(
+    getMarkerProperties(group)?.markerLabelFontColor ?? getBlockLabelFontColor(block),
+    'black'
+  );
+
+const getMarkerLabelFontFamily = (group: any, block?: Block) =>
+  getMarkerProperties(group)?.markerLabelFontFamily ?? getBlockLabelFontFamily(block);
+
+const getMarkerLabelFontWeight = (group: any, block?: Block): TextFontWeight | undefined =>
+  getMarkerProperties(group)?.markerLabelFontWeight ?? getBlockLabelFontWeight(block);
+
+const getMarkerLabelFontStyle = (group: any, block?: Block): TextFontStyle | undefined =>
+  getMarkerProperties(group)?.markerLabelFontStyle ?? getBlockLabelFontStyle(block);
+
+const getMarkerLabelFontSize = (
+  group: any,
+  block?: Block,
+  fallback = Math.max(12, BASE_FONT_SIZE * 0.95)
+) =>
+  resolveFontSize(
+    getMarkerProperties(group)?.markerLabelFontSize ?? getBlockLabelFontSize(block),
+    fallback
+  );
+
+const shouldCenterSingleLabel = (node: Node) => {
+  if (node.type === 'flatten' || node.type === 'stacked' || node.type === 'fullyConnected') {
+    return false;
+  }
+
+  const label = getNodeLabelText(node).trim();
+  const subLabel = getNodeSubLabelText(node).trim();
+
+  return !!label && !subLabel;
+};
+const drawPreciselyCenteredText = (
+  parent:
+    | d3.Selection<SVGGElement, unknown, any, any>
+    | d3.Selection<SVGTextElement, unknown, any, any>,
+  value: string,
+  cx: number,
+  cy: number,
+  options?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    fill?: string;
+    rotate?: number;
+    lineHeight?: number;
+  }
+) => {
+  const lines = getRendTextLines(value).map(sanitizeRenderedText);
+  const fontSize = options?.fontSize ?? BASE_FONT_SIZE;
+  const lineHeight = options?.lineHeight ?? fontSize + 2;
+
+  const text =
+    'append' in parent && (parent as any).node()?.tagName !== 'text'
+      ? (parent as any).append('text')
+      : (parent as d3.Selection<SVGTextElement, unknown, any, any>);
+
+  text
+    .attr('x', cx)
+    .attr('y', cy)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('pointer-events', 'none')
+    .text(null);
+
+  applyTextStyleAttrs(text, {
+    fontFamily: options?.fontFamily,
+    fontSize,
+    fontWeight: options?.fontWeight,
+    fontStyle: options?.fontStyle,
+    fill: options?.fill ?? 'black',
+  });
+
+  const startDy = -((lines.length - 1) * lineHeight) / 2;
+
+  lines.forEach((line, i) => {
+    const row = text
+      .append('tspan')
+      .attr('x', cx)
+      .attr('dy', i === 0 ? startDy : lineHeight);
+    appendInlineMathToText(row, line, cx, fontSize);
+  });
+
+  if (options?.rotate) {
+    text.attr('transform', `rotate(${options.rotate}, ${cx}, ${cy})`);
+  }
+  return text;
+};
+
+const drawCenteredNodeLabel = (
+  parent: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box,
+  block?: Block
+) => {
+  const label = getNodeLabelText(node);
+  const fontSize = getNodeLabelMainFontSize(node, block);
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  if (isVerticalLabel(node)) {
+    drawPreciselyCenteredText(parent as any, label, cx, cy, {
+      rotate: getVerticalLabelRotation(node),
+      fontSize,
+      fill: getNodeLabelColor(node, block),
+      fontFamily: getNodeLabelFontFamily(node, block),
+      fontWeight: getNodeLabelFontWeight(node, block),
+      fontStyle: getNodeLabelFontStyle(node, block),
+    });
+    return;
+  }
+
+  drawPreciselyCenteredText(parent as any, label, cx, cy, {
+    fontSize,
+    fill: getNodeLabelColor(node, block),
+    fontFamily: getNodeLabelFontFamily(node, block),
+    fontWeight: getNodeLabelFontWeight(node, block),
+    fontStyle: getNodeLabelFontStyle(node, block),
+  });
+};
+const getMarkerProperties = (group: any) => group?.markerProperties;
+
+const getMarkerColor = (group: any) =>
+  safeColorName(getMarkerProperties(group)?.markerColor, '#444');
+
+const hasMarkerConfig = (group: any) => {
+  const marker = getMarkerProperties(group);
+  if (!marker) {
+    return false;
+  }
+
+  return (
+    marker.markerType !== undefined ||
+    marker.markerPosition !== undefined ||
+    marker.markerLabelText !== undefined ||
+    marker.markerLeft !== undefined ||
+    marker.markerRight !== undefined ||
+    marker.markerTop !== undefined ||
+    marker.markerBottom !== undefined ||
+    marker.markerColor !== undefined ||
+    marker.markerLabelFontColor !== undefined ||
+    marker.markerLabelFontFamily !== undefined ||
+    marker.markerLabelFontSize !== undefined ||
+    marker.markerLabelFontWeight !== undefined ||
+    marker.markerLabelFontStyle !== undefined
+  );
+};
+
+const getMarkerType = (group: any): 'bracket' | 'brace' | 'arrow' | undefined => {
+  if (!hasMarkerConfig(group)) {
+    return undefined;
+  }
+
+  const type = getMarkerProperties(group)?.markerType;
+  return type === 'brace' || type === 'arrow' || type === 'bracket' ? type : 'bracket';
+};
+
+const getMarkerPosition = (group: any): 'top' | 'bottom' | 'left' | 'right' => {
+  const pos = getMarkerProperties(group)?.markerPosition;
+  return pos === 'top' || pos === 'bottom' || pos === 'left' || pos === 'right' ? pos : 'bottom';
+};
+
+const getMarkerLabelText = (group: any) =>
+  normalizeRendText(getMarkerProperties(group)?.markerLabelText ?? '');
+
+const getMarkerOffsetLeft = (group: any) =>
+  Number(getMarkerProperties(group)?.markerLeft ?? 0) || 0;
+
+const getMarkerOffsetRight = (group: any) =>
+  Number(getMarkerProperties(group)?.markerRight ?? 0) || 0;
+
+const getMarkerOffsetTop = (group: any) => Number(getMarkerProperties(group)?.markerTop ?? 0) || 0;
+
+const getMarkerOffsetBottom = (group: any) =>
+  Number(getMarkerProperties(group)?.markerBottom ?? 0) || 0;
+
+const applyTextStyleAttrs = (
+  text:
+    | d3.Selection<SVGTextElement, unknown, any, any>
+    | d3.Selection<SVGTSpanElement, unknown, any, any>,
+  options?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+    fill?: string;
+  }
+) => {
+  if (options?.fontFamily) {
+    text.attr('font-family', options.fontFamily);
+  }
+  if (options?.fontSize !== undefined) {
+    text.attr('font-size', options.fontSize);
+  }
+  if (options?.fontWeight !== undefined) {
+    text.attr('font-weight', options.fontWeight);
+  }
+  if (options?.fontStyle) {
+    text.attr('font-style', options.fontStyle);
+  }
+  if (options?.fill) {
+    text.attr('fill', options.fill);
+  }
+
+  text.attr('xml:space', 'preserve').style('white-space', 'pre');
+
+  return text;
+};
+
+const getNodeOpLabelText = (node: Node) =>
+  normalizeRendText((node as any).opLabelProperties?.opLabelText ?? '');
+
+const getNodeOpLabelSubtext = (node: Node) =>
+  normalizeRendText((node as any).opLabelProperties?.opLabelSubtext ?? '');
+
+const getAnnotationGap = (annotation: Annotation | undefined, fallback: number) => {
+  const raw = Number(annotation?.gap);
+  return Number.isFinite(raw) ? raw : fallback;
+};
+const getAnnotationShift = (annotation: Annotation | undefined) => {
+  const shiftLeft = Number(annotation?.shiftLeft ?? 0);
+  const shiftRight = Number(annotation?.shiftRight ?? 0);
+  const shiftTop = Number(annotation?.shiftTop ?? 0);
+  const shiftBottom = Number(annotation?.shiftBottom ?? 0);
+
+  return {
+    dx:
+      (Number.isFinite(shiftRight) ? shiftRight : 0) - (Number.isFinite(shiftLeft) ? shiftLeft : 0),
+    dy:
+      (Number.isFinite(shiftBottom) ? shiftBottom : 0) - (Number.isFinite(shiftTop) ? shiftTop : 0),
+  };
+};
+
+const hasBidirectionalArrow = (connector: Edge | Connection) => !!(connector as any).bidirectional;
+
+const getTerminalArrowheadCount = (connector: Edge | Connection) =>
+  Math.max(0, Math.min(3, connector.arrowheads ?? 1));
+
+const drawArrowheadPolygon = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  tip: Point,
+  from: Point,
+  color: string,
+  strokeWidth: number,
+  options?: {
+    headLength?: number;
+    headWidth?: number;
+  }
+) => {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return;
+  }
+
+  const ux = dx / len;
+  const uy = dy / len;
+
+  const headLength = Math.min(len, options?.headLength ?? Math.max(8, strokeWidth * 4.5));
+
+  const headWidth = options?.headWidth ?? Math.max(6, strokeWidth * 3.2);
+
+  const baseX = tip.x - ux * headLength;
+  const baseY = tip.y - uy * headLength;
+
+  const px = -uy;
+  const py = ux;
+
+  const left = {
+    x: baseX + px * (headWidth / 2),
+    y: baseY + py * (headWidth / 2),
+  };
+
+  const right = {
+    x: baseX - px * (headWidth / 2),
+    y: baseY - py * (headWidth / 2),
+  };
+
+  group
+    .append('polygon')
+    .attr('points', `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`)
+    .attr('fill', color)
+    .attr('stroke', color)
+    .attr('stroke-width', Math.max(1, strokeWidth * 0.6))
+    .attr('pointer-events', 'none');
+};
+const getPolylineDirectionAtDistance = (
+  points: Point[],
+  distanceAlong: number
+): { point: Point; from: Point; to: Point } | null => {
+  if (points.length < 2) {
+    return null;
+  }
+
+  const totalLength = getPolylineLength(points);
+  const target = clamp(distanceAlong, 0, totalLength);
+
+  let walked = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segLen = distance(a, b);
+
+    if (segLen <= 0.001) {
+      continue;
+    }
+
+    if (walked + segLen >= target) {
+      return {
+        point: getPointOnSegment(a, b, target - walked),
+        from: a,
+        to: b,
+      };
+    }
+
+    walked += segLen;
+  }
+
+  const a = points[points.length - 2];
+  const b = points[points.length - 1];
+
+  return {
+    point: { ...b },
+    from: a,
+    to: b,
+  };
+};
+
+const drawArrowheadPolygonCentered = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  center: Point,
+  from: Point,
+  to: Point,
+  color: string,
+  strokeWidth: number
+) => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+
+  if (len <= 0.001) {
+    return;
+  }
+
+  const ux = dx / len;
+  const uy = dy / len;
+
+  const headLength = Math.max(8, strokeWidth * 4.5);
+
+  const tip = {
+    x: center.x + ux * (headLength / 2),
+    y: center.y + uy * (headLength / 2),
+  };
+
+  const tail = {
+    x: tip.x - ux * headLength,
+    y: tip.y - uy * headLength,
+  };
+
+  drawArrowheadPolygon(group, tip, tail, color, strokeWidth);
 };
 
 const drawConnector = (
@@ -3901,13 +7576,26 @@ const drawConnector = (
   endBox?: Box,
   isFromEdge = false,
   isToEdge = false,
-  routeBoundary?: Box
+  routeBoundary?: Box,
+  startEdgeAxis?: 'horizontal' | 'vertical',
+  isStartGroup = false,
+  isEndGroup = false,
+  block?: Block
 ): RenderedConnector => {
+  const headOnly = !!(connector as any).headOnly;
   const color = safeColorName(connector.color, 'black');
-  const arrowheads = Math.max(0, Math.min(3, connector.arrowheads ?? 1));
-  const { arrowId } = ensureDefs(svg, componentId, color);
+  const strokeWidth = getConnectorStrokeWidth(connector);
+  const arrowheads = getTerminalArrowheadCount(connector);
+  const bidirectional = hasBidirectionalArrow(connector);
+  const startArrowheads = bidirectional ? 1 : 0;
+  const endArrowheads = arrowheads;
+  const dasharray = getConnectorStrokeDasharray(connector);
+  const labelColor = getConnectorLabelColor(connector, block);
+  const labelFontSize = getConnectorLabelFontSize(connector, block);
+  const { arrowId, arrowStartId } = ensureDefs(svg, componentId, color, strokeWidth);
 
   const connectorG = group.append('g').attr('class', 'unit').attr('id', unitId);
+
   const isSameAnchorSelfLoop =
     !!startSide &&
     !!endSide &&
@@ -3923,131 +7611,364 @@ const drawConnector = (
 
   const gap = getConnectorGap(connector);
 
+  const groupStartInset = 0.5;
+  const groupEndInset = -0.25;
+
   const pathStart =
     isSameAnchorSelfLoop || !startSide
       ? start
-      : insetFromSide(start, startSide, getStartInset(startSide, arrowheads));
+      : insetFromSide(
+          start,
+          startSide,
+          isStartGroup ? groupStartInset : getStartInset(startSide, arrowheads)
+        );
 
   const pathEnd =
     isSameAnchorSelfLoop || !endSide
       ? end
-      : insetFromSide(end, endSide, getEndInset(endSide, arrowheads));
+      : insetFromSide(end, endSide, isEndGroup ? groupEndInset : getEndInset(endSide, arrowheads));
 
+  if (connector.shape === 'arc') {
+    const lift = getArcLift(connector, pathStart, pathEnd);
+    const arcPath = getArcPath(pathStart, pathEnd, lift, startSide, endSide);
+
+    const sampleCount = 24;
+    const sampledPoints: Point[] = Array.from({ length: sampleCount + 1 }, (_, i) => {
+      const t = i / sampleCount;
+      const bendDown = startSide === 'bottom' && endSide === 'bottom';
+      const bendY = bendDown
+        ? Math.max(pathStart.y, pathEnd.y) + lift
+        : Math.min(pathStart.y, pathEnd.y) - lift;
+
+      const c1 = { x: pathStart.x + (pathEnd.x - pathStart.x) * 0.25, y: bendY };
+      const c2 = { x: pathStart.x + (pathEnd.x - pathStart.x) * 0.75, y: bendY };
+
+      const mt = 1 - t;
+      return {
+        x:
+          mt * mt * mt * pathStart.x +
+          3 * mt * mt * t * c1.x +
+          3 * mt * t * t * c2.x +
+          t * t * t * pathEnd.x,
+        y:
+          mt * mt * mt * pathStart.y +
+          3 * mt * mt * t * c1.y +
+          3 * mt * t * t * c2.y +
+          t * t * t * pathEnd.y,
+      };
+    });
+
+    if (!headOnly) {
+      connectorG
+        .append('path')
+        .attr('d', arcPath)
+        .attr('fill', 'none')
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', Math.max(8, strokeWidth + 6))
+        .attr('pointer-events', 'stroke');
+
+      const visiblePath = connectorG
+        .append('path')
+        .attr('data-arrow-id', arrowId)
+        .attr('d', arcPath)
+        .attr('fill', 'none')
+        .attr('stroke', safeColorName(color, 'black'))
+        .attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dasharray)
+        .attr('stroke-linecap', 'round')
+        .attr('pointer-events', 'none');
+
+      if (startArrowheads === 1) {
+        visiblePath.attr('marker-start', `url(#${arrowStartId})`);
+      }
+      if (endArrowheads === 1) {
+        visiblePath.attr('marker-end', `url(#${arrowId})`);
+      }
+    } else {
+      const strokeColor = safeColorName(color, 'black');
+
+      if (startArrowheads === 1 && sampledPoints.length >= 2) {
+        drawArrowheadPolygon(
+          connectorG,
+          sampledPoints[0],
+          sampledPoints[1],
+          strokeColor,
+          strokeWidth
+        );
+      }
+
+      if (endArrowheads >= 1 && sampledPoints.length >= 2) {
+        drawArrowheadPolygon(
+          connectorG,
+          sampledPoints[sampledPoints.length - 1],
+          sampledPoints[sampledPoints.length - 2],
+          strokeColor,
+          strokeWidth
+        );
+      }
+    }
+
+    const label = String(connector.labelProperties?.labelText ?? '');
+    if (label) {
+      const pos = getArcLabelPosition(connector, pathStart, pathEnd, lift, startSide, endSide);
+      const labelText = connectorG
+        .append('text')
+        .attr('x', pos.x)
+        .attr('y', pos.y)
+        .attr('text-anchor', pos.textAnchor)
+        .attr('dominant-baseline', pos.dominantBaseline)
+        .attr('pointer-events', 'none');
+
+      applyTextStyleAttrs(labelText, {
+        fontFamily: getConnectorLabelFontFamily(connector, block),
+        fontSize: labelFontSize,
+        fontWeight: getConnectorLabelFontWeight(connector, block),
+        fontStyle: getConnectorLabelFontStyle(connector, block),
+        fill: labelColor,
+      });
+
+      appendInlineMathToText(
+        labelText,
+        label === '\\null' ? 'null' : label === 'null' ? '' : label,
+        pos.x,
+        labelFontSize
+      );
+    }
+
+    return {
+      name: 'name' in connector ? connector.name : '',
+      start: pathStart,
+      end: pathEnd,
+      mid: sampledPoints[Math.floor(sampledPoints.length / 2)],
+      points: sampledPoints,
+      bounds: expandBox(getPolylineBounds(sampledPoints), 12, 12),
+    };
+  }
   const rawPoints = connectorPoints(
+    connector,
     pathStart,
     pathEnd,
-    connector.style,
+    connector.shape,
     startSide,
     endSide,
     startBox,
     endBox,
     isFromEdge,
     isToEdge,
-    routeBoundary
+    routeBoundary,
+    startEdgeAxis
   );
 
-  let points = trimPolylineStart(rawPoints, gap);
+  let points = rawPoints;
   let mid = polylineMidpoint(points);
-  if (arrowheads <= 1 || !endSide) {
-    points = trimPolylineEnd(points, arrowheads === 0 ? gap : gap + 3);
+  const polylineRadius = connector.shape === 'bow' ? getBowCornerRadius(connector) : 0;
+  const strokeColor = safeColorName(color, 'black');
 
-    connectorG
-      .append('path')
-      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 0))
-      .attr('fill', 'none')
-      .attr('stroke', 'transparent')
-      .attr('stroke-width', 8)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'butt')
-      .attr('pointer-events', 'stroke');
+  const startTrimAmount =
+    startArrowheads === 0
+      ? gap
+      : strokeWidth >= 3
+        ? gap + 1.5 + strokeWidth * 0.7
+        : gap + 1.5 + strokeWidth * 0.3;
 
-    const path = connectorG
-      .append('path')
-      .attr('data-arrow-id', arrowId)
-      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 0))
-      .attr('fill', 'none')
-      .attr('stroke', safeColorName(color, 'black'))
-      .attr('stroke-width', 2.0)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'butt')
-      .attr('color', safeColorName(color, 'black'))
-      .attr('pointer-events', 'none');
+  const endTrimAmount =
+    endArrowheads === 0
+      ? gap
+      : strokeWidth >= 3
+        ? gap + 1.5 + strokeWidth * 0.7
+        : gap + 1.5 + strokeWidth * 0.3;
 
-    if (arrowheads === 1) {
-      path.attr('marker-end', `url(#${arrowId})`);
+  if (headOnly) {
+    let headPoints = rawPoints;
+
+    if (gap > 0) {
+      headPoints = trimPolylineStart(headPoints, gap);
+      headPoints = trimPolylineEnd(headPoints, gap);
     }
+
+    const total = getPolylineLength(headPoints);
+    const midInfo = total > 0 ? getPolylineDirectionAtDistance(headPoints, total / 2) : null;
+
+    if (startArrowheads === 1 && midInfo) {
+      drawArrowheadPolygonCentered(
+        connectorG,
+        midInfo.point,
+        midInfo.from,
+        midInfo.to,
+        strokeColor,
+        strokeWidth
+      );
+    }
+
+    if (endArrowheads <= 1 || !endSide) {
+      if (endArrowheads === 1 && midInfo) {
+        drawArrowheadPolygonCentered(
+          connectorG,
+          midInfo.point,
+          midInfo.from,
+          midInfo.to,
+          strokeColor,
+          strokeWidth
+        );
+      }
+    } else {
+      const fan = getMultiArrowBus(pathEnd, endSide, endArrowheads, 8 + gap, 17);
+
+      for (const branch of fan.branches) {
+        let branchPoints = branch;
+
+        if (gap > 0) {
+          branchPoints = trimPolylineEnd(branchPoints, gap);
+        }
+
+        const branchTotal = getPolylineLength(branchPoints);
+        const branchMid =
+          branchTotal > 0 ? getPolylineDirectionAtDistance(branchPoints, branchTotal / 2) : null;
+
+        if (branchMid) {
+          drawArrowheadPolygonCentered(
+            connectorG,
+            branchMid.point,
+            branchMid.from,
+            branchMid.to,
+            strokeColor,
+            strokeWidth
+          );
+        }
+      }
+    }
+
+    points = headPoints;
     mid = polylineMidpoint(points);
   } else {
-    const fan = getMultiArrowBus(pathEnd, endSide, arrowheads, 8 + gap, 17);
-    points = replacePolylineEnd(points, fan.shaftTarget);
+    points = trimPolylineStart(points, startTrimAmount);
 
-    connectorG
-      .append('path')
-      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 18))
-      .attr('fill', 'none')
-      .attr('stroke', 'transparent')
-      .attr('stroke-width', 8)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'round')
-      .attr('pointer-events', 'stroke');
-
-    connectorG
-      .append('path')
-      .attr('data-arrow-id', arrowId)
-      .attr('d', roundedPolylinePath(points, connector.style === 'bow' ? 24 : 18))
-      .attr('fill', 'none')
-      .attr('stroke', safeColorName(color, 'black'))
-      .attr('stroke-width', 2.0)
-      .attr('stroke-linejoin', 'round')
-      .attr('stroke-linecap', 'butt')
-      .attr('color', safeColorName(color, 'black'))
-      .attr('pointer-events', 'none');
-
-    for (const branch of fan.branches) {
-      const forkPoints =
-        endSide === 'top' || endSide === 'bottom'
-          ? [fan.shaftTarget, { x: branch[0].x, y: fan.shaftTarget.y }, branch[1]]
-          : [fan.shaftTarget, { x: fan.shaftTarget.x, y: branch[0].y }, branch[1]];
+    if (endArrowheads <= 1 || !endSide) {
+      points = trimPolylineEnd(points, endTrimAmount);
 
       connectorG
         .append('path')
-        .attr('d', roundedPolylinePath(forkPoints, 22))
+        .attr('d', roundedPolylinePath(points, polylineRadius))
         .attr('fill', 'none')
         .attr('stroke', 'transparent')
-        .attr('stroke-width', 8)
+        .attr('stroke-width', Math.max(8, strokeWidth + 6))
+        .attr('stroke-linejoin', 'round')
+        .attr('stroke-linecap', 'butt')
+        .attr('pointer-events', 'stroke');
+
+      const path = connectorG
+        .append('path')
+        .attr('data-arrow-id', arrowId)
+        .attr('d', roundedPolylinePath(points, polylineRadius))
+        .attr('fill', 'none')
+        .attr('stroke', strokeColor)
+        .attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dasharray)
+        .attr('stroke-linejoin', 'round')
+        .attr('stroke-linecap', dasharray ? 'round' : 'butt')
+        .attr('color', strokeColor)
+        .attr('pointer-events', 'none');
+
+      if (startArrowheads === 1) {
+        path.attr('marker-start', `url(#${arrowStartId})`);
+      }
+
+      if (endArrowheads === 1) {
+        path.attr('marker-end', `url(#${arrowId})`);
+      }
+
+      mid = polylineMidpoint(points);
+    } else {
+      const fan = getMultiArrowBus(pathEnd, endSide, endArrowheads, 8 + gap, 17);
+      points = replacePolylineEnd(points, fan.shaftTarget);
+
+      connectorG
+        .append('path')
+        .attr('d', roundedPolylinePath(points, polylineRadius))
+        .attr('fill', 'none')
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', Math.max(8, strokeWidth + 6))
         .attr('stroke-linejoin', 'round')
         .attr('stroke-linecap', 'round')
         .attr('pointer-events', 'stroke');
 
-      connectorG
+      const mainPath = connectorG
         .append('path')
         .attr('data-arrow-id', arrowId)
-        .attr('d', roundedPolylinePath(forkPoints, 22))
+        .attr('d', roundedPolylinePath(points, polylineRadius))
         .attr('fill', 'none')
-        .attr('stroke', safeColorName(color, 'black'))
-        .attr('stroke-width', 2.0)
-        .attr('stroke-linejoin', 'stroke')
-        .attr('stroke-linecap', 'round')
-        .attr('color', safeColorName(color, 'black'))
-        .attr('marker-end', `url(#${arrowId})`)
+        .attr('stroke', strokeColor)
+        .attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dasharray)
+        .attr('stroke-linejoin', 'round')
+        .attr('stroke-linecap', dasharray ? 'round' : 'butt')
+        .attr('color', strokeColor)
         .attr('pointer-events', 'none');
-    }
 
-    mid = polylineMidpoint(points);
+      if (startArrowheads === 1) {
+        mainPath.attr('marker-start', `url(#${arrowStartId})`);
+      }
+
+      for (const branch of fan.branches) {
+        const forkPoints =
+          endSide === 'top' || endSide === 'bottom'
+            ? [fan.shaftTarget, { x: branch[0].x, y: fan.shaftTarget.y }, branch[1]]
+            : [fan.shaftTarget, { x: fan.shaftTarget.x, y: branch[0].y }, branch[1]];
+
+        connectorG
+          .append('path')
+          .attr('d', roundedPolylinePath(forkPoints, 22))
+          .attr('fill', 'none')
+          .attr('stroke', 'transparent')
+          .attr('stroke-width', Math.max(8, strokeWidth + 6))
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('pointer-events', 'stroke');
+
+        connectorG
+          .append('path')
+          .attr('data-arrow-id', arrowId)
+          .attr('d', roundedPolylinePath(forkPoints, 22))
+          .attr('fill', 'none')
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-dasharray', dasharray)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('color', strokeColor)
+          .attr('marker-end', `url(#${arrowId})`)
+          .attr('pointer-events', 'none');
+      }
+
+      mid = polylineMidpoint(points);
+    }
   }
 
-  const label = String(connector.label ?? '').trim();
+  const label = String(connector.labelProperties?.labelText ?? '').trim();
   if (label) {
-    const pos = getLabelPosition(points, label, startSide, endSide);
-    connectorG
+    const pos = getLabelPosition(connector, points, label, startSide, endSide);
+    const labelText = connectorG
       .append('text')
       .attr('x', pos.x)
       .attr('y', pos.y)
       .attr('text-anchor', pos.textAnchor)
       .attr('dominant-baseline', pos.dominantBaseline)
-      .attr('font-size', CONNECTOR_LABEL_FONT_SIZE)
-      .attr('pointer-events', 'none')
-      .text(label === '\\null' ? 'null' : label === 'null' ? '' : label);
+      .attr('pointer-events', 'none');
+
+    applyTextStyleAttrs(labelText, {
+      fontFamily: getConnectorLabelFontFamily(connector, block),
+      fontSize: labelFontSize,
+      fontWeight: getConnectorLabelFontWeight(connector, block),
+      fontStyle: getConnectorLabelFontStyle(connector, block),
+      fill: labelColor,
+    });
+
+    appendInlineMathToText(
+      labelText,
+      label === '\\null' ? 'null' : label === 'null' ? '' : label,
+      pos.x,
+      labelFontSize
+    );
   }
 
   return {
@@ -4069,7 +7990,7 @@ const resolveNodeEndpointWithPreferredAxis = (
   preferredX?: number,
   preferredY?: number
 ): { point: Point; side?: Side } => {
-  const { anchor, portIndex, anchorBox, nodeType, nodeStyle } = getEndpointPortInfo(
+  const { anchor, portIndex, anchorBox, nodeType, nodeStyle } = getEndpointTargetInfo(
     rendered,
     endpoint
   );
@@ -4097,15 +8018,73 @@ const renderBlockGroupVisuals = (
   nodeCount: number,
   edgeCount: number
 ) => {
-  for (const [groupIdx, groupDef] of (groupDefs ?? []).entries()) {
-    const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
-    if (!visualBox || visualBox.width <= 0 || visualBox.height <= 0) {
+  const defs = groupDefs ?? [];
+  const groupMap = new Map(defs.map((g) => [g.name, g]));
+
+  const getDepth = (groupName: string, memo = new Map<string, number>()): number => {
+    if (memo.has(groupName)) {
+      return memo.get(groupName)!;
+    }
+
+    const group = groupMap.get(groupName);
+    if (!group) {
+      memo.set(groupName, 0);
+      return 0;
+    }
+
+    let maxChildDepth = 0;
+    for (const member of group.members ?? []) {
+      if (!groupMap.has(member)) {
+        continue;
+      }
+      maxChildDepth = Math.max(maxChildDepth, getDepth(member, memo) + 1);
+    }
+
+    memo.set(groupName, maxChildDepth);
+    return maxChildDepth;
+  };
+
+  const depthMemo = new Map<string, number>();
+
+  const groupDslIndex = new Map(defs.map((g, i) => [g.name, i]));
+
+  const sortedGroups = [...defs].sort((a, b) => {
+    const depthA = getDepth(a.name, depthMemo);
+    const depthB = getDepth(b.name, depthMemo);
+
+    if (depthA !== depthB) {
+      return depthB - depthA;
+    }
+
+    const boxA = hasGroupColorBoxAdjustments(a)
+      ? metrics.groupColorBoxes.get(a.name)
+      : metrics.groups.get(a.name);
+
+    const boxB = hasGroupColorBoxAdjustments(b)
+      ? metrics.groupColorBoxes.get(b.name)
+      : metrics.groups.get(b.name);
+
+    const areaA = boxA ? boxA.width * boxA.height : 0;
+    const areaB = boxB ? boxB.width * boxB.height : 0;
+
+    return areaB - areaA;
+  });
+
+  for (const groupDef of sortedGroups) {
+    const unitBox = hasGroupColorBoxAdjustments(groupDef)
+      ? metrics.groupColorBoxes.get(groupDef.name)
+      : metrics.groups.get(groupDef.name);
+
+    if (!unitBox || unitBox.width <= 0 || unitBox.height <= 0) {
       continue;
     }
 
-    const colorBox = getGroupColorRenderBox(groupDef, visualBox);
+    const originalGroupIndex = groupDslIndex.get(groupDef.name);
+    if (originalGroupIndex === undefined) {
+      continue;
+    }
 
-    const localIndex = nodeCount + edgeCount + groupIdx;
+    const localIndex = nodeCount + edgeCount + originalGroupIndex;
     const unitId = `unit_(${blockIndex},${localIndex})`;
 
     const groupUnit = groupBackgroundLayer
@@ -4114,30 +8093,53 @@ const renderBlockGroupVisuals = (
       .attr('id', unitId)
       .style('pointer-events', 'auto');
 
-    groupUnit
+    const groupRect = groupUnit
       .append('rect')
-      .attr('x', colorBox.x)
-      .attr('y', colorBox.y)
-      .attr('width', colorBox.width)
-      .attr('height', colorBox.height)
-      .attr('rx', 14)
-      .attr('ry', 14)
+      .attr('x', unitBox.x)
+      .attr('y', unitBox.y)
+      .attr('width', unitBox.width)
+      .attr('height', unitBox.height)
+      .attr('rx', groupDef.shape === 'rounded' ? 14 : 0)
+      .attr('ry', groupDef.shape === 'rounded' ? 14 : 0)
       .attr('fill', safeColorName(groupDef.color, 'transparent'))
-      .attr('stroke', safeColorName(groupDef.stroke, 'transparent'))
-      .attr('stroke-width', 1.3)
+      .attr('stroke', safeColorName(groupDef.strokeColor, 'transparent'))
+      .attr('stroke-width', getGroupStrokeWidth(groupDef, 1.3))
       .style('pointer-events', 'auto');
+
+    applyStrokeStyleAttrs(groupRect, (groupDef as any).strokeStyle);
   }
 };
-const getEndpointNodeName = (endpoint: any): string | undefined =>
+const getEndpointTargetName = (endpoint: any): string | undefined =>
   endpoint?.nodeName ? String(endpoint.nodeName) : undefined;
 
+const getEndpointMemberSet = (metrics: BlockMetrics, endpoint: any): Set<string> | null => {
+  const name = getEndpointTargetName(endpoint);
+  if (!name) {
+    return null;
+  }
+
+  const groupMembers = metrics.groupNodeMembers.get(name);
+  if (groupMembers) {
+    return groupMembers;
+  }
+
+  if (metrics.nodes.has(name) || metrics.nodeShapes.has(name)) {
+    return new Set([name]);
+  }
+
+  return null;
+};
+
 const getSmallestCommonGroupBoundary = (
+  block: Block,
   metrics: BlockMetrics,
   endpoints: any[]
 ): Box | undefined => {
-  const nodeNames = endpoints.map(getEndpointNodeName).filter(Boolean) as string[];
+  const endpointSets = endpoints
+    .map((endpoint) => getEndpointMemberSet(metrics, endpoint))
+    .filter(Boolean) as Set<string>[];
 
-  if (!nodeNames.length) {
+  if (!endpointSets.length) {
     return undefined;
   }
 
@@ -4145,20 +8147,28 @@ const getSmallestCommonGroupBoundary = (
   let bestArea = Infinity;
 
   for (const [groupName, members] of metrics.groupNodeMembers.entries()) {
-    const containsAll = nodeNames.every((nodeName) => members.has(nodeName));
+    const containsAll = endpointSets.every((targetSet) => {
+      for (const member of targetSet) {
+        if (!members.has(member)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
     if (!containsAll) {
       continue;
     }
 
-    const visualBox = metrics.groupVisualBoxes.get(groupName) ?? metrics.groups.get(groupName);
+    const effectiveBox = getEffectiveGroupBox(metrics, block.groups, groupName);
 
-    if (!visualBox || visualBox.width <= 0 || visualBox.height <= 0) {
+    if (!effectiveBox || effectiveBox.width <= 0 || effectiveBox.height <= 0) {
       continue;
     }
 
-    const area = visualBox.width * visualBox.height;
+    const area = effectiveBox.width * effectiveBox.height;
     if (area < bestArea) {
-      best = visualBox;
+      best = effectiveBox;
       bestArea = area;
     }
   }
@@ -4166,8 +8176,13 @@ const getSmallestCommonGroupBoundary = (
   return best;
 };
 
-const getEdgeRouteBoundary = (metrics: BlockMetrics, fromEndpoint: any, toEndpoint: any): Box => {
-  const groupBoundary = getSmallestCommonGroupBoundary(metrics, [fromEndpoint, toEndpoint]);
+const getEdgeRouteBoundary = (
+  block: Block,
+  metrics: BlockMetrics,
+  fromEndpoint: any,
+  toEndpoint: any
+): Box => {
+  const groupBoundary = getSmallestCommonGroupBoundary(block, metrics, [fromEndpoint, toEndpoint]);
   if (groupBoundary) {
     return groupBoundary;
   }
@@ -4180,9 +8195,113 @@ const getEdgeRouteBoundary = (metrics: BlockMetrics, fromEndpoint: any, toEndpoi
   };
 };
 
+const resolveRenderedEndpointNode = (
+  rendered: RenderedBlock,
+  endpoint: any
+): RenderedNode | undefined => {
+  const targetName = endpoint?.nodeName;
+  if (!targetName) {
+    return undefined;
+  }
+
+  const directNode = rendered.nodes.get(targetName);
+  if (directNode) {
+    return directNode;
+  }
+
+  const members = rendered.metrics.groupNodeMembers.get(targetName);
+  if (!members || !members.size) {
+    return undefined;
+  }
+
+  const anchor = (endpoint?.anchor ?? 'right') as Side;
+  const candidates = [...members]
+    .map((name) => rendered.nodes.get(name))
+    .filter(Boolean) as RenderedNode[];
+
+  if (!candidates.length) {
+    return undefined;
+  }
+
+  const scoreNode = (candidate: RenderedNode) => {
+    const visualBox =
+      candidate.def.type === 'stacked'
+        ? getStackedConnectorAnchorBox(candidate.def, candidate.box)
+        : getNodeVisualAnchorBox(candidate.def, candidate.box);
+
+    switch (anchor) {
+      case 'left':
+        return visualBox.x;
+      case 'right':
+        return -(visualBox.x + visualBox.width);
+      case 'top':
+        return visualBox.y;
+      case 'bottom':
+        return -(visualBox.y + visualBox.height);
+      default:
+        return 0;
+    }
+  };
+
+  candidates.sort((a, b) => scoreNode(a) - scoreNode(b));
+  return candidates[0];
+};
+
+const resolveFlattenTransitionEndpointNode = (
+  rendered: RenderedBlock,
+  endpoint: any,
+  _role: 'from' | 'to'
+): RenderedNode | undefined => {
+  const targetName = endpoint?.nodeName;
+  if (!targetName) {
+    return undefined;
+  }
+
+  const directNode = rendered.nodes.get(targetName);
+  if (directNode) {
+    return directNode;
+  }
+
+  const memberNames = rendered.metrics.groupNodeMembers.get(targetName);
+  if (!memberNames?.size) {
+    return undefined;
+  }
+
+  const anchor = (endpoint?.anchor ?? 'right') as Side;
+
+  const candidates = [...memberNames]
+    .map((name) => rendered.nodes.get(name))
+    .filter(Boolean) as RenderedNode[];
+
+  if (!candidates.length) {
+    return undefined;
+  }
+
+  const scoreNode = (candidate: RenderedNode) => {
+    const visualBox = getNodeVisualAnchorBox(candidate.def, candidate.box);
+
+    switch (anchor) {
+      case 'left':
+        return visualBox.x;
+      case 'right':
+        return -(visualBox.x + visualBox.width);
+      case 'top':
+        return visualBox.y;
+      case 'bottom':
+        return -(visualBox.y + visualBox.height);
+      default:
+        return 0;
+    }
+  };
+
+  candidates.sort((a, b) => scoreNode(a) - scoreNode(b));
+  return candidates[0];
+};
+
 const renderBlock = (
   svg: SVG,
   root: d3.Selection<SVGGElement, unknown, any, any>,
+  annotationRoot: d3.Selection<SVGGElement, unknown, any, any>,
   block: Block,
   x: number,
   y: number,
@@ -4194,6 +8313,19 @@ const renderBlock = (
 ): RenderedBlock => {
   const metrics = computeBlockMetrics(block, externalPortCounts);
 
+  const naturalBodyBox = {
+    x: metrics.bodyX,
+    y: metrics.bodyY,
+    width: metrics.bodyWidth / metrics.scale,
+    height: metrics.bodyHeight / metrics.scale,
+  };
+
+  const scaledBodyBox = scaleBoxFromOrigin(
+    naturalBodyBox,
+    { x: metrics.bodyX, y: metrics.bodyY },
+    metrics.scale
+  );
+
   const blockUnitId = `unit_${unitIndexAllocator.next++}`;
 
   const g = root
@@ -4202,26 +8334,58 @@ const renderBlock = (
     .attr('id', blockUnitId)
     .attr('transform', `translate(${x}, ${y})`);
 
-  g.append('rect')
+  const blockBody = g
+    .append('rect')
     .attr('class', 'block-body')
     .attr('x', metrics.bodyX)
     .attr('y', metrics.bodyY)
     .attr('width', metrics.bodyWidth)
     .attr('height', metrics.bodyHeight)
-    .attr('rx', block.style === 'rounded' ? 14 : 0)
-    .attr('ry', block.style === 'rounded' ? 14 : 0)
+    .attr('rx', block.shape === 'rounded' ? 14 : 0)
+    .attr('ry', block.shape === 'rounded' ? 14 : 0)
     .attr('fill', safeColorName(block.color, 'transparent'))
-    .style('stroke', safeColorName(block.color, 'transparent'))
-    .style('stroke-width', '1.5px')
-    .style('outline', 'none')
-    .style('filter', 'none')
+    .attr(
+      'stroke',
+      safeColorName((block as any).strokeColor, safeColorName(block.color, 'transparent'))
+    )
+    .attr('stroke-width', getBlockStrokeWidth(block, 1.5))
     .style('pointer-events', 'all');
+
+  applyStrokeStyleAttrs(blockBody, (block as any).strokeStyle);
 
   const groupLayer = g.append('g').attr('class', 'block-groups');
   const groupBackgroundLayer = groupLayer.append('g').attr('class', 'group-backgrounds');
-  const nodeLayer = g.append('g').attr('class', 'block-nodes');
-  const edgeLayer = g.append('g').attr('class', 'block-edges');
-  const annotationLayer = g.append('g').attr('class', 'block-annotations');
+
+  const hasFeatureMapEdge = (block.edges ?? []).some(
+    (edge) => (edge as any).transition === 'featureMap'
+  );
+
+  let nodeLayer: d3.Selection<SVGGElement, unknown, any, any>;
+  let edgeLayer: d3.Selection<SVGGElement, unknown, any, any>;
+
+  if (hasFeatureMapEdge) {
+    nodeLayer = g.append('g').attr('class', 'block-nodes');
+    edgeLayer = g.append('g').attr('class', 'block-edges');
+  } else {
+    edgeLayer = g.append('g').attr('class', 'block-edges');
+    nodeLayer = g.append('g').attr('class', 'block-nodes');
+  }
+
+  const annotationLayer = annotationRoot
+    .append('g')
+    .attr('class', 'block-annotations')
+    .attr('transform', `translate(${x}, ${y})`);
+
+  const contentTransform =
+    metrics.scale !== 1
+      ? `translate(${metrics.bodyX}, ${metrics.bodyY}) scale(${metrics.scale}) translate(${-metrics.bodyX}, ${-metrics.bodyY})`
+      : null;
+
+  if (contentTransform) {
+    groupLayer.attr('transform', contentTransform);
+    edgeLayer.attr('transform', contentTransform);
+    nodeLayer.attr('transform', contentTransform);
+  }
 
   const renderedNodes = new Map<string, RenderedNode>();
   const renderedEdges = new Map<string, RenderedConnector>();
@@ -4244,7 +8408,7 @@ const renderBlock = (
       continue;
     }
 
-    drawNode(nodeLayer, node, box, blockIndex, nodeIndex);
+    drawNode(nodeLayer, node, box, blockIndex, nodeIndex, block);
     renderedNodes.set(node.name, { def: node, box });
   }
 
@@ -4254,19 +8418,6 @@ const renderBlock = (
     const current = layoutNodes[i];
     const next = layoutNodes[i + 1];
 
-    const supportedTypes: Node['type'][] = [
-      'rect',
-      'circle',
-      'text',
-      'stacked',
-      'flatten',
-      'fullyConnected',
-    ];
-
-    if (!supportedTypes.includes(current.type)) {
-      continue;
-    }
-
     const currentBox = metrics.nodes.get(current.name);
     const nextBox = metrics.nodes.get(next.name);
 
@@ -4274,8 +8425,9 @@ const renderBlock = (
       continue;
     }
 
-    drawBetweenNodeOpLabel(nodeLayer as any, currentBox, nextBox, current);
+    drawBetweenNodeOpLabel(nodeLayer as any, current, currentBox, next, nextBox, current, block);
   }
+
   const rendered: RenderedBlock = {
     def: block,
     x,
@@ -4291,16 +8443,28 @@ const renderBlock = (
   for (const [edgeIndex, edge] of (block.edges ?? []).entries()) {
     const unitId = `unit_(${blockIndex},${nodeCount + edgeIndex})`;
 
+    const transition = (edge as any).transition ?? 'default';
+
     const fromNodeName = (edge.from as any)?.nodeName;
     const toNodeName = (edge.to as any)?.nodeName;
 
-    const fromRenderedNode = fromNodeName ? renderedNodes.get(fromNodeName) : undefined;
-    const toRenderedNode = toNodeName ? renderedNodes.get(toNodeName) : undefined;
+    const fromRenderedNode =
+      transition === 'flatten'
+        ? resolveFlattenTransitionEndpointNode(rendered, edge.from, 'from')
+        : fromNodeName
+          ? renderedNodes.get(fromNodeName)
+          : undefined;
+
+    const toRenderedNode =
+      transition === 'flatten'
+        ? resolveFlattenTransitionEndpointNode(rendered, edge.to, 'to')
+        : toNodeName
+          ? renderedNodes.get(toNodeName)
+          : undefined;
 
     const layoutDirection = (block.layout ?? 'vertical') === 'vertical' ? 'vertical' : 'horizontal';
 
     const special = (() => {
-      const transition = (edge as any).transition ?? 'default';
       if (transition === 'default') {
         return null;
       }
@@ -4316,7 +8480,9 @@ const renderBlock = (
         fromRenderedNode.box,
         toRenderedNode.def,
         toRenderedNode.box,
-        layoutDirection
+        layoutDirection,
+        (edge.from as any)?.anchor,
+        (edge.to as any)?.anchor
       );
     })();
 
@@ -4324,85 +8490,10 @@ const renderBlock = (
       renderedEdges.set(edge.name, special);
       continue;
     }
-    let from = resolveLocalEndpoint(rendered, edge.from);
-    let to = resolveLocalEndpoint(rendered, edge.to);
+    let from = resolveLocalEndpoint(rendered, edge.from, edge, 'from');
+    let to = resolveLocalEndpoint(rendered, edge.to, edge, 'to');
 
-    const getTextTopAnchorBoxForMainLabelOnly = (node: Node, box: Box): Box => {
-      const rawLabel = node.label ?? ''.trim();
-      const rawSubText = node.labelSubtext ?? ''.trim();
-
-      if (!rawLabel || node.labelOrientation === 'vertical') {
-        return box;
-      }
-
-      const availableWidth = Math.max(8, box.width);
-      const labelLines = wrapTextLines(rawLabel, availableWidth, TEXT_NODE_FONT_SIZE);
-      const subLines = rawSubText
-        ? wrapTextLines(rawSubText, availableWidth, BASE_SUB_FONT_SIZE)
-        : [];
-
-      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
-      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
-
-      const totalTextHeight =
-        labelLines.length * labelLineHeight +
-        (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
-
-      const labelBlockHeight = labelLines.length * labelLineHeight;
-      const topOfAllText = box.y + box.height / 2 - totalTextHeight / 2;
-
-      return {
-        x: box.x,
-        y: topOfAllText,
-        width: box.width,
-        height: labelBlockHeight,
-      };
-    };
-
-    const fromNodeDef = fromNodeName ? renderedNodes.get(fromNodeName)?.def : undefined;
-
-    if (
-      fromNodeDef?.type === 'text' &&
-      (edge.from as any)?.anchor === 'top' &&
-      (edge.to as any)?.anchor === 'bottom' &&
-      fromNodeName
-    ) {
-      const originalBox = metrics.nodeShapes.get(fromNodeName);
-      if (originalBox) {
-        const anchorBox = getTextTopAnchorBoxForMainLabelOnly(fromNodeDef, originalBox);
-        from = {
-          ...from,
-          point: getAnchorPoint(anchorBox, 'top'),
-          side: 'top',
-          box: anchorBox,
-        };
-      }
-    }
-
-    const fromIsEdgeMid = (edge.from as any)?.edgeAnchor === 'mid';
-    const toIsEdgeMid = (edge.to as any)?.edgeAnchor === 'mid';
-
-    if (fromIsEdgeMid) {
-      const offsetX = to.point.x < from.point.x ? -1 : 1;
-      from = {
-        ...from,
-        point: {
-          x: from.point.x + offsetX,
-          y: from.point.y,
-        },
-      };
-    }
-
-    if (toIsEdgeMid) {
-      const offsetX = from.point.x < to.point.x ? -28 : 28;
-      to = {
-        ...to,
-        point: {
-          x: to.point.x + offsetX,
-          y: to.point.y,
-        },
-      };
-    }
+    const fromNodeDef = fromRenderedNode?.def;
 
     if (shouldPreferVerticalPortAlignment(edge)) {
       const fromAny = edge.from as any;
@@ -4417,7 +8508,7 @@ const renderBlock = (
       }
     }
 
-    const routeBoundary = getEdgeRouteBoundary(metrics, edge.from, edge.to);
+    const routeBoundary = getEdgeRouteBoundary(block, metrics, edge.from, edge.to);
 
     renderedEdges.set(
       edge.name,
@@ -4435,7 +8526,11 @@ const renderBlock = (
         to.box,
         isEdgeEndpoint(edge.from),
         isEdgeEndpoint(edge.to),
-        routeBoundary
+        routeBoundary,
+        from.edgeAxis,
+        from.isGroup ?? false,
+        to.isGroup ?? false,
+        block
       )
     );
   }
@@ -4446,25 +8541,52 @@ const renderBlock = (
       continue;
     }
 
-    drawNodeAnnotations(annotationLayer, node, box);
+    drawNodeAnnotations(
+      annotationLayer,
+      node,
+      box,
+      metrics.scale,
+      {
+        x: metrics.bodyX,
+        y: metrics.bodyY,
+      },
+      block
+    );
   }
 
   for (const groupDef of block.groups ?? []) {
-    const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
     const annotationMap = metrics.groupAnnotations.get(groupDef.name);
 
-    if (!visualBox || !annotationMap) {
+    const annotationBox = hasGroupColorBoxAdjustments(groupDef)
+      ? metrics.groupColorBoxes.get(groupDef.name) ?? metrics.groups.get(groupDef.name)
+      : metrics.groups.get(groupDef.name);
+
+    if (!annotationBox || !annotationMap) {
       continue;
     }
 
     for (const side of SIDES) {
       const annotation = annotationMap[side];
-      if (annotation) {
-        drawGroupAnnotation(annotationLayer, side, annotation, visualBox);
+      if (!annotation) {
+        continue;
       }
+
+      const forcedAnnotation =
+        side === 'bottom'
+          ? ({ ...annotation, gap: Math.max(Number(annotation.gap ?? 0), 12) } as Annotation)
+          : annotation;
+
+      drawSideAnnotation(
+        annotationLayer.append('text'),
+        side,
+        scaleBoxFromOrigin(annotationBox, { x: metrics.bodyX, y: metrics.bodyY }, metrics.scale),
+        forcedAnnotation,
+        8,
+        GROUP_ANNOTATION_FONT_SIZE * metrics.scale,
+        block
+      );
     }
   }
-
   for (const groupDef of block.groups ?? []) {
     const visualBox = metrics.groupVisualBoxes.get(groupDef.name);
     const markerBox = metrics.groupMarkerBoxes.get(groupDef.name) ?? visualBox;
@@ -4473,14 +8595,24 @@ const renderBlock = (
       continue;
     }
 
-    drawGroupMarker(annotationLayer as any, groupDef, markerBox, visualBox);
+    drawGroupMarker(annotationLayer as any, groupDef, markerBox, visualBox, block);
   }
 
   for (const side of SIDES) {
     const annotation = metrics.annotations[side];
-    if (annotation) {
-      drawAnnotation(annotationLayer, side, annotation, metrics);
+    if (!annotation) {
+      continue;
     }
+
+    drawSideAnnotation(
+      annotationLayer.append('text'),
+      side,
+      scaledBodyBox,
+      annotation,
+      BLOCK_ANNOTATION_GAP,
+      BLOCK_ANNOTATION_FONT_SIZE * metrics.scale,
+      block
+    );
   }
 
   return rendered;
@@ -4490,9 +8622,118 @@ const getInstanceKey = (endpoint: any): string => {
   return endpoint?.instanceName ?? endpoint?.block ?? endpoint?.alias ?? '';
 };
 
+const resolveFlattenTransitionEndpointForDiagram = (
+  instances: Map<string, RenderedBlock[]>,
+  endpoint: any,
+  role: 'from' | 'to'
+): FlattenTransitionResolvedEndpoint | null => {
+  const key = getInstanceKey(endpoint);
+  const matchedInstances = instances.get(key);
+
+  if (!matchedInstances || matchedInstances.length === 0) {
+    return null;
+  }
+
+  for (const instance of matchedInstances) {
+    const resolved = resolveFlattenTransitionEndpointInInstance(instance, endpoint, role);
+    if (!resolved) {
+      continue;
+    }
+
+    return {
+      renderedBlock: resolved.renderedBlock,
+      node: resolved.node,
+      box: {
+        x: resolved.renderedBlock.x + resolved.box.x,
+        y: resolved.renderedBlock.y + resolved.box.y,
+        width: resolved.box.width,
+        height: resolved.box.height,
+      },
+    };
+  }
+
+  return null;
+};
+
+const resolveFlattenTransitionEndpointInInstance = (
+  instance: RenderedBlock,
+  endpoint: any,
+  role: 'from' | 'to'
+): FlattenTransitionResolvedEndpoint | null => {
+  const targetName = endpoint?.nodeName;
+  if (!targetName) {
+    return null;
+  }
+
+  // 1) direct node: allow any node type
+  const directNode = instance.nodes.get(targetName);
+  if (directNode) {
+    return {
+      renderedBlock: instance,
+      node: directNode.def,
+      box: directNode.box,
+    };
+  }
+
+  const effectiveGroupBox = getEffectiveGroupBox(instance.metrics, instance.def.groups, targetName);
+
+  if (effectiveGroupBox) {
+    const groupDef = (instance.def.groups ?? []).find((g) => g.name === targetName);
+    return {
+      renderedBlock: instance,
+      node: {
+        name: targetName,
+        type: 'rect',
+        shape: groupDef?.shape,
+      } as Node,
+
+      box: effectiveGroupBox,
+    };
+  }
+
+  const memberNames = instance.metrics.groupNodeMembers.get(targetName);
+  if (!memberNames?.size) {
+    return null;
+  }
+
+  const anchor = (endpoint.anchor ?? 'right') as Side;
+
+  const members: FlattenTransitionResolvedEndpoint[] = [...memberNames]
+    .map((name) => instance.nodes.get(name))
+    .filter(Boolean)
+    .map((renderedNode) => ({
+      renderedBlock: instance,
+      node: renderedNode!.def,
+      box: renderedNode!.box,
+    }));
+
+  if (!members.length) {
+    return null;
+  }
+
+  if (anchor === 'left') {
+    return members.reduce((best, current) => (current.box.x < best.box.x ? current : best));
+  }
+
+  if (anchor === 'right') {
+    return members.reduce((best, current) =>
+      current.box.x + current.box.width > best.box.x + best.box.width ? current : best
+    );
+  }
+
+  if (anchor === 'top') {
+    return members.reduce((best, current) => (current.box.y < best.box.y ? current : best));
+  }
+
+  return members.reduce((best, current) =>
+    current.box.y + current.box.height > best.box.y + best.box.height ? current : best
+  );
+};
 const resolveDiagramEndpoints = (
   instances: Map<string, RenderedBlock[]>,
-  endpoint: any
+  endpoint: any,
+  connector?: Connection,
+  endpointRole: 'from' | 'to' = 'from'
 ): ResolvedEndpoint[] => {
   const key = getInstanceKey(endpoint);
   const matchedInstances = instances.get(key);
@@ -4502,7 +8743,7 @@ const resolveDiagramEndpoints = (
   }
 
   return matchedInstances.map((instance) => {
-    const local = resolveLocalEndpoint(instance, endpoint);
+    const local = resolveLocalEndpoint(instance, endpoint, connector, endpointRole);
 
     return {
       point: instance.toGlobal(local.point),
@@ -4515,6 +8756,8 @@ const resolveDiagramEndpoints = (
             height: local.box.height,
           }
         : undefined,
+      edgeAxis: local.edgeAxis,
+      isGroup: local.isGroup,
     };
   });
 };
@@ -4547,6 +8790,13 @@ const expandBox = (box: Box, padX: number, padY = padX): Box => ({
   y: box.y - padY,
   width: box.width + padX * 2,
   height: box.height + padY * 2,
+});
+
+const scaleBoxFromOrigin = (box: Box, origin: Point, scale: number): Box => ({
+  x: origin.x + (box.x - origin.x) * scale,
+  y: origin.y + (box.y - origin.y) * scale,
+  width: box.width * scale,
+  height: box.height * scale,
 });
 
 const mergeBoxes = (...boxes: Array<Box | undefined>) => {
@@ -4606,7 +8856,7 @@ const getBlockAnchorAlignment = (
     };
   }
 
-  const groupBox = metrics.groups.get(anchorName);
+  const groupBox = getEffectiveGroupBox(metrics, block.groups, anchorName);
   if (groupBox) {
     return {
       alignX: groupBox.x + groupBox.width / 2,
@@ -4628,6 +8878,218 @@ const getBlockAnchorAlignment = (
   return {
     alignX: metrics.totalWidth / 2,
     alignY: metrics.totalHeight / 2,
+  };
+};
+
+const isIndexedPortEndpoint = (endpoint: any) =>
+  endpoint?.nodeName &&
+  endpoint?.anchor &&
+  endpoint?.portIndex !== undefined &&
+  endpoint?.portIndex !== null;
+
+const resolveBlockLocalEndpoint = (
+  block: Block,
+  metrics: BlockMetrics,
+  endpoint: any
+): ResolvedEndpoint | null => {
+  const targetName = endpoint?.nodeName;
+  if (!targetName) {
+    return null;
+  }
+
+  const anchor = (endpoint.anchor ?? 'right') as Side;
+  const portIndex = Number(endpoint.portIndex ?? 0);
+  const useFixedSlot = endpoint?.portIndex !== undefined && endpoint?.portIndex !== null;
+
+  const nodeBox = metrics.nodeShapes.get(targetName);
+  if (nodeBox) {
+    const nodeDef = (block.nodes ?? []).find((n) => n.name === targetName);
+
+    const anchorBox =
+      nodeDef?.type === 'stacked'
+        ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
+        : getNodeVisualAnchorBox(nodeDef, nodeBox);
+
+    return {
+      point: getAnchorPoint(
+        anchorBox,
+        anchor,
+        portIndex,
+        undefined,
+        undefined,
+        nodeDef?.type,
+        nodeDef?.shape,
+        useFixedSlot
+      ),
+      side: anchor,
+      box: anchorBox,
+    };
+  }
+
+  const groupBox = getEffectiveGroupBox(metrics, block.groups, targetName);
+  if (groupBox) {
+    return {
+      point: getAnchorPoint(
+        groupBox,
+        anchor,
+        portIndex,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        useFixedSlot
+      ),
+      side: anchor,
+      box: groupBox,
+    };
+  }
+
+  return null;
+};
+
+const shiftPlacedBlockToMatchEndpoints = (
+  sourcePlaced: { box: Box },
+  sourceLocal: ResolvedEndpoint,
+  targetPlaced: { box: Box },
+  targetLocal: ResolvedEndpoint
+) => {
+  if (!sourceLocal.side || !targetLocal.side) {
+    return;
+  }
+
+  const sourceGlobalX = sourcePlaced.box.x + sourceLocal.point.x;
+  const sourceGlobalY = sourcePlaced.box.y + sourceLocal.point.y;
+  const targetGlobalX = targetPlaced.box.x + targetLocal.point.x;
+  const targetGlobalY = targetPlaced.box.y + targetLocal.point.y;
+
+  const horizontalConstraint =
+    isHorizontalSide(sourceLocal.side) && isHorizontalSide(targetLocal.side);
+
+  const verticalConstraint = isVerticalSide(sourceLocal.side) && isVerticalSide(targetLocal.side);
+
+  if (horizontalConstraint) {
+    targetPlaced.box.y += sourceGlobalY - targetGlobalY;
+    return;
+  }
+
+  if (verticalConstraint) {
+    targetPlaced.box.x += sourceGlobalX - targetGlobalX;
+    return;
+  }
+
+  // Mixed-side fallback:
+  // keep the dominant routing axis stable based on the target anchor.
+  if (isHorizontalSide(targetLocal.side)) {
+    targetPlaced.box.y += sourceGlobalY - targetGlobalY;
+    return;
+  }
+
+  if (isVerticalSide(targetLocal.side)) {
+    targetPlaced.box.x += sourceGlobalX - targetGlobalX;
+  }
+};
+
+const normalizePlacedBlocks = (
+  placedBlocks: Array<{
+    key: string;
+    block: Block;
+    box: Box;
+  }>
+) => {
+  if (!placedBlocks.length) {
+    return { totalWidth: 0, totalHeight: 0 };
+  }
+
+  const minX = Math.min(...placedBlocks.map((p) => p.box.x));
+  const minY = Math.min(...placedBlocks.map((p) => p.box.y));
+
+  if (minX < 0 || minY < 0) {
+    const shiftX = minX < 0 ? -minX : 0;
+    const shiftY = minY < 0 ? -minY : 0;
+
+    for (const placed of placedBlocks) {
+      placed.box.x += shiftX;
+      placed.box.y += shiftY;
+    }
+  }
+
+  return {
+    totalWidth: Math.max(...placedBlocks.map((p) => p.box.x + p.box.width), 0),
+    totalHeight: Math.max(...placedBlocks.map((p) => p.box.y + p.box.height), 0),
+  };
+};
+
+const alignPlacedBlocksToIndexedConnections = (
+  placedBlocks: Array<{
+    key: string;
+    block: Block;
+    box: Box;
+  }>,
+  metricSource: Array<{
+    key: string;
+    block: Block;
+    metrics: BlockMetrics;
+  }>,
+  connections: Connection[]
+) => {
+  const placedByKey = new Map(placedBlocks.map((p) => [p.key, p]));
+  const metricsByKey = new Map(metricSource.map((m) => [m.key, m]));
+
+  // Iterate a few times so chained indexed constraints settle.
+  for (let pass = 0; pass < 3; pass++) {
+    for (const connection of connections ?? []) {
+      const fromEp = connection.from as any;
+      const toEp = connection.to as any;
+
+      const fromKey = getInstanceKey(fromEp);
+      const toKey = getInstanceKey(toEp);
+
+      if (!fromKey || !toKey || fromKey === toKey) {
+        continue;
+      }
+
+      const fromPlaced = placedByKey.get(fromKey);
+      const toPlaced = placedByKey.get(toKey);
+      const fromMetricEntry = metricsByKey.get(fromKey);
+      const toMetricEntry = metricsByKey.get(toKey);
+
+      if (!fromPlaced || !toPlaced || !fromMetricEntry || !toMetricEntry) {
+        continue;
+      }
+
+      const fromLocal = resolveBlockLocalEndpoint(
+        fromMetricEntry.block,
+        fromMetricEntry.metrics,
+        fromEp
+      );
+      const toLocal = resolveBlockLocalEndpoint(toMetricEntry.block, toMetricEntry.metrics, toEp);
+
+      if (!fromLocal || !toLocal) {
+        continue;
+      }
+
+      const fromIndexed = isIndexedPortEndpoint(fromEp);
+      const toIndexed = isIndexedPortEndpoint(toEp);
+
+      if (!fromIndexed && !toIndexed) {
+        continue;
+      }
+
+      const shouldAlignIndexed = ((connection as any).alignToIndexedPort ?? false) !== false;
+      if (!shouldAlignIndexed) {
+        continue;
+      }
+
+      shiftPlacedBlockToMatchEndpoints(fromPlaced, fromLocal, toPlaced, toLocal);
+    }
+  }
+
+  const normalized = normalizePlacedBlocks(placedBlocks);
+
+  return {
+    placedBlocks,
+    totalWidth: normalized.totalWidth,
+    totalHeight: normalized.totalHeight,
   };
 };
 
@@ -4701,17 +9163,38 @@ export const drawBlockDiagram = (
   const placedBlocks = metricSource.map((m, i) => ({
     key: m.key,
     block: m.block,
-    box: arranged.boxes[i],
+    box: { ...arranged.boxes[i] },
   }));
 
-  const totalWidth = arranged.width;
-  const totalHeight = arranged.height;
+  const alignedDiagram = alignPlacedBlocksToIndexedConnections(
+    placedBlocks,
+    metricSource,
+    connections
+  );
 
-  const diagramLeftSpace = diagramAnnotations.left ? 44 : 0;
-  const diagramRightSpace = diagramAnnotations.right ? 44 : 0;
-  const diagramTopSpace = diagramAnnotations.top ? 28 : 0;
-  const diagramBottomSpace = diagramAnnotations.bottom ? 28 : 0;
+  const totalWidth = alignedDiagram.totalWidth;
+  const totalHeight = alignedDiagram.totalHeight;
 
+  const diagramLeftSpace = getAnnotationReservedSpace(
+    diagramAnnotations.left,
+    DIAGRAM_ANNOTATION_FONT_SIZE,
+    ANNOTATION_SPACE
+  );
+  const diagramRightSpace = getAnnotationReservedSpace(
+    diagramAnnotations.right,
+    DIAGRAM_ANNOTATION_FONT_SIZE,
+    ANNOTATION_SPACE
+  );
+  const diagramTopSpace = getAnnotationReservedSpace(
+    diagramAnnotations.top,
+    DIAGRAM_ANNOTATION_FONT_SIZE,
+    ANNOTATION_SPACE
+  );
+  const diagramBottomSpace = getAnnotationReservedSpace(
+    diagramAnnotations.bottom,
+    DIAGRAM_ANNOTATION_FONT_SIZE,
+    ANNOTATION_SPACE
+  );
   const rootX = position.x + OUTER_MARGIN + diagramLeftSpace;
   const rootY = position.y + OUTER_MARGIN + (title ? TITLE_HEIGHT : 0) + diagramTopSpace;
 
@@ -4732,23 +9215,49 @@ export const drawBlockDiagram = (
 
   svg.attr('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
 
+  const normalizeRotateRight = (value?: number | null): 0 | 1 | 2 | 3 => {
+    const n = Number(value ?? 0);
+    if (!Number.isFinite(n)) {
+      return 0;
+    }
+
+    const normalized = ((Math.round(n) % 4) + 4) % 4;
+    return normalized as 0 | 1 | 2 | 3;
+  };
+
+  const getQuarterTurnRotationDeg = (rotateRight?: number | null) =>
+    normalizeRotateRight(rotateRight) * 90;
+
   if (title) {
-    svg
-      .append('text')
-      .attr('x', rootX + totalWidth / 2)
-      .attr('y', OUTER_MARGIN - 19)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'hanging')
-      .attr('class', 'blockDiagramTitle')
-      .attr('font-size', TITLE_FONT_SIZE)
-      .text(title);
+    appendMultilineText(svg as any, title, rootX + totalWidth / 2, OUTER_MARGIN - 19, {
+      anchor: 'middle',
+      fontSize: TITLE_FONT_SIZE,
+      fill: 'black',
+      dominantBaseline: 'hanging',
+      lineHeight: TITLE_FONT_SIZE + 4,
+    }).attr('class', 'blockDiagramTitle');
   }
   const root = svg.append('g').attr('transform', `translate(${rootX}, ${rootY})`);
+
+  const diagramRotation = getQuarterTurnRotationDeg(
+    (blockDiagram.diagram as any)?.rotateRight ?? (blockDiagram as any)?.rotateRight
+  );
 
   const componentGroup = root
     .append('g')
     .attr('class', 'component')
     .attr('id', `component_${component_id}`);
+
+  const blockLayer = componentGroup.append('g').attr('class', 'diagram-blocks');
+  const connLayer = componentGroup.append('g').attr('class', 'diagram-connections');
+  const annotationOverlay = componentGroup.append('g').attr('class', 'diagram-block-annotations');
+
+  if (diagramRotation !== 0) {
+    const cx = totalWidth / 2;
+    const cy = totalHeight / 2;
+
+    componentGroup.attr('transform', `rotate(${diagramRotation}, ${cx}, ${cy})`);
+  }
 
   const instances = new Map<string, RenderedBlock[]>();
   const unitIndexAllocator: UnitIndexAllocator = { next: 0 };
@@ -4756,7 +9265,8 @@ export const drawBlockDiagram = (
   for (const [blockIndex, placement] of placedBlocks.entries()) {
     const rendered = renderBlock(
       svg,
-      componentGroup,
+      blockLayer,
+      annotationOverlay,
       placement.block,
       placement.box.x,
       placement.box.y,
@@ -4773,39 +9283,42 @@ export const drawBlockDiagram = (
   }
 
   if (connections.length) {
-    const connLayer = componentGroup.append('g').attr('class', 'diagram-connections');
-
     for (const connection of connections) {
-      const fromEndpoints = resolveDiagramEndpoints(instances, connection.from);
-      const toEndpoints = resolveDiagramEndpoints(instances, connection.to);
+      const fromResolved = resolveFlattenTransitionEndpointForDiagram(
+        instances,
+        connection.from,
+        'from'
+      );
+      const toResolved = resolveFlattenTransitionEndpointForDiagram(instances, connection.to, 'to');
 
-      for (let from of fromEndpoints) {
-        for (let to of toEndpoints) {
-          const fromIsEdgeMid = (connection.from as any)?.edgeAnchor === 'mid';
-          const toIsEdgeMid = (connection.to as any)?.edgeAnchor === 'mid';
+      const transition = (connection as any).transition ?? 'default';
 
-          if (fromIsEdgeMid) {
-            const offsetX = to.point.x < from.point.x ? -28 : 28;
-            from = {
-              ...from,
-              point: {
-                x: from.point.x + offsetX,
-                y: from.point.y,
-              },
-            };
-          }
+      if (transition === 'flatten' && fromResolved && toResolved) {
+        const unitId = `unit_${unitIndexAllocator.next++}`;
 
-          if (toIsEdgeMid) {
-            const offsetX = from.point.x < to.point.x ? -28 : 28;
-            to = {
-              ...to,
-              point: {
-                x: to.point.x + offsetX,
-                y: to.point.y,
-              },
-            };
-          }
+        const special = drawSpecialTransitionConnector(
+          connLayer,
+          connection,
+          unitId,
+          fromResolved.node,
+          fromResolved.box,
+          toResolved.node,
+          toResolved.box,
+          'horizontal',
+          (connection.from as any)?.anchor,
+          (connection.to as any)?.anchor
+        );
 
+        if (special) {
+          continue;
+        }
+      }
+
+      const fromEndpoints = resolveDiagramEndpoints(instances, connection.from, connection, 'from');
+      const toEndpoints = resolveDiagramEndpoints(instances, connection.to, connection, 'to');
+
+      for (const from of fromEndpoints) {
+        for (const to of toEndpoints) {
           const unitId = `unit_${unitIndexAllocator.next++}`;
 
           drawConnector(
@@ -4821,7 +9334,11 @@ export const drawBlockDiagram = (
             from.box,
             to.box,
             isEdgeEndpoint(connection.from),
-            isEdgeEndpoint(connection.to)
+            isEdgeEndpoint(connection.to),
+            undefined,
+            undefined,
+            from.isGroup ?? false,
+            to.isGroup ?? false
           );
         }
       }

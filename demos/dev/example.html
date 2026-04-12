@@ -27,14 +27,13 @@ block ResidualUnit
 layout: horizontal
 gap: 22
 color: "white"
-style: box
 
 nodes
 text x label: "x"
 rect l1 label: "l1" subtext: "3x3 stride=2" size: (150,50) style: rounded stroke: "black"
 rect l2 label: "l2"subtext: "3x3 stride=2" size: (110,50) stroke: "black"
 circle add label: "+" size: (28,28)
-rect l3 label: "l3" style: rounded
+rect l3 label: "l3" shape: rounded
 circle r1 label: "r1" 
 circle r2 label: "r2"
 circle r3 label: "r3"
@@ -64,7 +63,7 @@ block DecoderUnit
 layout: vertical
 gap: 18
 color: "white"
-style: rounded
+shape: rounded
 annotation.top: "Decoder"
 annotation.bottom: "Decoder"
 annotation.right: "Decoder"

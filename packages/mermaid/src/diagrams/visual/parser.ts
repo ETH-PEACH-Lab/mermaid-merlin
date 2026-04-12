@@ -4,7 +4,7 @@ import type { ParserDefinition } from '../../diagram-api/types.js';
 import { log } from '../../logger.js';
 import { populateCommonDb } from '../common/populateCommonDb.js';
 import { db } from './db.js';
-import type { Use, Annotation, Node } from './types.js';
+import type { Use, Annotation } from './types.js';
 
 const populate = (ast: VisualDiagram) => {
   populateCommonDb(ast, db);
@@ -96,25 +96,95 @@ const populate = (ast: VisualDiagram) => {
                   }
                 : undefined,
               color: e1.color,
-              style: e1.style,
-              annotations: (e1.annotations ?? []).map((e2: Annotation) => ({
-                side: e2.side,
-                value: e2.value,
-              })),
+              strokeColor: e1.strokeColor,
+              strokeStyle: e1.strokeStyle,
+              strokeWidth: e1.strokeWidth,
+              shape: e1.shape,
+              annotations: (e1?.annotations?.annotationValues ?? []).map(
+                (e2: any, index: number) => ({
+                  side: e2.side,
+                  value: e2.value,
+                  shiftLeft: e2.shiftLeft,
+                  shiftRight: e2.shiftRight,
+                  shiftTop: e2.shiftTop,
+                  shiftBottom: e2.shiftBottom,
+                  gap: e1?.annotations?.annotationProperties?.gap,
+                  fontFamily: e1?.annotations?.annotationProperties?.fontFamily,
+                  fontSize: e1?.annotations?.annotationProperties?.fontSize,
+                  fontWeight: e1?.annotations?.annotationProperties?.fontWeight,
+                  fontStyle: e1?.annotations?.annotationProperties?.fontStyle,
+                  fontColor: e1?.annotations?.annotationProperties?.fontColor,
+                })
+              ),
+              labelProperties: {
+                fontColor: e1.labelProperties?.fontColor,
+                fontFamily: e1.labelProperties?.fontFamily,
+                fontSize: e1.labelProperties?.fontSize,
+                fontWeight: e1.labelProperties?.fontWeight,
+                fontStyle: e1.labelProperties?.fontStyle,
+              },
+
               nodes: (e1.nodes?.nodes ?? []).map((e2: any) => {
-                if (e2.type === 'text' || e2.type === 'rect' || e2.type === 'circle') {
+                if (
+                  e2.type === 'text' ||
+                  e2.type === 'rect' ||
+                  e2.type === 'circle' ||
+                  e2.type === 'arrow' ||
+                  e2.type === 'trapezoid'
+                ) {
                   return {
                     type: e2.type,
                     name: e2.name,
-                    label: e2.label,
-                    labelOrientation: e2.labelOrientation,
-                    labelSubtext: e2.labelSubtext,
-                    opLabel: e2.opLabel,
-                    opLabelSubtext: e2.opLabelSubtext,
-                    annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
-                      side: e3.side,
-                      value: e3.value,
-                    })),
+                    labelProperties: {
+                      labelText: e2.labelProperties?.labelText,
+                      labelOrientation: e2.labelProperties?.labelOrientation
+                        ? {
+                            orientation: e2.labelProperties?.labelOrientation?.orientation,
+                            side: e2.labelProperties?.labelOrientation?.side,
+                          }
+                        : undefined,
+                      labelFontColor: e2.labelProperties?.labelFontColor,
+                      labelFontFamily: e2.labelProperties?.labelFontFamily,
+                      labelFontSize: e2.labelProperties?.labelFontSize,
+                      labelFontWeight: e2.labelProperties?.labelFontWeight,
+                      labelFontStyle: e2.labelProperties?.labelFontStyle,
+                    },
+
+                    subLabelProperties: {
+                      subLabelText: e2.subLabelProperties?.subLabelText,
+                      subLabelFontColor: e2.subLabelProperties?.subLabelFontColor,
+                      subLabelFontFamily: e2.subLabelProperties?.subLabelFontFamily,
+                      subLabelFontSize: e2.subLabelProperties?.subLabelFontSize,
+                      subLabelFontWeight: e2.subLabelProperties?.subLabelFontWeight,
+                      subLabelFontStyle: e2.subLabelProperties?.subLabelFontStyle,
+                    },
+                    opLabelProperties: {
+                      opLabelText: e2.opLabelProperties?.opLabelText,
+                      opLabelFontColor: e2.opLabelProperties?.opLabelFontColor,
+                      opLabelFontFamily: e2.opLabelProperties?.opLabelFontFamily,
+                      opLabelFontSize: e2.opLabelProperties?.opLabelFontSize,
+                      opLabelFontWeight: e2.opLabelProperties?.opLabelFontWeight,
+                      opLabelFontStyle: e2.opLabelProperties?.opLabelFontStyle,
+                      opLabelSubtext: e2.opLabelProperties?.opLabelSubtext,
+                    },
+
+                    annotations: (e2?.annotations?.annotationValues ?? []).map(
+                      (e3: any, index: number) => ({
+                        side: e3.side,
+                        value: e3.value,
+                        shiftLeft: e3.shiftLeft,
+                        shiftRight: e3.shiftRight,
+                        shiftTop: e3.shiftTop,
+                        shiftBottom: e3.shiftBottom,
+                        gap: e2?.annotations?.annotationProperties?.gap,
+                        fontFamily: e2?.annotations?.annotationProperties?.fontFamily,
+                        fontSize: e2?.annotations?.annotationProperties?.fontSize,
+                        fontWeight: e2?.annotations?.annotationProperties?.fontWeight,
+                        fontStyle: e2?.annotations?.annotationProperties?.fontStyle,
+                        fontColor: e2?.annotations?.annotationProperties?.fontColor,
+                      })
+                    ),
+
                     size: e2.size
                       ? {
                           width: e2.size.width,
@@ -122,8 +192,11 @@ const populate = (ast: VisualDiagram) => {
                         }
                       : undefined,
                     color: e2.color,
-                    style: e2.style,
-                    stroke: e2.stroke,
+                    shape: e2.shape,
+                    strokeColor: e2.strokeColor,
+                    strokeStyle: e2.strokeStyle,
+                    strokeWidth: e2.strokeWidth,
+                    direction: e2.direction,
                   };
                 } else {
                   return {
@@ -137,16 +210,60 @@ const populate = (ast: VisualDiagram) => {
                         labels: e3.labels,
                       })),
                     kernelSize: e2.kernelSize,
-                    label: e2.label,
-                    labelSubtext: e2.labelSubtext,
-                    opLabel: e2.opLabel,
-                    opLabelSubtext: e2.opLabelSubtext,
-                    annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
-                      side: e3.side,
-                      value: e3.value,
-                    })),
+                    filterSpacing: e2.filterSpacing,
+                    labelProperties: {
+                      labelText: e2.labelProperties?.labelText,
+                      labelFontColor: e2.labelProperties?.labelFontColor,
+                      labelFontFamily: e2.labelProperties?.labelFontFamily,
+                      labelFontSize: e2.labelProperties?.labelFontSize,
+                      labelFontWeight: e2.labelProperties?.labelFontWeight,
+                      labelFontStyle: e2.labelProperties?.labelFontStyle,
+                    },
+
+                    subLabelProperties: {
+                      subLabelText: e2.subLabelProperties?.subLabelText,
+                      subLabelFontColor: e2.subLabelProperties?.subLabelFontColor,
+                      subLabelFontFamily: e2.subLabelProperties?.subLabelFontFamily,
+                      subLabelFontSize: e2.subLabelProperties?.subLabelFontSize,
+                      subLabelFontWeight: e2.subLabelProperties?.subLabelFontWeight,
+                      subLabelFontStyle: e2.subLabelProperties?.subLabelFontStyle,
+                    },
+
+                    opLabelProperties: {
+                      opLabelText: e2.opLabelProperties?.opLabelText,
+                      opLabelFontColor: e2.opLabelProperties?.opLabelFontColor,
+                      opLabelFontFamily: e2.opLabelProperties?.opLabelFontFamily,
+                      opLabelFontSize: e2.opLabelProperties?.opLabelFontSize,
+                      opLabelFontWeight: e2.opLabelProperties?.opLabelFontWeight,
+                      opLabelFontStyle: e2.opLabelProperties?.opLabelFontStyle,
+                      opLabelSubtext: e2.opLabelProperties?.opLabelSubtext,
+                    },
+
+                    annotations: (e2?.annotations?.annotationValues ?? []).map(
+                      (e3: any, index: number) => ({
+                        side: e3.side,
+                        value: e3.value,
+                        shiftLeft: e3.shiftLeft,
+                        shiftRight: e3.shiftRight,
+                        shiftTop: e3.shiftTop,
+                        shiftBottom: e3.shiftBottom,
+                        gap: e2?.annotations?.annotationProperties?.gap,
+                        fontFamily: e2?.annotations?.annotationProperties?.fontFamily,
+                        fontSize: e2?.annotations?.annotationProperties?.fontSize,
+                        fontWeight: e2?.annotations?.annotationProperties?.fontWeight,
+                        fontStyle: e2?.annotations?.annotationProperties?.fontStyle,
+                        fontColor: e2?.annotations?.annotationProperties?.fontColor,
+                      })
+                    ),
+
                     size: e2.size,
                     color: e2.color?.color ?? e2.color,
+                    strokeColor: e2.strokeColor,
+                    strokeStyle: e2.strokeStyle,
+                    strokeWidth: e2.strokeWidth,
+                    outerStrokeColor: e2.outerStrokeColor,
+                    outerStrokeStyle: e2.outerStrokeStyle,
+                    outerStrokeWidth: e2.outerStrokeWidth,
                   };
                 }
               }),
@@ -156,17 +273,55 @@ const populate = (ast: VisualDiagram) => {
                 members: e2.members,
                 layout: e2.layout,
                 anchor: e2.anchor,
+                anchorSource: e2.anchorSource,
+                anchorTarget: e2.anchorTarget,
                 gap: e2.gap,
                 color: e2.color,
-                stroke: e2.stroke,
-                markerType: e2.markerType,
-                markerLabel: e2.markerLabel,
-                markerPosition: e2.markerPosition,
-                annotations: (e2.annotations ?? []).map((e3: Annotation) => ({
+                strokeColor: e2.strokeColor,
+                strokeStyle: e2.strokeStyle,
+                strokeWidth: e2.strokeWidth,
+
+                markerProperties: {
+                  markerType: e2.markerProperties?.markerType,
+                  markerColor: e2.markerProperties?.markerColor,
+                  markerPosition: e2.markerProperties?.markerPosition,
+                  markerLabelText: e2.markerProperties?.markerLabelText,
+                  markerLabelFontColor: e2.markerProperties?.markerLabelFontColor,
+                  markerLabelFontFamily: e2.markerProperties?.markerLabelFontFamily,
+                  markerLabelFontSize: e2.markerProperties?.markerLabelFontSize,
+                  markerLabelFontWeight: e2.markerProperties?.markerLabelFontWeight,
+                  markerLabelFontStyle: e2.markerProperties?.markerLabelFontStyle,
+                  markerLeft: e2.markerProperties?.markerLeft,
+                  markerRight: e2.markerProperties?.markerRight,
+                  markerTop: e2.markerProperties?.markerTop,
+                  markerBottom: e2.markerProperties?.markerBottom,
+                },
+                colorBoxAdjustments: e2.colorBoxAdjustments,
+
+                shiftProperties: {
+                  shiftLeft: e2.shiftProperties?.shiftLeft,
+                  shiftRight: e2.shiftProperties?.shiftRight,
+                  shiftTop: e2.shiftProperties?.shiftTop,
+                  shiftBottom: e2.shiftProperties?.shiftBottom,
+                },
+
+                annotations: (e2?.annotations?.annotationValues ?? []).map((e3: any) => ({
                   side: e3.side,
                   value: e3.value,
+                  shiftLeft: e3.shiftLeft,
+                  shiftRight: e3.shiftRight,
+                  shiftTop: e3.shiftTop,
+                  shiftBottom: e3.shiftBottom,
+                  gap: e2?.annotations?.annotationProperties?.gap,
+                  fontFamily: e2?.annotations?.annotationProperties?.fontFamily,
+                  fontSize: e2?.annotations?.annotationProperties?.fontSize,
+                  fontWeight: e2?.annotations?.annotationProperties?.fontWeight,
+                  fontStyle: e2?.annotations?.annotationProperties?.fontStyle,
+                  fontColor: e2?.annotations?.annotationProperties?.fontColor,
                 })),
-                colorBoxAdjustments: e2.colorBoxAdjustments,
+
+                align: e2.align,
+                shape: e2.shape,
               })),
 
               edges: (e1.edges?.edges ?? []).map((e2: any) => ({
@@ -191,12 +346,31 @@ const populate = (ast: VisualDiagram) => {
                       edgeName: e2.to.edgeName,
                       edgeAnchor: e2.to.edgeAnchor,
                     },
+                shape: e2.shape,
                 style: e2.style,
                 transition: e2.transition,
                 color: e2.color,
-                label: e2.label,
+                labelProperties: {
+                  labelText: e2.labelProperties?.labelText,
+                  labelFontColor: e2.labelProperties?.labelFontColor,
+                  labelFontFamily: e2.labelProperties?.labelFontFamily,
+                  labelFontSize: e2.labelProperties?.labelFontSize,
+                  labelFontWeight: e2.labelProperties?.labelFontWeight,
+                  labelFontStyle: e2.labelProperties?.labelFontStyle,
+                  labelShiftLeft: e2.labelProperties?.labelShiftLeft,
+                  labelShiftRight: e2.labelProperties?.labelShiftRight,
+                  labelShiftTop: e2.labelProperties?.labelShiftTop,
+                  labelShiftBottom: e2.labelProperties?.labelShiftBottom,
+                },
                 arrowheads: e2.arrowheads,
+                bidirectional: e2.bidirectional,
+                headOnly: e2.headOnly,
                 gap: e2.gap,
+                alignToIndexedPort: e2.alignToIndexedPort,
+                fromEdgeAnchorOffset: e2.fromEdgeAnchorOffset,
+                toEdgeAnchorOffset: e2.toEdgeAnchorOffset,
+                curveHeight: e2.curveHeight,
+                width: e2.width,
               })),
             })),
 
@@ -204,6 +378,7 @@ const populate = (ast: VisualDiagram) => {
               ? {
                   layout: blockDiagramDiagram.layout,
                   gap: blockDiagramDiagram.gap,
+                  rotateRight: blockDiagramDiagram.rotateRight,
                   uses: (blockDiagramDiagram.uses?.items ?? []).map((e: Use) => ({
                     name: e.name,
                     block: e.block,
@@ -235,17 +410,51 @@ const populate = (ast: VisualDiagram) => {
                           edgeAnchor: e.to.edgeAnchor,
                         },
 
+                    shape: e.shape,
                     style: e.style,
+                    lineStyle: e.lineStyle,
                     transition: e.transition,
                     color: e.color,
-                    label: e.label,
+                    labelProperties: {
+                      labelText: e.labelProperties?.labelText,
+                      labelFontColor: e.labelProperties?.labelFontColor,
+                      labelFontFamily: e.labelProperties?.labelFontFamily,
+                      labelFontSize: e.labelProperties?.labelFontSize,
+                      labelFontWeight: e.labelProperties?.labelFontWeight,
+                      labelFontStyle: e.labelProperties?.labelFontStyle,
+                      labelShiftLeft: e.labelProperties?.labelShiftLeft,
+                      labelShiftRight: e.labelProperties?.labelShiftRight,
+                      labelShiftTop: e.labelProperties?.labelShiftTop,
+                      labelShiftBottom: e.labelProperties?.labelShiftBottom,
+                    },
                     arrowheads: e.arrowheads,
                     gap: e.gap,
+                    alignToIndexedPort: e.alignToIndexedPort,
+                    fromEdgeAnchorOffset: e.fromEdgeAnchorOffset,
+                    toEdgeAnchorOffset: e.toEdgeAnchorOffset,
+                    curveHeight: e.curveHeight,
+                    width: e.width,
+                    bidirectional: e.bidirectional,
+                    headOnly: e.headOnly,
                   })),
-                  annotations: (blockDiagramDiagram.annotations ?? []).map((e3: Annotation) => ({
-                    side: e3.side,
-                    value: e3.value,
-                  })),
+                  annotations: (blockDiagramDiagram?.annotations?.annotationValues ?? []).map(
+                    (e2: any, index: number) => ({
+                      side: e2.side,
+                      value: e2.value,
+                      shiftLeft: e2.shiftLeft,
+                      shiftRight: e2.shiftRight,
+                      shiftTop: e2.shiftTop,
+                      shiftBottom: e2.shiftBottom,
+                      gap: blockDiagramDiagram?.annotations?.annotationProperties?.gap,
+                      fontFamily:
+                        blockDiagramDiagram?.annotations?.annotationProperties?.fontFamily,
+                      fontSize: blockDiagramDiagram?.annotations?.annotationProperties?.fontSize,
+                      fontWeight:
+                        blockDiagramDiagram?.annotations?.annotationProperties?.fontWeight,
+                      fontStyle: blockDiagramDiagram?.annotations?.annotationProperties?.fontStyle,
+                      fontColor: blockDiagramDiagram?.annotations?.annotationProperties?.fontColor,
+                    })
+                  ),
                 }
               : undefined,
           };
@@ -262,10 +471,15 @@ const populate = (ast: VisualDiagram) => {
             positionLabels: subDiagram.positionLabels ?? 'bottom',
             showArrowheads: subDiagram.showArrowheads,
             showBias: subDiagram.showBias,
+            edgeWidth: subDiagram.edgeWidth,
+            edgeColor: subDiagram.edgeColor ?? 'none',
+            neuronSpacing: subDiagram.neuronSpacing,
+            layerSpacing: subDiagram.layerSpacing,
             position: processPosition(subDiagram.position),
             elements: neuralNetworkLayer.map((e1: any) => ({
               layer: e1.layer,
               color: e1.color ?? 'none',
+              stroke: e1.stroke ?? 'none',
               nodes: (e1.nodes ?? []).map((e2: any) => ({
                 value: e2.value,
                 color: e2.color ?? 'none',

@@ -1,10 +1,19 @@
 import type { VisualDiagramConfig } from '../../config.type.js';
 import type { DiagramDBBase } from '../../diagram-api/types.js';
 
+export type TextFontWeight = 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+
+export type TextFontStyle = 'normal' | 'italic' | 'oblique';
+
 // Common interfaces
 export interface SizeDefinition {
   width: number;
   height: number;
+}
+
+export interface LabelOrientationDefinition {
+  orientation: 'vertical';
+  side: 'right' | 'left';
 }
 
 export interface SizeDefinitionColorBox {
@@ -74,11 +83,23 @@ export interface Block {
   gap?: number;
   size?: SizeDefinition;
   color?: string;
-  style?: 'box' | 'rounded';
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: 'solid' | 'dashed' | 'dotted';
+  shape?: 'rounded';
   annotations?: Annotation[];
+  labelProperties?: BlockLabelProperty;
   nodes?: Node[];
   groups?: Group[];
   edges?: Edge[];
+}
+
+export interface BlockLabelProperty {
+  fontColor?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: TextFontWeight;
+  fontStyle?: TextFontStyle;
 }
 
 export interface Group {
@@ -86,43 +107,72 @@ export interface Group {
   members: string[];
   layout?: 'horizontal' | 'vertical' | 'grid';
   anchor?: string;
+  anchorSource?: string;
+  anchorTarget?: string;
   gap?: number;
   color?: string;
-  stroke?: string;
-  markerType: 'bracket' | 'brace';
-  markerLabel: string;
-  markerPosition: 'bottom' | 'top';
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: 'solid' | 'dashed' | 'dotted';
+  markerProperties?: MarkerProperty;
+  shiftProperties?: ShiftProperty;
   annotations?: Annotation[];
-  ColorBoxAdjustments?: SizeDefinitionColorBox;
+  align?: boolean;
+  colorBoxAdjustments?: SizeDefinitionColorBox;
+  shape?: 'rounded';
+  shiftLeft?: number;
+  shiftRight?: number;
+  shiftTop?: number;
+  shiftBottom?: number;
 }
 
 export interface Node {
-  type: 'text' | 'rect' | 'circle' | 'stacked' | 'flatten' | 'fullyConnected';
+  type:
+    | 'text'
+    | 'rect'
+    | 'circle'
+    | 'stacked'
+    | 'flatten'
+    | 'fullyConnected'
+    | 'arrow'
+    | 'trapezoid';
   name: string;
-  label?: string;
-  labelOrientation?: 'horizontal' | 'vertical';
+  labelProperties?: LabelProperty;
+  subLabelProperties?: SubLabelProperty;
   annotations?: Annotation[];
   size?: SizeDefinition;
   color?: string | string[];
-  style?: 'box' | 'rounded';
-  stroke?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: 'solid' | 'dashed' | 'dotted';
+  outerStrokeColor?: string;
+  outerStrokeStyle?: 'solid' | 'dashed' | 'dotted';
+  outerStrokeWidth?: number;
   shape: string | CNNNeurons[];
   kernelSize?: string;
+  filterSpacing?: number;
   labelSubtext?: string;
-  opLabel?: string;
-  opLabelSubtext?: string;
+  opLabelProperties?: OpLabelProperty;
+  direction?: string;
 }
 
 export interface Edge {
   name: string;
   from: EndpointEdge;
   to: EndpointEdge;
-  style?: 'straight' | 'bow';
+  shape?: 'straight' | 'bow' | 'arc';
+  style: 'solid' | 'dashed' | 'dotted';
+  width: number;
   transition?: 'default' | 'featureMap' | 'flatten' | 'fullyConnected';
   color?: string;
-  label?: string;
+  labelProperties?: LabelProperty;
   arrowheads?: number;
   gap?: number;
+  alignToIndexedPort?: boolean;
+  edgeAnchorOffset?: number;
+  curveHeight?: number;
+  bidirectional?: boolean;
+  headOnly?: boolean;
 }
 
 export type EndpointEdge =
@@ -139,6 +189,72 @@ export type EndpointEdge =
 export interface Annotation {
   side: Side;
   value: string;
+  shiftLeft?: number;
+  shiftRight?: number;
+  shiftBottom?: number;
+  shiftTop?: number;
+  gap?: number;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: TextFontWeight;
+  fontStyle?: TextFontStyle;
+  fontColor?: string;
+}
+
+export interface LabelProperty {
+  labelText?: string;
+  labelOrientation?: LabelOrientationDefinition;
+  labelFontColor?: string;
+  labelFontFamily?: string;
+  labelFontSize?: number;
+  labelFontWeight?: TextFontWeight;
+  labelFontStyle?: TextFontStyle;
+  labelShiftLeft?: number;
+  labelShiftRight?: number;
+  labelShiftTop?: number;
+  labelShiftBottom?: number;
+}
+
+export interface SubLabelProperty {
+  subLabelText?: string;
+  subLabelFontColor?: string;
+  subLabelFontFamily?: string;
+  subLabelFontSize?: number;
+  subLabelFontWeight?: TextFontWeight;
+  subLabelFontStyle?: TextFontStyle;
+}
+
+export interface MarkerProperty {
+  markerType: 'bracket' | 'brace';
+  markerColor: string;
+  markerPosition: 'bottom' | 'top' | 'left' | 'right';
+  markerLabelText: string;
+  markerLabelFontColor?: string;
+  markerLabelFontFamily?: string;
+  markerLabelFontSize?: number;
+  markerLabelFontWeight?: TextFontWeight;
+  markerLabelFontStyle?: TextFontStyle;
+  markerLeft?: number;
+  markerRight?: number;
+  markerTop?: number;
+  markerBottom?: number;
+}
+
+export interface ShiftProperty {
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+}
+
+export interface OpLabelProperty {
+  opLabelText?: string;
+  opLabelFontColor?: string;
+  opLabelFontFamily?: string;
+  opLabelFontSize?: number;
+  opLabelFontWeight?: TextFontWeight;
+  opLabelFontStyle?: TextFontStyle;
+  opLabelSubtext: string;
 }
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
@@ -146,6 +262,7 @@ export type Side = 'left' | 'right' | 'top' | 'bottom';
 export interface Diagram {
   layout?: LayoutKind;
   gap?: number;
+  rotateRight?: 0 | 1 | 2 | 3 | 4;
   uses?: Use[];
   connections?: Connection[];
   annotations?: Annotation[];
@@ -162,12 +279,19 @@ export interface Use {
 export interface Connection {
   from: EndpointDiagram;
   to: EndpointDiagram;
-  style?: 'straight' | 'bow';
+  shape?: 'straight' | 'bow' | 'arc';
+  style: 'solid' | 'dashed' | 'dotted';
+  width: number;
   transition?: 'default' | 'featureMap' | 'flatten' | 'fullyConnected';
   color?: string;
-  label?: string;
+  labelProperties?: LabelProperty;
   arrowheads?: number;
   gap?: number;
+  alignToIndexedPort?: boolean;
+  edgeAnchorOffset?: number;
+  curveHeight?: number;
+  bidirectional?: boolean;
+  headOnly?: boolean;
 }
 
 export type EndpointDiagram =
@@ -198,12 +322,17 @@ export interface NeuralNetworkDiagram {
   positionLabels: 'top' | 'bottom';
   showArrowheads?: boolean;
   showBias?: boolean;
+  edgeWidth?: number;
+  edgeColor: string;
+  layerSpacing?: number;
+  neuronSpacing?: number;
   elements: NeuralNetworkLayer[];
 }
 
 export interface NeuralNetworkLayer {
   layer: string | number;
   color: string;
+  stroke: string;
   nodes: NeuralNetworkElement[];
 }
 
