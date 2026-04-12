@@ -1229,7 +1229,7 @@ const computeBlockMetrics = (
   const groupAnnotationMaps = new Map<string, Record<Side, Annotation | undefined>>();
   const nodeBoxes = new Map<string, Box>();
   const nodeShapeBoxes = new Map<string, Box>();
-  const annotations = getAnnotationMap(block.annotations);
+  const annotations = getAnnotationMap(block?.annotations);
   const outerLayout = block.layout ?? 'vertical';
   const defaultGap = block.gap ?? ROW_GAP;
 
@@ -4646,7 +4646,7 @@ export const drawBlockDiagram = (
   const position = parsePosition(blockDiagram.position);
   const elements = blockDiagram.elements ?? [];
   const title = String(blockDiagram.title ?? '');
-  const diagramAnnotations = getAnnotationMap((blockDiagram.diagram as any).annotations);
+  const diagramAnnotations = getAnnotationMap((blockDiagram.diagram as any)?.annotations);
 
   const blockMap = new Map(elements.map((b) => [b.name, b]));
   const uses = blockDiagram.diagram?.uses ?? [];
