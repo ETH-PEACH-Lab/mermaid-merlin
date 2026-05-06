@@ -196,6 +196,11 @@ const ABSOLUTE_MIN_NODE_SIZE = 2;
 
 const STACKED_OUTER_STROKE_PAD = 8;
 
+const STACKED3D_MIN_BODY_WIDTH = 34;
+const STACKED3D_MIN_BODY_HEIGHT = 92;
+const STACKED3D_THICKNESS_MIN = 10;
+const STACKED3D_THICKNESS_MAX = 24;
+
 const getStackedConnectorAnchorBox = (node: Node, box: Box): Box => {
   const fitted = getStackedFittedMetrics(node, box);
   if (!fitted) {
@@ -309,7 +314,37 @@ const getStackedMetrics = (
 };
 
 const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }): number => {
-  if (node.type === 'stacked' || node.type === 'flatten' || node.type === 'fullyConnected') {
+  if (node.type === 'cuboid') {
+    const fitted = getStacked3DFittedMetrics(node, {
+      x: 0,
+      y: 0,
+      width: size.width,
+      height: size.height,
+    });
+
+    if (fitted) {
+      return fitted.stackTop + fitted.metrics.visibleHeight;
+    }
+
+    return Math.max(1, size.height - getSpecialBottomReserved(node));
+  }
+
+  if (node.type === 'stacked') {
+    const fitted = getStackedFittedMetrics(node, {
+      x: 0,
+      y: 0,
+      width: size.width,
+      height: size.height,
+    });
+
+    if (fitted) {
+      return fitted.stackTop + fitted.metrics.visibleHeight;
+    }
+
+    return Math.max(1, size.height - getSpecialBottomReserved(node));
+  }
+
+  if (node.type === 'flatten' || node.type === 'fullyConnected') {
     return Math.max(1, size.height - getSpecialBottomReserved(node)) / 2;
   }
 
@@ -945,7 +980,19 @@ const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
       height: fitted.metrics.visibleHeight,
     };
   }
+  if (node.type === 'cuboid') {
+    const fitted = getStacked3DFittedMetrics(node, box);
+    if (!fitted) {
+      return box;
+    }
 
+    return {
+      x: fitted.stackLeft,
+      y: fitted.stackTop,
+      width: fitted.metrics.visibleWidth,
+      height: fitted.metrics.visibleHeight,
+    };
+  }
   if (node.type === 'flatten') {
     const fitted = getFlattenFittedMetrics(node, box);
     return {
@@ -1184,6 +1231,178 @@ const getStackedFittedMetrics = (node: Node, box: Box) => {
   return { shape, visual, featureScale, metrics, stackLeft, stackTop };
 };
 
+const getStacked3DDepthOffset = (
+  shapeDepth: number,
+  featureScale: number,
+  rectWidth: number,
+  rectHeight: number,
+  node: Node
+) => {
+  const explicit = Number((node as any).depthOffset ?? (node as any).perspectiveDepth);
+  if (Number.isFinite(explicit)) {
+    return Math.max(0, explicit);
+  }
+
+  return Math.max(0, shapeDepth * featureScale);
+};
+
+const getStacked3DSlabWidth = (
+  shapeWidth: number,
+  featureScale: number,
+  rectHeight: number,
+  node: Node
+) => {
+  const explicit = Number((node as any).slabWidth ?? (node as any).thickness);
+  if (Number.isFinite(explicit)) {
+    return Math.max(1, explicit);
+  }
+
+  const rawWidth = Math.max(1, shapeWidth * featureScale);
+
+  return Math.max(STACKED3D_THICKNESS_MIN, Math.min(STACKED3D_THICKNESS_MAX, rawWidth));
+};
+
+const getStacked3DMetrics = (
+  shape: { depth: number; width: number; height: number },
+  featureScale: number,
+  node: Node
+) => {
+  const rectHeight = Math.max(1, shape.height * featureScale);
+
+  // shape.depth  -> projected depth offset
+  // shape.height -> vertical height
+  // shape.width  -> thin slab width
+  const rectWidth = getStacked3DSlabWidth(shape.width, featureScale, rectHeight, node);
+
+  const depthOffset = getStacked3DDepthOffset(
+    shape.depth,
+    featureScale,
+    rectWidth,
+    rectHeight,
+    node
+  );
+
+  return {
+    rectWidth,
+    rectHeight,
+    depthOffset,
+    visibleWidth: rectWidth + depthOffset,
+    visibleHeight: rectHeight + depthOffset,
+  };
+};
+
+const getStacked3DNodeBodySize = (node: Node, block?: Block) => {
+  const requested = parseSize(node.size, {
+    width: STACKED3D_MIN_BODY_WIDTH,
+    height: STACKED3D_MIN_BODY_HEIGHT,
+  });
+
+  const hasExplicitSize = !!node.size;
+
+  if (hasExplicitSize) {
+    return {
+      width: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width),
+      height: Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height),
+    };
+  }
+
+  const shape = parse3DDims((node as any).shape)!;
+
+  const featureScale = 0.7;
+  const metrics = getStacked3DMetrics(shape, featureScale, node);
+  const bottomReserved = getSpecialBottomReserved(node, block);
+
+  const labelWidth =
+    estimateMultilineTextWidth(getNodeLabelText(node), getNodeLabelMainFontSize(node, block)) + 20;
+
+  return {
+    width: Math.max(
+      ABSOLUTE_MIN_NODE_SIZE,
+      STACKED3D_MIN_BODY_WIDTH,
+      metrics.visibleWidth,
+      labelWidth + 20
+    ),
+    height: Math.max(
+      ABSOLUTE_MIN_NODE_SIZE,
+      STACKED3D_MIN_BODY_HEIGHT,
+      metrics.visibleHeight + bottomReserved
+    ),
+  };
+};
+
+const getStacked3DFittedMetrics = (node: Node, box: Box) => {
+  const shape = parse3DDims((node as any).shape);
+  if (!shape) {
+    return null;
+  }
+
+  const visual = getSpecialVisualBox(node, box);
+
+  let featureScale = Math.min(
+    visual.width / Math.max(0.0001, shape.depth + shape.width),
+    visual.height / Math.max(0.0001, shape.depth + shape.height)
+  );
+
+  featureScale = Math.max(featureScale, 0.0001);
+
+  let metrics = getStacked3DMetrics(shape, featureScale, node);
+
+  for (let i = 0; i < 8; i++) {
+    const fitScale = Math.min(
+      visual.width / Math.max(1, metrics.visibleWidth),
+      visual.height / Math.max(1, metrics.visibleHeight)
+    );
+
+    if (Math.abs(fitScale - 1) < 0.005) {
+      break;
+    }
+
+    featureScale *= fitScale;
+    metrics = getStacked3DMetrics(shape, featureScale, node);
+  }
+
+  const stackLeft = visual.x + (visual.width - metrics.visibleWidth) / 2;
+  const stackTop = visual.y + (visual.height - metrics.visibleHeight) / 2;
+
+  return {
+    shape,
+    visual,
+    featureScale,
+    metrics,
+    stackLeft,
+    stackTop,
+
+    // The visible slab face starts after the perspective offset.
+    frontX: stackLeft,
+    frontY: stackTop + metrics.depthOffset,
+  };
+};
+
+const getStacked3DConnectorAnchorBox = (node: Node, box: Box): Box => {
+  const fitted = getStacked3DFittedMetrics(node, box);
+  if (!fitted) {
+    return box;
+  }
+
+  const baseBox = {
+    x: fitted.stackLeft,
+    y: fitted.stackTop,
+    width: fitted.metrics.visibleWidth,
+    height: fitted.metrics.visibleHeight,
+  };
+
+  if (node.outerStrokeColor !== undefined && node.outerStrokeColor !== null) {
+    return {
+      x: baseBox.x - STACKED_OUTER_STROKE_PAD,
+      y: baseBox.y - STACKED_OUTER_STROKE_PAD,
+      width: baseBox.width + STACKED_OUTER_STROKE_PAD * 2,
+      height: baseBox.height + STACKED_OUTER_STROKE_PAD * 2,
+    };
+  }
+
+  return baseBox;
+};
+
 const getFlattenFittedMetrics = (node: Node, box: Box) => {
   const shape = parse2DDims(typeof (node as any).shape === 'string' ? (node as any).shape : null);
 
@@ -1364,6 +1583,9 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Block) =>
   }
   if (node.type === 'stacked') {
     return getStackedNodeBodySize(node, block);
+  }
+  if (node.type === 'cuboid') {
+    return getStacked3DNodeBodySize(node, block);
   }
 
   if (node.type === 'flatten') {
@@ -2153,7 +2375,7 @@ const computeBlockMetrics = (
     };
 
     if (layout === 'horizontal') {
-      const memberAlignYs = items.map((i) => (alignMembers ? i.height / 2 : i.alignY));
+      const memberAlignYs = items.map((i) => i.alignY);
       const baseline = Math.max(...memberAlignYs);
 
       const minTop = Math.min(...items.map((i, idx) => baseline - memberAlignYs[idx]));
@@ -2163,10 +2385,10 @@ const computeBlockMetrics = (
 
       let x = 0;
 
-      const boxes = items.map((item) => {
+      const boxes = items.map((item, idx) => {
         const box = {
           x,
-          y: baseline - (alignMembers ? item.height / 2 : item.alignY) - minTop,
+          y: baseline - memberAlignYs[idx] - minTop,
           width: item.width,
           height: item.height,
         };
@@ -3452,7 +3674,7 @@ const getArcLift = (connector: Edge | Connection, start: Point, end: Point) => {
     return Math.max(10, explicit);
   }
 
-  // Default: larger horizontal span => taller arch
+  // default: larger horizontal span => taller arch
   const dx = Math.abs(end.x - start.x);
   return Math.max(30, Math.min(180, dx * 0.35));
 };
@@ -4480,31 +4702,6 @@ const drawProjectionLine = (
     .attr('stroke-linecap', dasharray ? 'round' : 'butt')
     .attr('opacity', 0.75)
     .attr('pointer-events', 'none');
-};
-
-const isRoundedRectLike = (node: Node | undefined) =>
-  !!node && node.type === 'rect' && node.shape === 'rounded';
-
-const getRoundedRectRightBoundaryX = (box: Box, y: number, radius = 8) => {
-  const r = Math.max(0, Math.min(radius, box.width / 2, box.height / 2));
-  if (r <= 0) {
-    return box.x + box.width;
-  }
-
-  const topArcCenterY = box.y + r;
-  const bottomArcCenterY = box.y + box.height - r;
-
-  let inset = 0;
-
-  if (y < topArcCenterY) {
-    const dy = topArcCenterY - y;
-    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
-  } else if (y > bottomArcCenterY) {
-    const dy = y - bottomArcCenterY;
-    inset = r - Math.sqrt(Math.max(0, r * r - dy * dy));
-  }
-
-  return box.x + box.width - inset;
 };
 
 const drawSpecialTransitionConnector = (
@@ -5817,6 +6014,150 @@ const drawGrowingDownLabelBlock = (
     }
   }
 };
+const drawStacked3DNode = (
+  group: d3.Selection<SVGGElement, unknown, any, any>,
+  node: Node,
+  box: Box,
+  block?: Block
+) => {
+  const fitted = getStacked3DFittedMetrics(node, box);
+  const nodeStrokeWidth = getNodeStrokeWidth(node, 1.1);
+  const outerStrokeWidth = getStackedOuterStrokeWidth(node, 1.4);
+
+  if (!fitted) {
+    return;
+  }
+
+  const { metrics, stackLeft, stackTop } = fitted;
+
+  const stroke = safeColorName(node.strokeColor, '#4d9488');
+  const strokeStyle = (node as any).strokeStyle as StrokeStyle | undefined;
+  const strokeDasharray = getStrokeDasharrayFromStyle(strokeStyle);
+
+  const outerStroke = safeColorName(node.outerStrokeColor, 'black');
+  const outerStrokeStyle = (node as any).outerStrokeStyle as StrokeStyle | undefined;
+  const outerStrokeDasharray = getStrokeDasharrayFromStyle(outerStrokeStyle);
+
+  const baseColor = safeColorName(!Array.isArray(node.color) ? node.color : '#bfe7d8', '#bfe7d8');
+
+  const frontFill = getLightenedColor(baseColor, 0.92);
+  const sideFill = getLightenedColor(baseColor, 1.0);
+  const topFill = getLightenedColor(baseColor, 1.1);
+
+  const t = metrics.rectWidth; // thin slab thickness
+  const h = metrics.rectHeight; // tall height
+  const d = metrics.depthOffset; // back-right perspective depth
+
+  const A = { x: stackLeft + d, y: stackTop };
+  const B = { x: stackLeft + d + t, y: stackTop };
+  const C = { x: stackLeft + t, y: stackTop + d };
+  const D = { x: stackLeft, y: stackTop + d };
+
+  const E = { x: stackLeft + d, y: stackTop + h };
+  const F = { x: stackLeft + d + t, y: stackTop + h };
+  const G = { x: stackLeft, y: stackTop + d + h };
+  const H = { x: stackLeft + t, y: stackTop + d + h };
+
+  const points = (ps: Point[]) => ps.map((p) => `${p.x},${p.y}`).join(' ');
+
+  const appendFace = (ps: Point[], fill: string, opacity: number) => {
+    const face = group
+      .append('polygon')
+      .attr('points', points(ps))
+      .attr('fill', fill)
+      .attr('fill-opacity', opacity)
+      .attr('stroke', stroke)
+      .attr('stroke-width', nodeStrokeWidth)
+      .attr('stroke-dasharray', strokeDasharray)
+      .style('pointer-events', 'none');
+
+    applyStrokeStyleAttrs(face, strokeStyle);
+    return face;
+  };
+
+  // Back/right first, then top, then the thin front slab on top.
+  appendFace([C, B, F, H], sideFill, 0.48);
+  appendFace([D, A, B, C], topFill, 0.52);
+  appendFace([D, C, H, G], frontFill, 0.64);
+
+  // Faint rear/internal edges exactly like the reference.
+  const innerStrokeWidth = Math.max(0.7, nodeStrokeWidth * 0.75);
+
+  group
+    .append('line')
+    .attr('x1', A.x)
+    .attr('y1', A.y)
+    .attr('x2', E.x)
+    .attr('y2', E.y)
+    .attr('stroke', stroke)
+    .attr('stroke-width', innerStrokeWidth)
+    .attr('stroke-opacity', 0.34)
+    .attr('pointer-events', 'none');
+
+  group
+    .append('line')
+    .attr('x1', E.x)
+    .attr('y1', E.y)
+    .attr('x2', F.x)
+    .attr('y2', F.y)
+    .attr('stroke', stroke)
+    .attr('stroke-width', innerStrokeWidth)
+    .attr('stroke-opacity', 0.34)
+    .attr('pointer-events', 'none');
+
+  group
+    .append('line')
+    .attr('x1', E.x)
+    .attr('y1', E.y)
+    .attr('x2', G.x)
+    .attr('y2', G.y)
+    .attr('stroke', stroke)
+    .attr('stroke-width', innerStrokeWidth)
+    .attr('stroke-opacity', 0.34)
+    .attr('pointer-events', 'none');
+
+  if (node.outerStrokeColor !== undefined && node.outerStrokeColor !== null) {
+    group
+      .append('rect')
+      .attr('x', stackLeft - STACKED_OUTER_STROKE_PAD)
+      .attr('y', stackTop - STACKED_OUTER_STROKE_PAD)
+      .attr('width', metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2)
+      .attr('height', metrics.visibleHeight + STACKED_OUTER_STROKE_PAD * 2)
+      .attr('fill', 'none')
+      .attr('stroke', outerStroke)
+      .attr('stroke-width', outerStrokeWidth)
+      .attr('stroke-dasharray', outerStrokeDasharray)
+      .style('pointer-events', 'none');
+  }
+
+  const kernel = parse2DDims((node as any).kernelSize);
+  if (kernel) {
+    const kernelW = Math.min(t, Math.max(4, kernel.width * fitted.featureScale));
+    const kernelH = Math.min(h, Math.max(10, kernel.height * fitted.featureScale));
+
+    group
+      .append('rect')
+      .attr('x', D.x + (t - kernelW) / 2)
+      .attr('y', D.y + (h - kernelH) / 2)
+      .attr('width', kernelW)
+      .attr('height', kernelH)
+      .attr('fill', 'none')
+      .attr('stroke', '#444')
+      .attr('stroke-width', outerStrokeWidth)
+      .style('pointer-events', 'none');
+  }
+
+  const label = getNodeLabelText(node);
+  const subText = getNodeSubLabelText(node);
+
+  // Center label under the whole projected object, not just the thin slab.
+  const centerX = stackLeft + metrics.visibleWidth / 2;
+  const labelY = stackTop + metrics.visibleHeight + STACKED_LABEL_GAP;
+
+  if (label || subText) {
+    drawGrowingDownLabelBlock(group as any, node, label, subText, centerX, labelY, block);
+  }
+};
 const drawStackedNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
@@ -6209,6 +6550,19 @@ const drawNode = (
       .style('pointer-events', 'all');
 
     drawStackedNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
+    return;
+  }
+
+  if (node.type === 'cuboid') {
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', innerBox.width)
+      .attr('height', innerBox.height)
+      .attr('fill', 'transparent')
+      .style('pointer-events', 'all');
+
+    drawStacked3DNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
     return;
   }
 
@@ -6644,6 +6998,56 @@ const getStackedAnnotationBoxes = (node: Node, box: Box) => {
   };
 };
 
+const getStacked3DAnnotationBoxes = (node: Node, box: Box) => {
+  const fitted = getStacked3DFittedMetrics(node, box);
+
+  if (!fitted) {
+    return {
+      topBox: box,
+      bottomBox: box,
+      sideBox: box,
+    };
+  }
+
+  const { metrics, stackLeft, stackTop } = fitted;
+
+  const hasOuterStroke = node.outerStrokeColor !== undefined && node.outerStrokeColor !== null;
+
+  const sideBox: Box = hasOuterStroke
+    ? {
+        x: stackLeft - STACKED_OUTER_STROKE_PAD,
+        y: stackTop - STACKED_OUTER_STROKE_PAD,
+        width: metrics.visibleWidth + STACKED_OUTER_STROKE_PAD * 2,
+        height: metrics.visibleHeight + STACKED_OUTER_STROKE_PAD * 2,
+      }
+    : {
+        x: stackLeft,
+        y: stackTop,
+        width: metrics.visibleWidth,
+        height: metrics.visibleHeight,
+      };
+
+  const topBox: Box = {
+    x: sideBox.x,
+    y: sideBox.y,
+    width: sideBox.width,
+    height: metrics.depthOffset,
+  };
+
+  const bottomBox: Box = {
+    x: sideBox.x,
+    y: stackTop + metrics.visibleHeight + STACKED_LABEL_GAP,
+    width: sideBox.width,
+    height: 0,
+  };
+
+  return {
+    topBox,
+    bottomBox,
+    sideBox,
+  };
+};
+
 const getNodeAnnotationBox = (node: Node, box: Box): Box => {
   const anchorBox = getNodeVisualAnchorBox(node, box);
 
@@ -6671,8 +7075,11 @@ const drawNodeAnnotations = (
 ) => {
   const annotationMap = getAnnotationMap(node.annotations);
 
-  if (node.type === 'stacked') {
-    const raw = getStackedAnnotationBoxes(node, box);
+  if (node.type === 'stacked' || node.type === 'cuboid') {
+    const raw =
+      node.type === 'cuboid'
+        ? getStacked3DAnnotationBoxes(node, box)
+        : getStackedAnnotationBoxes(node, box);
     const topBox = scaleBoxFromOrigin(raw.topBox, origin, scale);
     const bottomBox = scaleBoxFromOrigin(raw.bottomBox, origin, scale);
     const sideBox = scaleBoxFromOrigin(raw.sideBox, origin, scale);
@@ -6756,7 +7163,9 @@ const getEndpointTargetInfo = (rendered: RenderedBlock, endpoint: any) => {
     const anchorBox =
       nodeDef?.type === 'stacked'
         ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
-        : getNodeVisualAnchorBox(nodeDef, nodeBox);
+        : nodeDef?.type === 'cuboid'
+          ? getStacked3DConnectorAnchorBox(nodeDef, nodeBox)
+          : getNodeVisualAnchorBox(nodeDef, nodeBox);
 
     return {
       kind: 'node' as const,
@@ -7219,7 +7628,12 @@ const getMarkerLabelFontSize = (
   );
 
 const shouldCenterSingleLabel = (node: Node) => {
-  if (node.type === 'flatten' || node.type === 'stacked' || node.type === 'fullyConnected') {
+  if (
+    node.type === 'flatten' ||
+    node.type === 'stacked' ||
+    node.type === 'cuboid' ||
+    node.type === 'fullyConnected'
+  ) {
     return false;
   }
 
@@ -8195,58 +8609,6 @@ const getEdgeRouteBoundary = (
   };
 };
 
-const resolveRenderedEndpointNode = (
-  rendered: RenderedBlock,
-  endpoint: any
-): RenderedNode | undefined => {
-  const targetName = endpoint?.nodeName;
-  if (!targetName) {
-    return undefined;
-  }
-
-  const directNode = rendered.nodes.get(targetName);
-  if (directNode) {
-    return directNode;
-  }
-
-  const members = rendered.metrics.groupNodeMembers.get(targetName);
-  if (!members || !members.size) {
-    return undefined;
-  }
-
-  const anchor = (endpoint?.anchor ?? 'right') as Side;
-  const candidates = [...members]
-    .map((name) => rendered.nodes.get(name))
-    .filter(Boolean) as RenderedNode[];
-
-  if (!candidates.length) {
-    return undefined;
-  }
-
-  const scoreNode = (candidate: RenderedNode) => {
-    const visualBox =
-      candidate.def.type === 'stacked'
-        ? getStackedConnectorAnchorBox(candidate.def, candidate.box)
-        : getNodeVisualAnchorBox(candidate.def, candidate.box);
-
-    switch (anchor) {
-      case 'left':
-        return visualBox.x;
-      case 'right':
-        return -(visualBox.x + visualBox.width);
-      case 'top':
-        return visualBox.y;
-      case 'bottom':
-        return -(visualBox.y + visualBox.height);
-      default:
-        return 0;
-    }
-  };
-
-  candidates.sort((a, b) => scoreNode(a) - scoreNode(b));
-  return candidates[0];
-};
-
 const resolveFlattenTransitionEndpointNode = (
   rendered: RenderedBlock,
   endpoint: any,
@@ -8908,7 +9270,9 @@ const resolveBlockLocalEndpoint = (
     const anchorBox =
       nodeDef?.type === 'stacked'
         ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
-        : getNodeVisualAnchorBox(nodeDef, nodeBox);
+        : nodeDef?.type === 'cuboid'
+          ? getStacked3DConnectorAnchorBox(nodeDef, nodeBox)
+          : getNodeVisualAnchorBox(nodeDef, nodeBox);
 
     return {
       point: getAnchorPoint(
@@ -8977,8 +9341,7 @@ const shiftPlacedBlockToMatchEndpoints = (
     return;
   }
 
-  // Mixed-side fallback:
-  // keep the dominant routing axis stable based on the target anchor.
+  // Mixed-side fallback: keep the dominant routing axis stable based on the target anchor.
   if (isHorizontalSide(targetLocal.side)) {
     targetPlaced.box.y += sourceGlobalY - targetGlobalY;
     return;

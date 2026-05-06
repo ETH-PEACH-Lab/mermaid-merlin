@@ -135,7 +135,8 @@ export interface Node {
     | 'flatten'
     | 'fullyConnected'
     | 'arrow'
-    | 'trapezoid';
+    | 'trapezoid'
+    | 'cuboid';
   name: string;
   labelProperties?: LabelProperty;
   subLabelProperties?: SubLabelProperty;
