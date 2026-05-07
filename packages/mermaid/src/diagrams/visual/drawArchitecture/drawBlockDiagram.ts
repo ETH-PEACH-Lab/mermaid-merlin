@@ -10,128 +10,27 @@ import type {
   LayoutKind,
   TextFontWeight,
   TextFontStyle,
+} from '../types.js';
+import type { ArchitectureDiagramConfig } from '../../../config.type.js';
+import type { SVG } from '../../../diagram-api/types.js';
+import { getLightenedColor, safeColorName } from '../getColor.js';
+import type {
+  Box,
+  StrokeStyle,
+  TrapezoidDirection,
+  BlockMetrics,
+  ResolvedGroup,
+  LayoutItem,
+  ArrangedItemsResult,
+  Point,
+  RenderedConnector,
+  RelativePosition,
+  RenderedBlock,
+  ResolvedEndpoint,
+  RenderedNode,
+  UnitIndexAllocator,
+  FlattenTransitionResolvedEndpoint,
 } from './types.js';
-import type { ArchitectureDiagramConfig } from '../../config.type.js';
-import type { SVG } from '../../diagram-api/types.js';
-import { getLightenedColor, safeColorName } from './getColor.js';
-
-interface Point {
-  x: number;
-  y: number;
-}
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-interface UnitIndexAllocator {
-  next: number;
-}
-
-interface RenderedNode {
-  def: Node;
-  box: Box;
-}
-
-interface RenderedConnector {
-  name: string;
-  start: Point;
-  end: Point;
-  mid: Point;
-  points: Point[];
-  bounds: Box;
-}
-interface ResolvedEndpoint {
-  point: Point;
-  side?: Side;
-  box?: Box;
-  edgeAxis?: 'horizontal' | 'vertical';
-  isGroup?: boolean;
-}
-interface BlockMetrics {
-  totalWidth: number;
-  totalHeight: number;
-  bodyWidth: number;
-  bodyHeight: number;
-  bodyX: number;
-  bodyY: number;
-  scale: number;
-  annotations: Record<Side, Annotation | undefined>;
-  nodes: Map<string, Box>;
-  nodeShapes: Map<string, Box>;
-  groups: Map<string, Box>;
-  groupVisualBoxes: Map<string, Box>;
-  groupColorBoxes: Map<string, Box>;
-  groupMarkerBoxes: Map<string, Box>;
-  groupNodeMembers: Map<string, Set<string>>;
-  groupAnnotations: Map<string, Record<Side, Annotation | undefined>>;
-  portCounts: Map<string, Record<Side, number>>;
-}
-
-interface RenderedBlock {
-  def: Block;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  metrics: BlockMetrics;
-  nodes: Map<string, RenderedNode>;
-  edges: Map<string, RenderedConnector>;
-  toGlobal: (point: Point) => Point;
-}
-
-interface LayoutItem {
-  kind: 'node' | 'group';
-  name: string;
-  width: number;
-  height: number;
-  alignX: number;
-  alignY: number;
-  apply: (x: number, y: number) => void;
-  getAnchor: (name: string) => Point | null;
-}
-
-interface ResolvedGroup {
-  name: string;
-  width: number;
-  height: number;
-  alignY: number;
-  alignX: number;
-  nodeMembers: Set<string>;
-  apply: (x: number, y: number) => void;
-  getAnchor: (name: string) => Point | null;
-}
-
-interface ArrangedItemsResult {
-  width: number;
-  height: number;
-  boxes: Box[];
-  apply: (x: number, y: number) => void;
-  alignX: number;
-  alignY: number;
-}
-
-interface FlattenTransitionResolvedEndpoint {
-  renderedBlock: RenderedBlock;
-  node: Node;
-  box: Box;
-}
-
-type RelativePosition =
-  | 'left'
-  | 'right'
-  | 'above'
-  | 'below'
-  | 'upperLeft'
-  | 'upperRight'
-  | 'lowerLeft'
-  | 'lowerRight'
-  | 'overlap';
-
-type StrokeStyle = 'solid' | 'dashed' | 'dotted';
-
-type TrapezoidDirection = 'left' | 'right' | 'bottom' | 'top';
 
 const OUTER_MARGIN = 20;
 const TITLE_HEIGHT = 28;
@@ -196,10 +95,10 @@ const ABSOLUTE_MIN_NODE_SIZE = 2;
 
 const STACKED_OUTER_STROKE_PAD = 8;
 
-const STACKED3D_MIN_BODY_WIDTH = 34;
-const STACKED3D_MIN_BODY_HEIGHT = 92;
-const STACKED3D_THICKNESS_MIN = 10;
-const STACKED3D_THICKNESS_MAX = 24;
+const CUBOID_MIN_BODY_WIDTH = 34;
+const CUBOID_MIN_BODY_HEIGHT = 92;
+const CUBOID_THICKNESS_MIN = 10;
+const CUBOID_THICKNESS_MAX = 24;
 
 const getStackedConnectorAnchorBox = (node: Node, box: Box): Box => {
   const fitted = getStackedFittedMetrics(node, box);
@@ -315,7 +214,7 @@ const getStackedMetrics = (
 
 const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }): number => {
   if (node.type === 'cuboid') {
-    const fitted = getStacked3DFittedMetrics(node, {
+    const fitted = getCuboidFittedMetrics(node, {
       x: 0,
       y: 0,
       width: size.width,
@@ -329,22 +228,7 @@ const getNodeVisualAlignY = (node: Node, size: { width: number; height: number }
     return Math.max(1, size.height - getSpecialBottomReserved(node));
   }
 
-  if (node.type === 'stacked') {
-    const fitted = getStackedFittedMetrics(node, {
-      x: 0,
-      y: 0,
-      width: size.width,
-      height: size.height,
-    });
-
-    if (fitted) {
-      return fitted.stackTop + fitted.metrics.visibleHeight;
-    }
-
-    return Math.max(1, size.height - getSpecialBottomReserved(node));
-  }
-
-  if (node.type === 'flatten' || node.type === 'fullyConnected') {
+  if (node.type === 'flatten' || node.type === 'fullyConnected' || node.type === 'stacked') {
     return Math.max(1, size.height - getSpecialBottomReserved(node)) / 2;
   }
 
@@ -981,7 +865,7 @@ const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
     };
   }
   if (node.type === 'cuboid') {
-    const fitted = getStacked3DFittedMetrics(node, box);
+    const fitted = getCuboidFittedMetrics(node, box);
     if (!fitted) {
       return box;
     }
@@ -1231,7 +1115,7 @@ const getStackedFittedMetrics = (node: Node, box: Box) => {
   return { shape, visual, featureScale, metrics, stackLeft, stackTop };
 };
 
-const getStacked3DDepthOffset = (
+const getCuboidDepthOffset = (
   shapeDepth: number,
   featureScale: number,
   rectWidth: number,
@@ -1246,7 +1130,7 @@ const getStacked3DDepthOffset = (
   return Math.max(0, shapeDepth * featureScale);
 };
 
-const getStacked3DSlabWidth = (
+const getCuboidSlabWidth = (
   shapeWidth: number,
   featureScale: number,
   rectHeight: number,
@@ -1259,10 +1143,10 @@ const getStacked3DSlabWidth = (
 
   const rawWidth = Math.max(1, shapeWidth * featureScale);
 
-  return Math.max(STACKED3D_THICKNESS_MIN, Math.min(STACKED3D_THICKNESS_MAX, rawWidth));
+  return Math.max(CUBOID_THICKNESS_MIN, Math.min(CUBOID_THICKNESS_MAX, rawWidth));
 };
 
-const getStacked3DMetrics = (
+const getCuboidMetrics = (
   shape: { depth: number; width: number; height: number },
   featureScale: number,
   node: Node
@@ -1272,15 +1156,9 @@ const getStacked3DMetrics = (
   // shape.depth  -> projected depth offset
   // shape.height -> vertical height
   // shape.width  -> thin slab width
-  const rectWidth = getStacked3DSlabWidth(shape.width, featureScale, rectHeight, node);
+  const rectWidth = getCuboidSlabWidth(shape.width, featureScale, rectHeight, node);
 
-  const depthOffset = getStacked3DDepthOffset(
-    shape.depth,
-    featureScale,
-    rectWidth,
-    rectHeight,
-    node
-  );
+  const depthOffset = getCuboidDepthOffset(shape.depth, featureScale, rectWidth, rectHeight, node);
 
   return {
     rectWidth,
@@ -1291,10 +1169,10 @@ const getStacked3DMetrics = (
   };
 };
 
-const getStacked3DNodeBodySize = (node: Node, block?: Block) => {
+const getCuboidNodeBodySize = (node: Node, block?: Block) => {
   const requested = parseSize(node.size, {
-    width: STACKED3D_MIN_BODY_WIDTH,
-    height: STACKED3D_MIN_BODY_HEIGHT,
+    width: CUBOID_MIN_BODY_WIDTH,
+    height: CUBOID_MIN_BODY_HEIGHT,
   });
 
   const hasExplicitSize = !!node.size;
@@ -1309,7 +1187,7 @@ const getStacked3DNodeBodySize = (node: Node, block?: Block) => {
   const shape = parse3DDims((node as any).shape)!;
 
   const featureScale = 0.7;
-  const metrics = getStacked3DMetrics(shape, featureScale, node);
+  const metrics = getCuboidMetrics(shape, featureScale, node);
   const bottomReserved = getSpecialBottomReserved(node, block);
 
   const labelWidth =
@@ -1318,19 +1196,19 @@ const getStacked3DNodeBodySize = (node: Node, block?: Block) => {
   return {
     width: Math.max(
       ABSOLUTE_MIN_NODE_SIZE,
-      STACKED3D_MIN_BODY_WIDTH,
+      CUBOID_MIN_BODY_WIDTH,
       metrics.visibleWidth,
       labelWidth + 20
     ),
     height: Math.max(
       ABSOLUTE_MIN_NODE_SIZE,
-      STACKED3D_MIN_BODY_HEIGHT,
+      CUBOID_MIN_BODY_HEIGHT,
       metrics.visibleHeight + bottomReserved
     ),
   };
 };
 
-const getStacked3DFittedMetrics = (node: Node, box: Box) => {
+const getCuboidFittedMetrics = (node: Node, box: Box) => {
   const shape = parse3DDims((node as any).shape);
   if (!shape) {
     return null;
@@ -1345,7 +1223,7 @@ const getStacked3DFittedMetrics = (node: Node, box: Box) => {
 
   featureScale = Math.max(featureScale, 0.0001);
 
-  let metrics = getStacked3DMetrics(shape, featureScale, node);
+  let metrics = getCuboidMetrics(shape, featureScale, node);
 
   for (let i = 0; i < 8; i++) {
     const fitScale = Math.min(
@@ -1358,7 +1236,7 @@ const getStacked3DFittedMetrics = (node: Node, box: Box) => {
     }
 
     featureScale *= fitScale;
-    metrics = getStacked3DMetrics(shape, featureScale, node);
+    metrics = getCuboidMetrics(shape, featureScale, node);
   }
 
   const stackLeft = visual.x + (visual.width - metrics.visibleWidth) / 2;
@@ -1378,8 +1256,8 @@ const getStacked3DFittedMetrics = (node: Node, box: Box) => {
   };
 };
 
-const getStacked3DConnectorAnchorBox = (node: Node, box: Box): Box => {
-  const fitted = getStacked3DFittedMetrics(node, box);
+const getCuboidConnectorAnchorBox = (node: Node, box: Box): Box => {
+  const fitted = getCuboidFittedMetrics(node, box);
   if (!fitted) {
     return box;
   }
@@ -1585,7 +1463,7 @@ const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Block) =>
     return getStackedNodeBodySize(node, block);
   }
   if (node.type === 'cuboid') {
-    return getStacked3DNodeBodySize(node, block);
+    return getCuboidNodeBodySize(node, block);
   }
 
   if (node.type === 'flatten') {
@@ -2375,7 +2253,7 @@ const computeBlockMetrics = (
     };
 
     if (layout === 'horizontal') {
-      const memberAlignYs = items.map((i) => i.alignY);
+      const memberAlignYs = items.map((i) => (alignMembers ? i.height / 2 : i.alignY));
       const baseline = Math.max(...memberAlignYs);
 
       const minTop = Math.min(...items.map((i, idx) => baseline - memberAlignYs[idx]));
@@ -2385,10 +2263,10 @@ const computeBlockMetrics = (
 
       let x = 0;
 
-      const boxes = items.map((item, idx) => {
+      const boxes = items.map((item) => {
         const box = {
           x,
-          y: baseline - memberAlignYs[idx] - minTop,
+          y: baseline - (alignMembers ? item.height / 2 : item.alignY) - minTop,
           width: item.width,
           height: item.height,
         };
@@ -6014,13 +5892,13 @@ const drawGrowingDownLabelBlock = (
     }
   }
 };
-const drawStacked3DNode = (
+const drawCuboidNode = (
   group: d3.Selection<SVGGElement, unknown, any, any>,
   node: Node,
   box: Box,
   block?: Block
 ) => {
-  const fitted = getStacked3DFittedMetrics(node, box);
+  const fitted = getCuboidFittedMetrics(node, box);
   const nodeStrokeWidth = getNodeStrokeWidth(node, 1.1);
   const outerStrokeWidth = getStackedOuterStrokeWidth(node, 1.4);
 
@@ -6562,7 +6440,7 @@ const drawNode = (
       .attr('fill', 'transparent')
       .style('pointer-events', 'all');
 
-    drawStacked3DNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
+    drawCuboidNode(g as any, node, { x: 0, y: 0, width: box.width, height: box.height }, block);
     return;
   }
 
@@ -6998,8 +6876,8 @@ const getStackedAnnotationBoxes = (node: Node, box: Box) => {
   };
 };
 
-const getStacked3DAnnotationBoxes = (node: Node, box: Box) => {
-  const fitted = getStacked3DFittedMetrics(node, box);
+const getCuboidAnnotationBoxes = (node: Node, box: Box) => {
+  const fitted = getCuboidFittedMetrics(node, box);
 
   if (!fitted) {
     return {
@@ -7078,7 +6956,7 @@ const drawNodeAnnotations = (
   if (node.type === 'stacked' || node.type === 'cuboid') {
     const raw =
       node.type === 'cuboid'
-        ? getStacked3DAnnotationBoxes(node, box)
+        ? getCuboidAnnotationBoxes(node, box)
         : getStackedAnnotationBoxes(node, box);
     const topBox = scaleBoxFromOrigin(raw.topBox, origin, scale);
     const bottomBox = scaleBoxFromOrigin(raw.bottomBox, origin, scale);
@@ -7164,7 +7042,7 @@ const getEndpointTargetInfo = (rendered: RenderedBlock, endpoint: any) => {
       nodeDef?.type === 'stacked'
         ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
         : nodeDef?.type === 'cuboid'
-          ? getStacked3DConnectorAnchorBox(nodeDef, nodeBox)
+          ? getCuboidConnectorAnchorBox(nodeDef, nodeBox)
           : getNodeVisualAnchorBox(nodeDef, nodeBox);
 
     return {
@@ -9271,7 +9149,7 @@ const resolveBlockLocalEndpoint = (
       nodeDef?.type === 'stacked'
         ? getStackedConnectorAnchorBox(nodeDef, nodeBox)
         : nodeDef?.type === 'cuboid'
-          ? getStacked3DConnectorAnchorBox(nodeDef, nodeBox)
+          ? getCuboidConnectorAnchorBox(nodeDef, nodeBox)
           : getNodeVisualAnchorBox(nodeDef, nodeBox);
 
     return {

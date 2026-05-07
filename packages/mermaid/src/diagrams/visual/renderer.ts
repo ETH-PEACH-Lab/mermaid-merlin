@@ -23,7 +23,7 @@ import { drawTreeDiagram } from './drawTreeDiagram.js';
 import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 import { drawTextDiagram } from './drawTextDiagram.js';
 import { drawNeuralNetworkDiagram } from './drawNeuralNetworkDiagram.js';
-import { drawBlockDiagram } from './drawBlockDiagram.js';
+import { drawBlockDiagram } from './drawArchitecture/drawBlockDiagram.js';
 
 interface ProcessedGroup {
   type: string;
