@@ -118,6 +118,12 @@ type StrokeStyle = 'solid' | 'dashed' | 'dotted';
 
 type TrapezoidDirection = 'left' | 'right' | 'bottom' | 'top';
 
+type InlineMathRun =
+  | { kind: 'text'; value: string }
+  | { kind: 'sup'; value: string }
+  | { kind: 'sub'; value: string }
+  | { kind: 'symbol'; value: string };
+
 export type {
   Point,
   Box,
@@ -134,4 +140,5 @@ export type {
   RelativePosition,
   StrokeStyle,
   TrapezoidDirection,
+  InlineMathRun,
 };
