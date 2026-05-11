@@ -47,7 +47,10 @@ export const drawNeuralNetworkDiagram = (
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-      .attr('fill', 'black');
+      .attr(
+        'fill',
+        neuralNetworkDiagram.edgeColor !== 'none' ? neuralNetworkDiagram.edgeColor : 'black'
+      );
   }
 
   const elements = neuralNetworkDiagram.elements;
