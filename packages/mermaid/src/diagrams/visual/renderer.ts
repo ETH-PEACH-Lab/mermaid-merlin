@@ -12,6 +12,7 @@ import type {
   TreeDiagram,
   LinkedListDiagram,
   TextDiagram,
+  FrameDiagram,
 } from './types.js';
 import { drawArrayDiagram } from './drawArrayDiagram.js';
 import { drawMatrixDiagram } from './drawMatrixDiagram.js';
@@ -20,6 +21,7 @@ import { drawGraphDiagram } from './drawGraphDiagram.js';
 import { drawTreeDiagram } from './drawTreeDiagram.js';
 import { drawLinkedListDiagram } from './drawLinkedListDiagram.js';
 import { drawTextDiagram } from './drawTextDiagram.js';
+import { drawFrameDiagram } from './drawFrameDiagram.js';
 
 interface ProcessedGroup {
   type: string;
@@ -501,6 +503,10 @@ const draw: DrawDefinition = (_text, id, _version, diagram: Diagram) => {
       }
       case 'text': {
         drawTextDiagram(group as unknown as SVG, subDiagram as TextDiagram, subDiagram.index);
+        break;
+      }
+      case 'frame': {
+        drawFrameDiagram(group as unknown as SVG, subDiagram as FrameDiagram, subDiagram.index);
         break;
       }
       default:

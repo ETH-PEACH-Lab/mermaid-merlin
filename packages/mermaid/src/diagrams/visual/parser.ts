@@ -304,6 +304,21 @@ const populate = (ast: VisualDiagram) => {
             }),
           };
         }
+        case 'frame': {
+          const frameVariables = subDiagram.variables ?? [];
+          return {
+            type: 'frame',
+            title: subDiagram.diagramTitle,
+            position: processPosition(subDiagram.position),
+            label: subDiagram.label,
+            name: subDiagram.name,
+            variables: frameVariables.map((v: any) => ({
+              name: v.name,
+              value: v.value,
+              color: v.color,
+            })),
+          };
+        }
         default:
           throw new Error(`Unknown diagram type: ${subDiagram.diagramType}`);
       }

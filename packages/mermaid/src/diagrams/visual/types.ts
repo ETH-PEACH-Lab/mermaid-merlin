@@ -187,6 +187,22 @@ export interface TextDiagram {
   height?: number;
 }
 
+// Frame Interface
+export interface FrameVariable {
+  name: string;
+  value: string | number;
+  color?: string;
+}
+
+export interface FrameDiagram {
+  type: string;
+  title?: string;
+  position?: PositionType;
+  label?: string;
+  name: string;
+  variables: FrameVariable[];
+}
+
 // Page interface
 export interface VisualPage {
   layout?: LayoutDefinition;
@@ -198,6 +214,7 @@ export interface VisualPage {
     | GraphDiagram
     | LinkedListDiagram
     | TextDiagram
+    | FrameDiagram
   )[];
 }
 
