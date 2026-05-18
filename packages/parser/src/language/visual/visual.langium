@@ -15,7 +15,7 @@ VisualPage:
 ;
 
 SubDiagram:
-  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram
+  ArrayDiagram | MatrixDiagram | StackDiagram | GraphDiagram | TreeDiagram | LinkedListDiagram | TextDiagram | FrameDiagram
 ;
 
 ArrayDiagram:
@@ -168,6 +168,52 @@ TextDiagram:
   ('height:' height=NUMBER NEWLINE*)?
   elements+=TextElement* NEWLINE*
   ('label:' label=STRING NEWLINE*)?
+;
+
+FrameDiagram:
+  diagramType="frame" NEWLINE*
+  ('position:' position=PositionDefinition NEWLINE*)?
+  ('title:' diagramTitle=STRING NEWLINE*)?
+  '{' NEWLINE*
+  pairs+=FramePair*
+  '}' NEWLINE*
+  ('label:' label=STRING NEWLINE*)?
+;
+
+FramePair:
+  NamePair | VariablePair | ValuePair | ColorPair | AbovePair | BelowPair | LeftPair | RightPair
+;
+
+NamePair:
+  'name:' name=STRING NEWLINE*
+;
+
+VariablePair:
+  'variable:' '[' variables+=ID (',' variables+=ID)* ']' NEWLINE*
+;
+
+ValuePair:
+  'value:' '[' values+=Value (',' values+=Value)* ']' NEWLINE*
+;
+
+ColorPair:
+  'color:' '[' colors+=STRING (',' colors+=STRING)* ']' NEWLINE*
+;
+
+AbovePair:
+  'above:' position=(STRING | ID) NEWLINE*
+;
+
+BelowPair:
+  'below:' position=(STRING | ID) NEWLINE*
+;
+
+LeftPair:
+  'left:' position=(STRING | ID) NEWLINE*
+;
+
+RightPair:
+  'right:' position=(STRING | ID) NEWLINE*
 ;
 
 TextElement:
