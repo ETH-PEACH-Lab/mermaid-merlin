@@ -305,59 +305,20 @@ const populate = (ast: VisualDiagram) => {
           };
         }
         case 'frame': {
-          const pairs = subDiagram.pairs ?? [];
-          let frameName = '';
-          const variableNames: string[] = [];
-          const variableValues: (string | number)[] = [];
-          const variableColors: Map<number, string> = new Map();
-          let relativePosition: any = undefined;
+          const frameName = subDiagram.name?.replace(/^"|"$/g, '') || '';
+          const frameElements = subDiagram.elements ?? [];
 
-          // Process frame pairs
-          pairs.forEach((pair: any) => {
-            if (pair.$type === 'NamePair') {
-              frameName = pair.name?.replace(/^"|"$/g, '') || '';
-            } else if (pair.$type === 'VariablePair') {
-              variableNames.push(...(pair.variables ?? []));
-            } else if (pair.$type === 'ValuePair') {
-              variableValues.push(...(pair.values ?? []));
-            } else if (pair.$type === 'ColorPair') {
-              (pair.colors ?? []).forEach((color: string, index: number) => {
-                variableColors.set(index, color);
-              });
-            } else if (pair.$type === 'AbovePair') {
-              relativePosition = {
-                type: 'previous' as const,
-                placement: 'above' as const,
-              };
-            } else if (pair.$type === 'BelowPair') {
-              relativePosition = {
-                type: 'previous' as const,
-                placement: 'below' as const,
-              };
-            } else if (pair.$type === 'LeftPair') {
-              relativePosition = {
-                type: 'previous' as const,
-                placement: 'left' as const,
-              };
-            } else if (pair.$type === 'RightPair') {
-              relativePosition = {
-                type: 'previous' as const,
-                placement: 'right' as const,
-              };
-            }
-          });
-
-          const elements = variableNames.map((varName: string, index: number) => ({
-            name: varName,
-            variable: varName,
-            value: String(variableValues[index] ?? ''),
-            color: variableColors.get(index),
+          const elements = frameElements.map((e: any) => ({
+            name: e.variable,
+            variable: e.variable,
+            value: String(e.value ?? ''),
+            color: e.color,
           }));
 
           return {
             type: 'frame',
             title: subDiagram.diagramTitle,
-            position: relativePosition || processPosition(subDiagram.position),
+            position: processPosition(subDiagram.position),
             label: subDiagram.label,
             name: frameName,
             elements,
