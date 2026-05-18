@@ -347,10 +347,10 @@ const populate = (ast: VisualDiagram) => {
             }
           });
 
-          // Create frame variables from names and values
-          const variables = variableNames.map((name: string, index: number) => ({
-            name,
-            value: variableValues[index] ?? '',
+          const elements = variableNames.map((varName: string, index: number) => ({
+            name: varName,
+            variable: varName,
+            value: String(variableValues[index] ?? ''),
             color: variableColors.get(index),
           }));
 
@@ -360,7 +360,7 @@ const populate = (ast: VisualDiagram) => {
             position: relativePosition || processPosition(subDiagram.position),
             label: subDiagram.label,
             name: frameName,
-            variables,
+            elements,
           };
         }
         default:

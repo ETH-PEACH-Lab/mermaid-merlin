@@ -188,9 +188,10 @@ export interface TextDiagram {
 }
 
 // Frame Interface
-export interface FrameVariable {
+export interface FrameElement {
   name: string;
-  value: string | number;
+  variable: string;
+  value: string;
   color?: string;
 }
 
@@ -200,7 +201,7 @@ export interface FrameDiagram {
   position?: PositionType;
   label?: string;
   name: string;
-  variables: FrameVariable[];
+  elements: FrameElement[];
 }
 
 // Page interface

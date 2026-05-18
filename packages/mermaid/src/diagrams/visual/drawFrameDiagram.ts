@@ -7,7 +7,7 @@ export const drawFrameDiagram = (svg: SVG, frameDiagram: FrameDiagram, component
   const group = svg.append('g');
   group.attr('class', 'component').attr('id', `component_${component_id}`);
 
-  const variables = frameDiagram.variables || [];
+  const elements = frameDiagram.elements || [];
   const frameX = 50;
   const frameY = 50;
   const slotWidth = 100;
@@ -52,9 +52,9 @@ export const drawFrameDiagram = (svg: SVG, frameDiagram: FrameDiagram, component
     .attr('class', 'frameSeparator');
 
   // Draw variable slots
-  variables.forEach((variable, index) => {
+  elements.forEach((element, index) => {
     const slotY = frameY + headerHeight + index * slotHeight;
-    const fillColor = getLightenedColor(variable.color);
+    const fillColor = getLightenedColor(element.color);
 
     // Background rectangle for the slot
     group
@@ -90,7 +90,7 @@ export const drawFrameDiagram = (svg: SVG, frameDiagram: FrameDiagram, component
       .attr('font-weight', 'bold')
       .attr('fill', '#000000')
       .attr('class', 'frameVariableName')
-      .text(variable.name);
+      .text(element.name);
 
     // Variable value (right column)
     group
@@ -102,11 +102,11 @@ export const drawFrameDiagram = (svg: SVG, frameDiagram: FrameDiagram, component
       .attr('font-size', '16')
       .attr('fill', '#000000')
       .attr('class', 'frameVariableValue')
-      .text(formatValue(String(variable.value)));
+      .text(formatValue(element.value));
   });
 
   // Draw outer border
-  const totalHeight = headerHeight + variables.length * slotHeight;
+  const totalHeight = headerHeight + elements.length * slotHeight;
   group
     .append('rect')
     .attr('x', frameX)
