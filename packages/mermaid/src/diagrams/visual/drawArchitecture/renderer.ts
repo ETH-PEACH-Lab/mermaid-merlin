@@ -25,7 +25,7 @@ import {
   applyStrokeStyleAttrs,
   scaleBoxFromOrigin,
 } from './geometry.js';
-import { appendMultilineText, estimateMultilineTextWidth } from './text.js';
+import { appendMultilineText } from './text.js';
 import {
   ANNOTATION_SPACE,
   BLOCK_ANNOTATION_FONT_SIZE,
@@ -38,8 +38,6 @@ import {
   GROUP_ANNOTATION_FONT_SIZE,
   NODE_GAP,
   OUTER_MARGIN,
-  RECT_HORIZONTAL_PADDING,
-  RECT_MIN_WIDTH,
   ROW_GAP,
   SIDES,
   TITLE_FONT_SIZE,
@@ -47,12 +45,7 @@ import {
 } from './constants.js';
 import {
   isVerticalLabel,
-  getNodeLabelText,
-  getNodeLabelMainFontSize,
-  getNodeSubLabelText,
-  getNodeSubLabelFontSize,
   getNodeBodySize,
-  getNodeVisualAlignY,
   getNodeVisualAnchorBox,
   getStackedConnectorAnchorBox,
   getCuboidConnectorAnchorBox,
@@ -347,31 +340,7 @@ const computeBlockMetrics = (
     }
   };
 
-  const sharedRectWidth =
-    rectNodes.length > 0
-      ? Math.max(
-          ...rectNodes.map((n) => {
-            const requestedWidth = n.size?.width ? Number(n.size.width) : 0;
-
-            const naturalWidth = Math.max(
-              RECT_MIN_WIDTH,
-
-              Math.max(
-                estimateMultilineTextWidth(getNodeLabelText(n), getNodeLabelMainFontSize(n, block)),
-                estimateMultilineTextWidth(
-                  getNodeSubLabelText(n),
-                  getNodeSubLabelFontSize(n, block)
-                )
-              ) +
-                RECT_HORIZONTAL_PADDING * 2
-            );
-
-            return Math.max(requestedWidth, naturalWidth);
-          })
-        )
-      : undefined;
-
-  const nodeSizes = new Map(nodes.map((n) => [n.name, getNodeBodySize(n, sharedRectWidth, block)]));
+  const nodeSizes = new Map(nodes.map((n) => [n.name, getNodeBodySize(n, block)]));
   const groupAnnotationMaps = new Map<string, Record<Side, Annotation | undefined>>();
   const nodeBoxes = new Map<string, Box>();
   const nodeShapeBoxes = new Map<string, Box>();

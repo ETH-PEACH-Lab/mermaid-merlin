@@ -1061,7 +1061,8 @@ export const getRectHeightForWidth = (node: Node, width: number, block?: Block) 
 
   return Math.max(RECT_MIN_HEIGHT, textHeight + RECT_VERTICAL_PADDING * 2);
 };
-export const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Block) => {
+
+export const getNodeBodySize = (node: Node, block?: Block) => {
   if (node.type === 'trapezoid') {
     const requested = node.size
       ? { width: Number(node.size.width), height: Number(node.size.height) }
@@ -1077,7 +1078,7 @@ export const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Bl
         18
     );
 
-    const width = requested?.width || sharedRectWidth || naturalWidth;
+    const width = requested?.width || naturalWidth;
     const baseHeight = requested?.height || getRectHeightForWidth(node, width);
 
     return { width, height: baseHeight };
@@ -1267,7 +1268,7 @@ export const getNodeBodySize = (node: Node, sharedRectWidth?: number, block?: Bl
       RECT_HORIZONTAL_PADDING * 2
   );
 
-  const width = requested?.width || sharedRectWidth || naturalWidth;
+  const width = requested?.width || naturalWidth;
   const baseHeight = requested?.height || getRectHeightForWidth(node, width);
 
   return { width, height: baseHeight };
