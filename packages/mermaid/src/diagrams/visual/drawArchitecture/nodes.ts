@@ -62,6 +62,7 @@ import {
   getApproxMaxCharsFromWidth,
   wrapTextLines,
   applyTextStyleAttrs,
+  estimateTextNodeWidth,
 } from './text.js';
 
 import {
@@ -874,41 +875,6 @@ export const getVerticalLabelOrientationSide = (node: Node): 'left' | 'right' =>
 export const getVerticalLabelRotation = (node: Node) =>
   getVerticalLabelOrientationSide(node) === 'left' ? -90 : 90;
 
-export const getTextNodeAnchorBox = (node: Node, box: Box, block?: Block): Box => {
-  const rawLabel = getNodeLabelText(node);
-  const rawSubText = getNodeSubLabelText(node) ?? '';
-
-  if (isVerticalLabel(node)) {
-    return box;
-  }
-
-  const labelFontSize = getNodeLabelMainFontSize(node, block, TEXT_NODE_FONT_SIZE);
-  const subFontSize = getNodeSubLabelFontSize(node, block, BASE_SUB_FONT_SIZE);
-
-  const availableWidth = Math.max(8, box.width);
-  const labelLines = wrapTextLines(rawLabel, availableWidth, labelFontSize);
-  const subLines = rawSubText ? wrapTextLines(rawSubText, availableWidth, subFontSize) : [];
-
-  const labelLineHeight = labelFontSize + 2;
-  const subLineHeight = subFontSize + 1;
-
-  const totalTextHeight =
-    labelLines.length * labelLineHeight +
-    (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
-
-  const maxTextWidth = Math.max(
-    ...labelLines.map((line) => estimateTextWidth(line, labelFontSize)),
-    ...subLines.map((line) => estimateTextWidth(line, subFontSize)),
-    10
-  );
-
-  return {
-    x: box.x + (box.width - maxTextWidth) / 2,
-    y: box.y + (box.height - totalTextHeight) / 2,
-    width: maxTextWidth,
-    height: totalTextHeight,
-  };
-};
 export const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box => {
   if (!node) {
     return box;
@@ -962,10 +928,6 @@ export const getNodeVisualAnchorBox = (node: Node | undefined, box: Box): Box =>
       width: fitted.denseWidth,
       height: fitted.denseHeight,
     };
-  }
-
-  if (node.type === 'text') {
-    return getTextNodeAnchorBox(node, box);
   }
 
   return box;
@@ -1141,49 +1103,84 @@ export const getNodeBodySize = (node: Node, block?: Block) => {
 
   if (node.type === 'text') {
     const requested = parseSize(node.size, DEFAULT_TEXT);
+
+    const hasExplicitWidth =
+      node.size?.width !== undefined && Number(node.size.width) !== DEFAULT_TEXT.width;
+
+    const hasExplicitHeight =
+      node.size?.height !== undefined && Number(node.size.height) !== DEFAULT_TEXT.height;
+
     const rawLabel = getNodeLabelText(node);
     const rawSubText = getNodeSubLabelText(node) ?? '';
 
+    const labelFontSize = getNodeLabelMainFontSize(node, block, TEXT_NODE_FONT_SIZE);
+    const subFontSize = getNodeSubLabelFontSize(node, block, BASE_SUB_FONT_SIZE);
+
+    const paddingX = 2;
+    const paddingY = 2;
+
     if (isVerticalLabel(node)) {
       const availableVerticalExtent =
-        requested.height && requested.height > 0 ? Math.max(20, requested.height - 8) : 120;
+        hasExplicitHeight && requested.height > 0 ? Math.max(20, requested.height - 8) : 120;
 
-      const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, TEXT_NODE_FONT_SIZE);
+      const labelLines = wrapTextLines(rawLabel, availableVerticalExtent, labelFontSize);
       const subLines = rawSubText
-        ? wrapTextLines(rawSubText, availableVerticalExtent, BASE_SUB_FONT_SIZE)
+        ? wrapTextLines(rawSubText, availableVerticalExtent, subFontSize)
         : [];
 
-      const labelLineHeight = TEXT_NODE_FONT_SIZE + 2;
-      const subLineHeight = BASE_SUB_FONT_SIZE + 1;
+      const labelLineHeight = labelFontSize + 2;
+      const subLineHeight = subFontSize + 1;
 
       const totalTextHeight =
         labelLines.length * labelLineHeight +
         (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
 
       const maxLineWidth = Math.max(
-        ...labelLines.map((line) => estimateTextWidth(line, TEXT_NODE_FONT_SIZE)),
-        ...subLines.map((line) => estimateTextWidth(line, BASE_SUB_FONT_SIZE)),
+        ...labelLines.map((line) => estimateTextWidth(line, labelFontSize)),
+        ...subLines.map((line) => estimateTextWidth(line, subFontSize)),
         10
       );
 
+      const naturalWidth = totalTextHeight + paddingX * 2;
+      const naturalHeight = maxLineWidth + paddingY * 2;
+
       return {
-        width: Math.max(requested.width, totalTextHeight),
-        height: Math.max(requested.height, maxLineWidth),
+        width: hasExplicitWidth ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width) : naturalWidth,
+        height: hasExplicitHeight
+          ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
+          : naturalHeight,
       };
     }
 
-    const naturalWidth = Math.max(
-      estimateMultilineTextWidth(rawLabel, TEXT_NODE_FONT_SIZE),
-      estimateMultilineTextWidth(rawSubText, BASE_SUB_FONT_SIZE)
-    );
+    const labelLines = getRendTextLines(rawLabel).filter((line) => line.length > 0);
+    const subLines = rawSubText
+      ? getRendTextLines(rawSubText).filter((line) => line.length > 0)
+      : [];
 
-    const naturalHeight = TEXT_NODE_FONT_SIZE + (rawSubText ? 4 + BASE_SUB_FONT_SIZE : 0);
+    const labelLineHeight = labelFontSize + 2;
+    const subLineHeight = subFontSize + 1;
+
+    const naturalWidth =
+      Math.max(
+        ...labelLines.map((line) => estimateTextNodeWidth(line, labelFontSize)),
+        ...subLines.map((line) => estimateTextNodeWidth(line, subFontSize)),
+        10
+      ) +
+      paddingX * 2;
+
+    const naturalHeight =
+      labelLines.length * labelLineHeight +
+      (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0) +
+      paddingY * 2;
 
     return {
-      width: Math.max(requested.width, naturalWidth),
-      height: Math.max(requested.height, naturalHeight),
+      width: hasExplicitWidth ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.width) : naturalWidth,
+      height: hasExplicitHeight
+        ? Math.max(ABSOLUTE_MIN_NODE_SIZE, requested.height)
+        : naturalHeight,
     };
   }
+
   if (node.type === 'circle') {
     const requested = parseSize(node.size, DEFAULT_CIRCLE);
 

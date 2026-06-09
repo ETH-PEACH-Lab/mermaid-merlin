@@ -410,23 +410,10 @@ const computeBlockMetrics = (
       return null;
     }
 
-    const nodeDef = nodeMap.get(nodeName)!;
     const gapPad = getNodeGapPadding(nodeName);
 
-    const fullBox: Box = {
-      x: 0,
-      y: 0,
-      width: size.width,
-      height: size.height,
-    };
-
-    // Important:
-    // For text nodes, layout should use the visible text area,
-    // not the full invisible node box.
-    const visualBox = nodeDef.type === 'text' ? getNodeVisualAnchorBox(nodeDef, fullBox) : fullBox;
-
-    const layoutWidth = visualBox.width + gapPad.left + gapPad.right;
-    const layoutHeight = visualBox.height + gapPad.top + gapPad.bottom;
+    const layoutWidth = size.width + gapPad.left + gapPad.right;
+    const layoutHeight = size.height + gapPad.top + gapPad.bottom;
 
     return {
       kind: 'node',
@@ -435,14 +422,13 @@ const computeBlockMetrics = (
       width: layoutWidth,
       height: layoutHeight,
 
-      alignX: gapPad.left + visualBox.width / 2,
-      alignY: gapPad.top + visualBox.height / 2,
+      alignX: gapPad.left + size.width / 2,
+      alignY: gapPad.top + size.height / 2,
 
       apply: (x: number, y: number) => {
         const box = {
-          // Shift full node box so the visible text box starts at x/y.
-          x: x + gapPad.left - visualBox.x,
-          y: y + gapPad.top - visualBox.y,
+          x: x + gapPad.left,
+          y: y + gapPad.top,
           width: size.width,
           height: size.height,
         };
@@ -454,8 +440,8 @@ const computeBlockMetrics = (
       getAnchor: (name: string) =>
         name === nodeName
           ? {
-              x: gapPad.left + visualBox.width / 2,
-              y: gapPad.top + visualBox.height / 2,
+              x: gapPad.left + size.width / 2,
+              y: gapPad.top + size.height / 2,
             }
           : null,
     };

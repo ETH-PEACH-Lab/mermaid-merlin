@@ -166,7 +166,43 @@ export const setInlineMathText = (
 
 export const estimateTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
   const s = getPlainRendText(text);
-  return s ? Math.max(10, s.length * fontSize * 0.58) : 0;
+  return s ? Math.max(10, s.length * fontSize * 0.54) : 0;
+};
+
+export const estimateTextNodeWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
+  const s = getPlainRendText(text);
+
+  if (!s) {
+    return 0;
+  }
+
+  let width = 0;
+
+  for (const ch of s) {
+    if (ch === ' ') {
+      width += fontSize * 0.32;
+    } else if ("ilI.,:;|!()[]{}'`".includes(ch)) {
+      width += fontSize * 0.28;
+    } else if ('mwMW@#%&'.includes(ch)) {
+      width += fontSize * 0.78;
+    } else if (/[A-Z]/.test(ch)) {
+      width += fontSize * 0.6;
+    } else if (/\d/.test(ch)) {
+      width += fontSize * 0.52;
+    } else if ('-_/\\'.includes(ch)) {
+      width += fontSize * 0.38;
+    } else {
+      width += fontSize * 0.51;
+    }
+  }
+
+  // Small buffer prevents arrows from touching/overlapping the text.
+  return Math.max(10, width + fontSize * 0.25);
+};
+
+export const estimateMultilineTextNodeWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
+  const lines = getRendTextLines(text);
+  return Math.max(...lines.map((line) => estimateTextNodeWidth(line, fontSize)), 0);
 };
 
 export const estimateMultilineTextWidth = (text?: string, fontSize = BASE_FONT_SIZE) => {
@@ -405,7 +441,8 @@ export const renderCenteredTextLines = (
   const totalTextHeight =
     lines.length * mainLineHeight + (subLines.length > 0 ? 4 + subLines.length * subLineHeight : 0);
 
-  let y = box.y + box.height / 2 - totalTextHeight / 2 + labelFontSize / 2;
+  const centerY = box.y + box.height / 2;
+  let y = centerY - totalTextHeight / 2 + mainLineHeight / 2;
 
   for (const line of lines) {
     const t = textGroup
@@ -413,7 +450,8 @@ export const renderCenteredTextLines = (
       .attr('x', box.x + box.width / 2)
       .attr('y', y)
       .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('alignment-baseline', 'central')
       .attr('pointer-events', 'none');
 
     applyTextStyleAttrs(t, {
@@ -442,7 +480,9 @@ export const renderCenteredTextLines = (
         .attr('x', box.x + box.width / 2)
         .attr('y', y)
         .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
+        .attr('dominant-baseline', 'central')
+
+        .attr('alignment-baseline', 'central')
         .attr('pointer-events', 'none');
 
       applyTextStyleAttrs(t, {
@@ -534,7 +574,8 @@ export const drawPreciselyCenteredText = (
     .attr('x', cx)
     .attr('y', cy)
     .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
+    .attr('dominant-baseline', 'central')
+    .attr('alignment-baseline', 'central')
     .attr('pointer-events', 'none')
     .text(null);
 
