@@ -25,7 +25,7 @@ import {
   applyStrokeStyleAttrs,
   scaleBoxFromOrigin,
 } from './geometry.js';
-import { estimateTextWidth, appendMultilineText } from './text.js';
+import { appendMultilineText, estimateMultilineTextWidth } from './text.js';
 import {
   ANNOTATION_SPACE,
   BLOCK_ANNOTATION_FONT_SIZE,
@@ -287,7 +287,6 @@ const computeBlockMetrics = (
         n.type === 'trapezoid') &&
       !isVerticalLabel(n)
   );
-  const MAX_SHARED_RECT_WIDTH = 110;
 
   const alignCircularSourcesToIndexedTargets = (
     block: Block,
@@ -350,22 +349,25 @@ const computeBlockMetrics = (
 
   const sharedRectWidth =
     rectNodes.length > 0
-      ? Math.min(
-          MAX_SHARED_RECT_WIDTH,
-          Math.max(
-            ...rectNodes.map((n) => {
-              const requestedWidth = n.size?.width ? Number(n.size.width) : 0;
-              const naturalWidth = Math.max(
-                RECT_MIN_WIDTH,
-                Math.max(
-                  estimateTextWidth(getNodeLabelText(n), getNodeLabelMainFontSize(n, block)),
-                  estimateTextWidth(getNodeSubLabelText(n), getNodeSubLabelFontSize(n, block))
-                ) +
-                  RECT_HORIZONTAL_PADDING * 2
-              );
-              return Math.max(requestedWidth, naturalWidth);
-            })
-          )
+      ? Math.max(
+          ...rectNodes.map((n) => {
+            const requestedWidth = n.size?.width ? Number(n.size.width) : 0;
+
+            const naturalWidth = Math.max(
+              RECT_MIN_WIDTH,
+
+              Math.max(
+                estimateMultilineTextWidth(getNodeLabelText(n), getNodeLabelMainFontSize(n, block)),
+                estimateMultilineTextWidth(
+                  getNodeSubLabelText(n),
+                  getNodeSubLabelFontSize(n, block)
+                )
+              ) +
+                RECT_HORIZONTAL_PADDING * 2
+            );
+
+            return Math.max(requestedWidth, naturalWidth);
+          })
         )
       : undefined;
 
@@ -442,31 +444,49 @@ const computeBlockMetrics = (
     const nodeDef = nodeMap.get(nodeName)!;
     const gapPad = getNodeGapPadding(nodeName);
 
-    const layoutWidth = size.width + gapPad.left + gapPad.right;
-    const layoutHeight = size.height + gapPad.top + gapPad.bottom;
+    const fullBox: Box = {
+      x: 0,
+      y: 0,
+      width: size.width,
+      height: size.height,
+    };
+
+    // Important:
+    // For text nodes, layout should use the visible text area,
+    // not the full invisible node box.
+    const visualBox = nodeDef.type === 'text' ? getNodeVisualAnchorBox(nodeDef, fullBox) : fullBox;
+
+    const layoutWidth = visualBox.width + gapPad.left + gapPad.right;
+    const layoutHeight = visualBox.height + gapPad.top + gapPad.bottom;
 
     return {
       kind: 'node',
       name: nodeName,
+
       width: layoutWidth,
       height: layoutHeight,
-      alignX: gapPad.left + size.width / 2,
-      alignY: gapPad.top + getNodeVisualAlignY(nodeDef, size),
+
+      alignX: gapPad.left + visualBox.width / 2,
+      alignY: gapPad.top + visualBox.height / 2,
+
       apply: (x: number, y: number) => {
         const box = {
-          x: x + gapPad.left,
-          y: y + gapPad.top,
+          // Shift full node box so the visible text box starts at x/y.
+          x: x + gapPad.left - visualBox.x,
+          y: y + gapPad.top - visualBox.y,
           width: size.width,
           height: size.height,
         };
+
         nodeBoxes.set(nodeName, box);
         nodeShapeBoxes.set(nodeName, box);
       },
+
       getAnchor: (name: string) =>
         name === nodeName
           ? {
-              x: gapPad.left + size.width / 2,
-              y: gapPad.top + getNodeVisualAlignY(nodeDef, size),
+              x: gapPad.left + visualBox.width / 2,
+              y: gapPad.top + visualBox.height / 2,
             }
           : null,
     };
