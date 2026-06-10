@@ -196,7 +196,6 @@ export const estimateTextNodeWidth = (text?: string, fontSize = BASE_FONT_SIZE) 
     }
   }
 
-  // Small buffer prevents arrows from touching/overlapping the text.
   return Math.max(10, width + fontSize * 0.25);
 };
 
@@ -559,6 +558,10 @@ export const drawPreciselyCenteredText = (
     fill?: string;
     rotate?: number;
     lineHeight?: number;
+
+    // add these
+    dominantBaseline?: 'middle' | 'central';
+    alignmentBaseline?: 'middle' | 'central';
   }
 ) => {
   const lines = getRendTextLines(value).map(sanitizeRenderedText);
@@ -570,12 +573,15 @@ export const drawPreciselyCenteredText = (
       ? (parent as any).append('text')
       : (parent as d3.Selection<SVGTextElement, unknown, any, any>);
 
+  const dominantBaseline = options?.dominantBaseline ?? 'central';
+  const alignmentBaseline = options?.alignmentBaseline ?? 'central';
+
   text
     .attr('x', cx)
     .attr('y', cy)
     .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'central')
-    .attr('alignment-baseline', 'central')
+    .attr('dominant-baseline', dominantBaseline)
+    .attr('alignment-baseline', alignmentBaseline)
     .attr('pointer-events', 'none')
     .text(null);
 
@@ -594,12 +600,14 @@ export const drawPreciselyCenteredText = (
       .append('tspan')
       .attr('x', cx)
       .attr('dy', i === 0 ? startDy : lineHeight);
+
     appendInlineMathToText(row, line, cx, fontSize);
   });
 
   if (options?.rotate) {
     text.attr('transform', `rotate(${options.rotate}, ${cx}, ${cy})`);
   }
+
   return text;
 };
 

@@ -1391,6 +1391,17 @@ export const drawCenteredNodeLabel = (
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
+  const baselineOptions =
+    node.type === 'circle'
+      ? {
+          dominantBaseline: 'middle' as const,
+          alignmentBaseline: undefined,
+        }
+      : {
+          dominantBaseline: 'central' as const,
+          alignmentBaseline: 'central' as const,
+        };
+
   if (isVerticalLabel(node)) {
     drawPreciselyCenteredText(parent as any, label, cx, cy, {
       rotate: getVerticalLabelRotation(node),
@@ -1399,6 +1410,7 @@ export const drawCenteredNodeLabel = (
       fontFamily: getNodeLabelFontFamily(node, block),
       fontWeight: getNodeLabelFontWeight(node, block),
       fontStyle: getNodeLabelFontStyle(node, block),
+      ...baselineOptions,
     });
     return;
   }
@@ -1409,6 +1421,7 @@ export const drawCenteredNodeLabel = (
     fontFamily: getNodeLabelFontFamily(node, block),
     fontWeight: getNodeLabelFontWeight(node, block),
     fontStyle: getNodeLabelFontStyle(node, block),
+    ...baselineOptions,
   });
 };
 
